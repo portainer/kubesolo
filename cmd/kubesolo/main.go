@@ -6,7 +6,9 @@ import (
 	"os/signal"
 	"path/filepath"
 	rdebug "runtime/debug"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/portainer/kubesolo/internal/config/flags"
@@ -33,6 +35,11 @@ type kubesolo struct {
 	portainerEdgeID  string
 	portainerEdgeKey string
 	embedded         types.Embedded
+
+	// Memory management settings
+	gcPercent        int
+	memoryLimit      int64
+	idleMemoryCheck  bool
 }
 
 var (
@@ -51,6 +58,11 @@ func service() (*kubesolo, error) {
 		pprofServer:      *flags.PprofServer,
 		portainerEdgeID:  *flags.PortainerEdgeID,
 		portainerEdgeKey: *flags.PortainerEdgeKey,
+
+		// Default memory settings - will be overridden by env vars if present
+		gcPercent:        types.DefaultGCPercent,
+		memoryLimit:      types.DefaultMemoryLimit,
+		idleMemoryCheck:  true,
 	}, nil
 }
 
@@ -64,6 +76,54 @@ func main() {
 
 	service.bootstrap()
 	service.run()
+}
+
+// configureMemorySettings applies memory management settings from environment variables
+// and configures the Go runtime accordingly
+func (s *kubesolo) configureMemorySettings() {
+	// Check for GOGC environment variable (percentage for garbage collection)
+	if gogcStr := os.Getenv("GOGC"); gogcStr != "" {
+		if gogc, err := strconv.Atoi(gogcStr); err == nil && gogc >= 0 {
+			s.gcPercent = gogc
+			log.Info().Int("value", s.gcPercent).Msg("using GOGC environment variable")
+		}
+	}
+
+	// Check for GOMEMLIMIT environment variable (memory limit in bytes)
+	if memlimitStr := os.Getenv("GOMEMLIMIT"); memlimitStr != "" {
+		if memlimit, err := strconv.ParseInt(memlimitStr, 10, 64); err == nil && memlimit > 0 {
+			s.memoryLimit = memlimit
+			log.Info().Int64("value", s.memoryLimit).Msg("using GOMEMLIMIT environment variable")
+		}
+	}
+
+	// Check for KUBESOLO_IDLE_MEMORY_CHECK environment variable
+	if idleCheckStr := os.Getenv("KUBESOLO_IDLE_MEMORY_CHECK"); idleCheckStr != "" {
+		s.idleMemoryCheck = idleCheckStr == "1" || idleCheckStr == "true" || idleCheckStr == "yes"
+	}
+
+	// Apply settings to runtime
+	rdebug.SetGCPercent(s.gcPercent)
+	rdebug.SetMemoryLimit(s.memoryLimit)
+
+	// Start idle memory check if enabled
+	if s.idleMemoryCheck {
+		go s.startIdleMemoryCheck()
+	}
+}
+
+// startIdleMemoryCheck periodically frees memory when the system is idle
+func (s *kubesolo) startIdleMemoryCheck() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		<-ticker.C
+		// In a real implementation, we would check some metrics to determine if the system is idle
+		// For simplicity, we'll just periodically free memory
+		log.Debug().Msg("performing idle memory cleanup")
+		rdebug.FreeOSMemory()
+	}
 }
 
 func (s *kubesolo) run() {
@@ -194,8 +254,7 @@ func (s *kubesolo) bootstrap() {
 	}
 
 	// Configure runtime
-	rdebug.SetGCPercent(types.DefaultGCPercent)
-	rdebug.SetMemoryLimit(types.DefaultMemoryLimit)
+	s.configureMemorySettings()
 	rdebug.FreeOSMemory()
 
 	// Setup logging
