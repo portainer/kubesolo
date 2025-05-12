@@ -93,18 +93,19 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"kubeReserved":   map[string]string{"memory": "25Mi"},
 		"failSwapOn":     false,
 
-		"kubeAPIQPS":                2,
-		"kubeAPIBurst":              3,
+		"kubeAPIQPS":                1,
+		"kubeAPIBurst":              2,
 		"serializeImagePulls":       true,
+		"workerLoopSize":            1,  // Limit concurrent worker threads
 		"imagePullProgressDeadline": "1m",
 
-		"imageGCHighThresholdPercent": 95,
-		"imageGCLowThresholdPercent":  80,
+		"imageGCHighThresholdPercent": 90,
+		"imageGCLowThresholdPercent":  75,
 		"registryPullQPS":             1,
-		"registryBurst":               2,
+		"registryBurst":               1,
 
 		"eventRecordQPS": 1,
-		"eventBurst":     2,
+		"eventBurst":     1,
 
 		"containerLogMaxSize":     "512Ki",
 		"enableProfilingHandler":  false,

@@ -13,7 +13,7 @@ const (
 	DefaultContainerdDir         = "containerd"
 	DefaultContainerdSocket      = "containerd.sock"
 	DefaultSystemContainerdSock  = "/run/containerd/containerd.sock"
-	DefaultContainerdTimeout     = 30 * time.Second
+	DefaultContainerdTimeout     = 15 * time.Second
 	DefaultStandardCNIBinDir     = "/opt/cni/bin"
 	DefaultStandardCNIConfDir    = "/etc/cni/net.d"
 	DefaultStandardRuncFile      = "/usr/local/bin/runc"
@@ -33,9 +33,9 @@ const (
 	DefaultSandboxImage          = "registry.k8s.io/pause:3.10"
 	DefaultPortainerAgentImage   = "portainer/agent:2.29.2"
 	DefaultCoreDNSImage          = "coredns/coredns:1.12.1"
-	DefaultGCPercent             = 50
-	DefaultContextTimeout        = 30 * time.Second
-	DefaultMemoryLimit           = 100 * 1024 * 1024
+	DefaultGCPercent             = 30
+	DefaultContextTimeout        = 15 * time.Second
+	DefaultMemoryLimit           = 75 * 1024 * 1024
 	DefaultComponentSleep        = 5 * time.Second
 	DefaultRetryCount            = 10
 )

@@ -17,10 +17,15 @@ func ConfigureLogger() {
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
+	// Set buffer size limits to reduce memory usage
+	zerolog.BufferPoolSize = 2048
+	zerolog.MessageFieldName = "msg"
+
 	stdlog.SetFlags(0)
 	stdlog.SetOutput(log.Logger)
 
-	log.Logger = log.Logger.With().Caller().Stack().Logger()
+	// Limit stack trace depth to reduce memory usage
+	log.Logger = log.Logger.With().Caller().Logger()
 }
 
 func SetLoggingLevel(level string) {
