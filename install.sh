@@ -2,6 +2,22 @@
 
 set -e
 
+# Detect OS and architecture
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64)
+        ARCH="amd64"
+        ;;
+    aarch64)
+        ARCH="arm64"
+        ;;
+    *)
+        echo "Unsupported architecture: $ARCH"
+        exit 1
+        ;;
+esac
+
 # Parse command line arguments
 for arg in "$@"; do
   case $arg in
@@ -53,13 +69,18 @@ INTERACTIVE="false"
 
 # Service configuration
 APP_NAME="kubesolo"
-BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo"
+BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH.tar.gz"
 INSTALL_PATH="/usr/local/bin/$APP_NAME"
 SERVICE_PATH="/etc/systemd/system/$APP_NAME.service"
 
 echo "🔄 Installing $APP_NAME..."
 
-curl -sfL "$BIN_URL" -o "$INSTALL_PATH"
+# Download and extract the archive
+TEMP_DIR=$(mktemp -d)
+curl -sfL "$BIN_URL" -o "$TEMP_DIR/kubesolo.tar.gz"
+tar xzf "$TEMP_DIR/kubesolo.tar.gz" -C "$TEMP_DIR"
+mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH"
+rm -rf "$TEMP_DIR"
 chmod +x "$INSTALL_PATH"
 
 # Configuration prompts (only if interactive mode is enabled)
