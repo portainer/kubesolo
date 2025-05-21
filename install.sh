@@ -76,7 +76,7 @@ SERVICE_PATH="/etc/systemd/system/$APP_NAME.service"
 echo "🔄 Installing $APP_NAME..."
 
 # Download and extract the archive
-TEMP_DIR=$(mktemp -d)
+TEMP_DIR=$(mktemp -d -p $HOME)
 curl -sfL "$BIN_URL" -o "$TEMP_DIR/kubesolo.tar.gz"
 tar xzf "$TEMP_DIR/kubesolo.tar.gz" -C "$TEMP_DIR"
 mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH"
