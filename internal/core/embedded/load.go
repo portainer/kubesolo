@@ -150,7 +150,7 @@ func loadKernelModules() error {
 	return nil
 }
 
-// loadImages loads the images; "portainer-agent" and "coredns" into the containerd images directory
+// loadImages loads the images; "portainer-agent", "coredns" and "local-path-provisioner" into the containerd images directory
 func loadImages(containerdImagesDir string) error {
 	if err := filesystem.EnsureDirectoryExists(containerdImagesDir); err != nil {
 		return fmt.Errorf("failed to create directory %s... %w", containerdImagesDir, err)
@@ -163,6 +163,7 @@ func loadImages(containerdImagesDir string) error {
 	}{
 		{portainerAgentImageFile, filepath.Join(containerdImagesDir, "portainer-agent.tar.gz"), "portainer-agent"},
 		{corednsImageFile, filepath.Join(containerdImagesDir, "coredns.tar.gz"), "coredns"},
+		{localPathProvisionerImageFile, filepath.Join(containerdImagesDir, "local-path-provisioner.tar.gz"), "local-path-provisioner"},
 	}
 
 	for _, image := range images {

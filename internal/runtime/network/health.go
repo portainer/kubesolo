@@ -17,7 +17,7 @@ func IsComponentHealthy(client *http.Client, request *http.Request, component st
 		resp, err := client.Do(request)
 		if err != nil {
 			log.Warn().Str("component", component).Msgf("component health check failed: %v", err)
-			time.Sleep(2 * time.Second)
+			time.Sleep(types.DefaultComponentSleep)
 			continue
 		}
 		defer resp.Body.Close()
@@ -33,7 +33,7 @@ func IsComponentHealthy(client *http.Client, request *http.Request, component st
 		}
 
 		log.Warn().Str("component", component).Msgf("component health check failed: status=%d, body=%s", resp.StatusCode, string(body))
-		time.Sleep(2 * time.Second)
+		time.Sleep(types.DefaultComponentSleep)
 	}
 
 	return fmt.Errorf("component health check failed after multiple attempts")
