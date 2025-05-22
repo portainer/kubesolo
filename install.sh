@@ -89,7 +89,7 @@ done
 
 # Service configuration
 APP_NAME="kubesolo"
-BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH.tar.gz"
+BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION-beta/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH.tar.gz"
 INSTALL_PATH="/usr/local/bin/$APP_NAME"
 SERVICE_PATH="/etc/systemd/system/$APP_NAME.service"
 
