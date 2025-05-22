@@ -76,12 +76,14 @@ curl -sfL https://get.kubesolo.io | sudo sh -
 
 A kubeconfig file is written to `/var/lib/kubesolo/pki/admin/admin.kubeconfig` and the service is automatically started.
 
+Note: If you’re running KubeSolo on a device with less than 512MB of RAM, it’s strongly advised to interact with KubeSolo using the `kubectl` command-line tool installed externally.
+
 ## Flags
 
 KubeSolo supports the following command-line flags:
 
 | Flag | Environment Variable | Description | Default |
-|------|-------------|---------|
+|------|-------------|---------|---------|
 | `--path` | `KUBESOLO_PATH` | Path to the directory containing the kubesolo configuration files | `/var/lib/kubesolo` |
 | `--portainer-edge-id` | `KUBESOLO_PORTAINER_EDGE_ID` | Portainer Edge ID | `""` |
 | `--portainer-edge-key` | `KUBESOLO_PORTAINER_EDGE_KEY` | Portainer Edge Key | `""` |
@@ -89,6 +91,14 @@ KubeSolo supports the following command-line flags:
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | Enable local storage | `true` |
 | `--debug` | `KUBESOLO_DEBUG` | Enable debug logging | `false` |
 | `--pprof-server` | `KUBESOLO_PPROF_SERVER` | Enable pprof server for profiling | `false` |
+
+Example:
+
+To config KubeSolo to use Portainer Edge, you can use the following command:
+
+```bash
+curl -sfL https://get.kubesolo.io | KUBESOLO_PORTAINER_EDGE_ID=your-portainer-edge-id KUBESOLO_PORTAINER_EDGE_KEY=your-portainer-edge-key sudo -E sh
+```
 
 ## Documentation
 

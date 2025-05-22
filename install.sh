@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 set -e
 
@@ -114,11 +114,11 @@ echo "📝 Creating systemd service..."
 CMD_ARGS="--path=$CONFIG_PATH"
 
 if [ -n "$PORTAINER_EDGE_ID" ]; then
-  CMD_ARGS="$CMD_ARGS --portainer-edge-id=$PORTAINER_EDGE_ID"
+  CMD_ARGS="$CMD_ARGS --portainer-edge-id=\"$PORTAINER_EDGE_ID\""
 fi
 
 if [ -n "$PORTAINER_EDGE_KEY" ]; then
-  CMD_ARGS="$CMD_ARGS --portainer-edge-key=$PORTAINER_EDGE_KEY"
+  CMD_ARGS="$CMD_ARGS --portainer-edge-key=\"$PORTAINER_EDGE_KEY\""
 fi
 
 if [ "$LOCAL_STORAGE" = "true" ]; then
@@ -141,7 +141,7 @@ After=network.target
 [Service]
 ExecStart=$INSTALL_PATH $CMD_ARGS
 Restart=always
-Envirment="GODEBUG=madvdontneed=1"
+Environment="GODEBUG=madvdontneed=1"
 RestartSec=3
 OOMScoreAdjust=-500
 LimitNOFILE=65535
@@ -165,12 +165,14 @@ echo "✅ $APP_NAME is now running and self-healing via systemd!"
 echo "📋 Logs: journalctl -u $APP_NAME -f"
 
 # Check for kubectl and merge kubeconfig
-if command -v kubectl &> /dev/null; then
-    echo "🔍 Detected kubectl installation"
+KUBECTL_PATH=$(command -v kubectl 2>/dev/null)
+if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ]; then
+    echo "🔍 Detected kubectl installation at $KUBECTL_PATH"
     
     # Wait for kubesolo to generate the kubeconfig
     echo "⏳ Waiting for kubesolo to generate kubeconfig..."
-    for i in {1..30}; do
+    i=1
+    while [ $i -le 30 ]; do
         if [ -f "$CONFIG_PATH/pki/admin/admin.kubeconfig" ]; then
             break
         fi
@@ -179,6 +181,7 @@ if command -v kubectl &> /dev/null; then
             exit 0
         fi
         sleep 1
+        i=$((i + 1))
     done
 
     if [ -f "$CONFIG_PATH/pki/admin/admin.kubeconfig" ]; then
@@ -192,7 +195,7 @@ if command -v kubectl &> /dev/null; then
         mkdir -p "$HOME/.kube" || handle_error "Failed to create .kube directory"
         
         # Merge the configs
-        KUBECONFIG="$HOME/.kube/config:$CONFIG_PATH/pki/admin/admin.kubeconfig" kubectl config view --flatten > "$HOME/.kube/config.tmp" || handle_error "Failed to merge kubeconfigs"
+        KUBECONFIG="$HOME/.kube/config:$CONFIG_PATH/pki/admin/admin.kubeconfig" "$KUBECTL_PATH" config view --flatten > "$HOME/.kube/config.tmp" || handle_error "Failed to merge kubeconfigs"
         mv "$HOME/.kube/config.tmp" "$HOME/.kube/config" || handle_error "Failed to update kubeconfig"
         
         echo "✅ Kubeconfig merged successfully"
@@ -200,4 +203,5 @@ if command -v kubectl &> /dev/null; then
     fi
 else
     echo "ℹ️  kubectl not found, skipping kubeconfig merge"
+    echo "💡 To use kubectl, please install it first: https://kubernetes.io/docs/tasks/tools/install-kubectl/"
 fi
