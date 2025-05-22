@@ -10,6 +10,7 @@ RUNC_VERSION="v1.1.9"
 CNI_VERSION="v1.3.0"
 PORTAINER_AGENT_VERSION="2.29.2"
 COREDNS_VERSION="1.12.1"
+LOCAL_PATH_PROVISIONER_VERSION="v0.0.31"
 
 # Process command line arguments
 while [[ "$#" -gt 0 ]]; do
@@ -103,6 +104,20 @@ else
         echo "Error saving CoreDNS image. Skipping."
     else
         echo "CoreDNS image saved successfully."
+    fi
+fi
+
+# Download Local Path Provisioner
+echo "Downloading Local Path Provisioner ${LOCAL_PATH_PROVISIONER_VERSION}..."
+LOCAL_PATH_PROVISIONER_IMAGE="rancher/local-path-provisioner:${LOCAL_PATH_PROVISIONER_VERSION}"
+if ! docker image pull --platform ${OS}/${ARCH} ${LOCAL_PATH_PROVISIONER_IMAGE}; then
+    echo "Error pulling Local Path Provisioner image. Skipping."
+else
+    echo "Saving Local Path Provisioner image to tar..."
+    if ! docker save ${LOCAL_PATH_PROVISIONER_IMAGE} | gzip > internal/core/embedded/bin/images/local-path-provisioner.tar.gz; then
+        echo "Error saving Local Path Provisioner image. Skipping."
+    else
+        echo "Local Path Provisioner image saved successfully."
     fi
 fi
 

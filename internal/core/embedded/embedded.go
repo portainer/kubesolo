@@ -23,6 +23,9 @@ var corednsImageFile []byte
 //go:embed bin/images/portainer-agent.tar.gz
 var portainerAgentImageFile []byte
 
+//go:embed bin/images/local-path-provisioner.tar.gz
+var localPathProvisionerImageFile []byte
+
 // EnsureEmbeddedDependencies ensures all required components are available
 // it loads the containerd components, cni plugins, cni config, images, and kernel modules
 // before the kubesolo application starts

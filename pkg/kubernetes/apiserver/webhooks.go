@@ -99,7 +99,14 @@ func (w *webhoook) serveMutate(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	patches := w.processPodMutation(admissionReview)
+	var patches []map[string]interface{}
+	switch admissionReview.Request.Kind.Kind {
+	case "Pod":
+		patches = w.processPodMutation(admissionReview)
+	case "PersistentVolumeClaim":
+		patches = w.processPVCMutation(admissionReview)
+	}
+
 	w.sendResponse(resp, admissionReview, patches)
 }
 
@@ -184,6 +191,44 @@ func (w *webhoook) createNodeNamePatch(pod corev1.Pod) []map[string]interface{} 
 	return []map[string]interface{}{patch}
 }
 
+// processPVCMutation processes the PVC mutation
+func (w *webhoook) processPVCMutation(admissionReview *admissionv1.AdmissionReview) []map[string]interface{} {
+	var pvc corev1.PersistentVolumeClaim
+	if err := json.Unmarshal(admissionReview.Request.Object.Raw, &pvc); err != nil {
+		log.Error().Str("component", "webhook").Err(err).Msg("failed to unmarshal PVC")
+		return nil
+	}
+
+	log.Debug().Str("component", "webhook").
+		Str("pvc", pvc.Name).
+		Str("namespace", pvc.Namespace).
+		Msg("processing PVC")
+
+	if _, exists := pvc.Annotations["volume.kubernetes.io/selected-node"]; exists {
+		log.Debug().Str("component", "webhook").
+			Str("pvc", pvc.Name).
+			Str("namespace", pvc.Namespace).
+			Msg("PVC already has node annotation")
+		return nil
+	}
+
+	patch := map[string]interface{}{
+		"op":   "add",
+		"path": "/metadata/annotations",
+		"value": map[string]string{
+			"volume.kubernetes.io/selected-node": w.nodeName,
+		},
+	}
+
+	log.Info().Str("component", "webhook").
+		Str("pvc", pvc.Name).
+		Str("namespace", pvc.Namespace).
+		Str("node", w.nodeName).
+		Msg("setting node annotation for PVC")
+
+	return []map[string]interface{}{patch}
+}
+
 // sendResponse sends the response to the admission review
 func (w *webhoook) sendResponse(resp http.ResponseWriter, admissionReview *admissionv1.AdmissionReview, patches []map[string]interface{}) {
 	admissionResponse := w.createAdmissionResponse(admissionReview, patches)
@@ -262,7 +307,7 @@ func (w *webhoook) createConfiguration() (*admissionregistrationv1.MutatingWebho
 						Rule: admissionregistrationv1.Rule{
 							APIGroups:   []string{"", "apps"},
 							APIVersions: []string{"v1"},
-							Resources:   []string{"pods"},
+							Resources:   []string{"pods", "persistentvolumeclaims"},
 						},
 					},
 				},

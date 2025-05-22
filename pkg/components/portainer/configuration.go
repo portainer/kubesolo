@@ -3,6 +3,7 @@ package portainer
 import (
 	"context"
 	"maps"
+	"strconv"
 
 	"github.com/portainer/kubesolo/types"
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +16,7 @@ func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, confi
 	data := map[string]string{
 		"EDGE_ID":            config.EdgeID,
 		"EDGE_INSECURE_POLL": config.EdgeInsecurePoll,
+		"EDGE_ASYNC":         strconv.FormatBool(config.EdgeAsync),
 	}
 
 	if config.EdgeSecret != "" {

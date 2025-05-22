@@ -113,6 +113,7 @@ type Embedded struct {
 type EdgeAgentConfig struct {
 	EdgeID           string
 	EdgeKey          string
+	EdgeAsync        bool
 	EdgeInsecurePoll string
 	EdgeSecret       string
 	EnvVars          map[string]string

@@ -20,6 +20,7 @@ const CoreDNSConfig = `.:53 {
 	}
 	forward . 1.1.1.1 8.8.8.8
 	health :8080
+	ready :8181
 }`
 
 // createConfigMap creates a configMap with the bare minimum CoreDNS configuration
