@@ -16,7 +16,7 @@ func (s *service) configureControllerManagerFlags(command *cobra.Command) {
 	_ = flags.Set("tls-cert-file", s.controllerManagerCertFile)
 	_ = flags.Set("tls-private-key-file", s.controllerManagerKeyFile)
 	_ = flags.Set("leader-elect", "false")
-	_ = flags.Set("controllers", "deployment,replicaset,service,serviceaccount,namespace,attachdetach,endpoint,daemonset,statefulset,root-ca-certificate-publisher-controller,serviceaccount-token-controller,node-ipam-controller,endpointslice-controller,garbage-collector-controller,ttl-after-finished-controller")
+	_ = flags.Set("controllers", "deployment,replicaset,service,serviceaccount,namespace,attachdetach,endpoint,daemonset,statefulset,root-ca-certificate-publisher-controller,serviceaccount-token-controller,node-ipam-controller,endpointslice-controller,garbage-collector-controller,ttl-after-finished-controller,persistentvolume-binder-controller")
 	_ = flags.Set("profiling", "false")
 	_ = flags.Set("use-service-account-credentials", "true")
 	_ = flags.Set("bind-address", "0.0.0.0")

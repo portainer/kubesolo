@@ -12,7 +12,7 @@ import (
 
 func createStorageClass(ctx context.Context, clientset *kubernetes.Clientset) error {
 	waitForFirstConsumer := storagev1.VolumeBindingWaitForFirstConsumer
-	deletePolicy := v1.PersistentVolumeReclaimRetain
+	reclaimPolicy := v1.PersistentVolumeReclaimRetain
 
 	storageClass := &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -23,7 +23,7 @@ func createStorageClass(ctx context.Context, clientset *kubernetes.Clientset) er
 		},
 		Provisioner:       "rancher.io/local-path",
 		VolumeBindingMode: &waitForFirstConsumer,
-		ReclaimPolicy:     &deletePolicy,
+		ReclaimPolicy:     &reclaimPolicy,
 	}
 
 	_, err := clientset.StorageV1().StorageClasses().Create(ctx, storageClass, metav1.CreateOptions{})
