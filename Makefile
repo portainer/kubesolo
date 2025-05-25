@@ -16,8 +16,8 @@ CC_arm = arm-linux-gnueabihf-gcc  # ARM Hard Float (ARMHF) - targets ARMv7+ with
 # Install cross-compilation toolchains
 .PHONY: install-cross-compilers
 install-cross-compilers:
-	apt-get update
-	apt-get install -y gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu gcc-arm-linux-gnueabihf
+	sudo apt-get update
+	sudo apt-get install -y gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu gcc-arm-linux-gnueabihf
 
 .PHONY: deps
 deps:
