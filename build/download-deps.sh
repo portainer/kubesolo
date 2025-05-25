@@ -33,7 +33,7 @@ mkdir -p internal/core/embedded/bin/images
 # Get containerd binaries
 if [ "${ARCH}" = "arm" ]; then
     # Build containerd for ARM using Docker cross-compilation
-    echo "Building containerd v2.1.1 for ${OS}-${ARCH} using Docker..."
+    echo "Building containerd v2.0.4 for ${OS}-${ARCH} using Docker..."
     
     # Check if Docker is available
     if ! command -v docker &> /dev/null; then
@@ -55,7 +55,7 @@ if [ "${ARCH}" = "arm" ]; then
         exit 1
     fi
     
-    if ! docker cp temp-containerd:/containerd-v2.1.1-linux-arm32.tar.gz internal/core/embedded/bin/containerd.tar.gz; then
+    if ! docker cp temp-containerd:/containerd-v2.0.4-linux-arm32.tar.gz internal/core/embedded/bin/containerd.tar.gz; then
         echo "Error extracting containerd archive from container."
         docker rm temp-containerd 2>/dev/null
         exit 1
