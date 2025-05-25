@@ -30,25 +30,74 @@ mkdir -p internal/core/embedded/bin/containerd
 mkdir -p internal/core/embedded/bin/cni
 mkdir -p internal/core/embedded/bin/images
 
-# Download containerd - add error checking
-echo "Downloading containerd ${CONTAINERD_VERSION} for ${OS}-${ARCH}..."
-if ! curl -L -f --silent -o internal/core/embedded/bin/containerd.tar.gz https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-${OS}-${ARCH}.tar.gz; then
-    echo "Error downloading containerd. Please check the version and URL."
-    exit 1
+# Get containerd binaries
+if [ "${ARCH}" = "arm" ]; then
+    # Build containerd for ARM using Docker cross-compilation
+    echo "Building containerd v2.1.1 for ${OS}-${ARCH} using Docker..."
+    
+    # Check if Docker is available
+    if ! command -v docker &> /dev/null; then
+        echo "Docker is required to build containerd for ARM but is not installed."
+        echo "Please install Docker or use pre-built binaries."
+        exit 1
+    fi
+    
+    # Build the containerd image
+    if ! docker build -f build/containerd.Dockerfile -t containerd-arm32-cross .; then
+        echo "Error building containerd Docker image."
+        exit 1
+    fi
+    
+    # Extract the compiled archive
+    echo "Extracting containerd binaries..."
+    if ! docker create --name temp-containerd containerd-arm32-cross; then
+        echo "Error creating temporary container."
+        exit 1
+    fi
+    
+    if ! docker cp temp-containerd:/containerd-v2.1.1-linux-arm32.tar.gz internal/core/embedded/bin/containerd.tar.gz; then
+        echo "Error extracting containerd archive from container."
+        docker rm temp-containerd 2>/dev/null
+        exit 1
+    fi
+    
+    docker rm temp-containerd
+    
+    # Verify the archive
+    if ! tar -tf internal/core/embedded/bin/containerd.tar.gz >/dev/null 2>&1; then
+        echo "Built containerd archive is not valid."
+        exit 1
+    fi
+    
+    echo "Successfully built containerd for ARM."
+else
+    # Download containerd for other architectures
+    echo "Downloading containerd ${CONTAINERD_VERSION} for ${OS}-${ARCH}..."
+    if ! curl -L -f --silent -o internal/core/embedded/bin/containerd.tar.gz https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-${OS}-${ARCH}.tar.gz; then
+        echo "Error downloading containerd. Please check the version and URL."
+        exit 1
+    fi
+
+    # Verify the download is a valid tar file
+    if ! tar -tf internal/core/embedded/bin/containerd.tar.gz >/dev/null 2>&1; then
+        echo "Downloaded containerd archive is not valid. Check URL or try again."
+        exit 1
+    fi
 fi
 
-# Verify the download is a valid tar file
-if ! tar -tf internal/core/embedded/bin/containerd.tar.gz >/dev/null 2>&1; then
-    echo "Downloaded containerd archive is not valid. Check URL or try again."
-    exit 1
-fi
-
+# Extract containerd binaries
 tar -xzf internal/core/embedded/bin/containerd.tar.gz -C internal/core/embedded/bin/containerd
 rm internal/core/embedded/bin/containerd.tar.gz
 
 # Download runc - add error checking
-echo "Downloading runc ${RUNC_VERSION} for ${ARCH}..."
-if ! curl -L -f --silent -o internal/core/embedded/bin/runc https://github.com/opencontainers/runc/releases/download/${RUNC_VERSION}/runc.${ARCH}; then
+# Map architecture to runc filename (arm -> armhf for runc releases)
+RUNC_ARCH=${ARCH}
+if [ "${ARCH}" = "arm" ]; then
+    RUNC_ARCH="armhf"
+fi
+
+echo "Downloading runc ${RUNC_VERSION} for ${ARCH} (using runc.${RUNC_ARCH})..."
+if ! curl -L -f --silent -o internal/core/embedded/bin/runc https://github.com/opencontainers/runc/releases/download/${RUNC_VERSION}/runc.${RUNC_ARCH}; then
     echo "Error downloading runc. Please check the version and URL."
     exit 1
 fi

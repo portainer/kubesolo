@@ -1,1 +1,28 @@
-name: "kubesolo release"
+name: Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  releases-matrix:
+    name: Release Go Binary
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64, arm]
+    steps:
+    - uses: actions/checkout@v4
+    - id: get_version
+      uses: battila7/get-version-action@v2
+    - name: Set build time
+      run: echo BUILD_TIME=$(date) >> ${GITHUB_ENV}
+    - uses: wangyoucao577/go-release-action@v1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        pre_command: make install-cross-compilers
+        build_command: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo make build
