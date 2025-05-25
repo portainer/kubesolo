@@ -104,6 +104,93 @@ curl -sfL https://get.kubesolo.io | KUBESOLO_PORTAINER_EDGE_ID=your-portainer-ed
 
 Please see the [documentation](https://kubesolo.io/documentation) for complete documentation.
 
+## Building from Source
+
+### Prerequisites
+
+- Go 1.24 or later
+- Docker (for ARM builds and dependency management)
+- Cross-compilation toolchains (optional, for cross-platform builds)
+
+### Install Cross-Compilation Toolchains
+
+To build for multiple architectures, install the required cross-compilation toolchains:
+
+```bash
+make install-cross-compilers
+```
+
+This installs:
+- `gcc-aarch64-linux-gnu` (for ARM64)
+- `gcc-x86-64-linux-gnu` (for AMD64)
+- `gcc-arm-linux-gnueabihf` (for ARM/ARMHF)
+
+### Basic Build
+
+Build for your current platform (outputs to `./dist/kubesolo`):
+
+```bash
+make build
+```
+
+### Cross-Platform Builds
+
+Build for specific architectures using environment variables:
+
+```bash
+# Build for ARM64
+GOARCH=arm64 make build
+
+# Build for AMD64  
+GOARCH=amd64 make build
+
+# Build for ARM (ARMHF)
+GOARCH=arm make build
+```
+
+### Custom Output Path
+
+Specify a custom output path using the `OUTPUT` variable:
+
+```bash
+# Custom filename
+OUTPUT=./kubesolo-custom make build
+
+# Platform-specific naming
+GOARCH=arm OUTPUT=./dist/kubesolo-arm make build
+
+# Different directory
+OUTPUT=./bin/kubesolo make build
+```
+
+### Combined Examples
+
+```bash
+# Build ARM binary with custom name
+GOARCH=arm OUTPUT=./dist/kubesolo-linux-arm make build
+
+# Build AMD64 binary for CI/CD
+GOARCH=amd64 OUTPUT=./artifacts/kubesolo-linux-amd64 make build
+```
+
+### Development
+
+For development and testing, you can run KubeSolo directly without building:
+
+```bash
+# Download dependencies first (only needed once)
+make deps
+
+# Run KubeSolo in development mode
+make dev
+```
+
+### Notes
+
+- **ARM builds**: For ARM architecture, containerd binaries are built using Docker cross-compilation for optimal compatibility
+- **Dependencies**: The build process automatically downloads required dependencies (containerd, runc, CNI plugins) for the target architecture
+- **CGO**: All builds use CGO for better performance and compatibility with system libraries
+
 ## Community
 
 ### Getting involved
@@ -113,10 +200,6 @@ GitHub Issues - Submit your issues and feature requests via GitHub.
 ## Release cadence
 
 KubeSolo maintains pace with upstream Kubernetes releases but rely on the forked version from `k3s`. Our goal is to release patch releases within one week, and new minors within 30 days.
-
-## Contributing
-
-TBC
 
 ## Security
 

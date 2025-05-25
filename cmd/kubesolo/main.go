@@ -27,6 +27,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var (
+	Version   = "dev"
+	BuildDate = "unknown"
+	Commit    = "unknown"
+)
+
 // the main struct for the kubesolo application
 type kubesolo struct {
 	hostName           string
@@ -93,6 +99,12 @@ func (s *kubesolo) run() {
 		log.Info().Msg("the main process received interrupt signal, shutting down...")
 		cancel()
 	}()
+
+	log.Info().
+		Str("version", Version).
+		Str("build-date", BuildDate).
+		Str("commit", Commit).
+		Msg("starting kubesolo...")
 
 	log.Info().Str("component", "kubesolo").Msg("ensuring all embedded dependencies are available...")
 	if err := embedded.EnsureEmbeddedDependencies(s.embedded); err != nil {

@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
+    types: [opened, reopened, synchronize]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64, arm]
+    steps:
+      - name: "checkout the current branch"
+        uses: actions/checkout@v4
+      - name: "set up golang"
+        uses: actions/setup-go@v5.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "Install cross-compilation toolchains"
+        run: make install-cross-compilers
+      - name: "Build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} make build
