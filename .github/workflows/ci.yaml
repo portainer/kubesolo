@@ -22,5 +22,5 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - name: "Build the binary for ${matrix.goos}/${matrix.goarch}"
-        run: GOOS=${matrix.goos} GOARCH=${matrix.goarch} make build
+      - name: "Build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} make build
