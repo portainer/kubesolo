@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/portainer/kubesolo/types"
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 )
 
 // generateKubeletKubeconfig creates a kubeconfig structure for the kubelet
 func (s *service) generateKubeletKubeconfig() error {
+	nodeIP, err := network.GetNodeIP()
+	if err != nil {
+		return fmt.Errorf("failed to get node IP address: %v", err)
+	}
+
 	kubeconfigMap := map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Config",
@@ -19,7 +24,7 @@ func (s *service) generateKubeletKubeconfig() error {
 				"name": "kubernetes",
 				"cluster": map[string]any{
 					"certificate-authority": s.caFile,
-					"server":                types.DefaultAPIServerAddress,
+					"server":                fmt.Sprintf("https://%s:6443", nodeIP),
 				},
 			},
 		},
