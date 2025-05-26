@@ -117,7 +117,7 @@ Please see the [documentation](https://kubesolo.io/documentation) for complete d
 To build for multiple architectures, install the required cross-compilation toolchains:
 
 ```bash
-make install-cross-compilers
+sudo make install-cross-compilers
 ```
 
 This installs:
