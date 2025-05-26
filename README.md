@@ -76,7 +76,7 @@ curl -sfL https://get.kubesolo.io | sudo sh -
 
 A kubeconfig file is written to `/var/lib/kubesolo/pki/admin/admin.kubeconfig` and the service is automatically started.
 
-Note: If you’re running KubeSolo on a device with less than 512MB of RAM, it’s strongly advised to interact with KubeSolo using the `kubectl` command-line tool installed externally.
+Note: If you're running KubeSolo on a device with less than 512MB of RAM, it's strongly advised to interact with KubeSolo using the `kubectl` command-line tool installed externally.
 
 ## Flags
 
@@ -139,13 +139,13 @@ Build for specific architectures using environment variables:
 
 ```bash
 # Build for ARM64
-GOARCH=arm64 make build
+make build GOARCH=arm64
 
 # Build for AMD64  
-GOARCH=amd64 make build
+make build GOARCH=amd64
 
 # Build for ARM (ARMHF)
-GOARCH=arm make build
+make build GOARCH=arm
 ```
 
 ### Custom Output Path
@@ -154,23 +154,23 @@ Specify a custom output path using the `OUTPUT` variable:
 
 ```bash
 # Custom filename
-OUTPUT=./kubesolo-custom make build
+make build OUTPUT=./kubesolo-custom
 
 # Platform-specific naming
-GOARCH=arm OUTPUT=./dist/kubesolo-arm make build
+make build GOARCH=arm OUTPUT=./dist/kubesolo-arm
 
 # Different directory
-OUTPUT=./bin/kubesolo make build
+make build OUTPUT=./bin/kubesolo
 ```
 
 ### Combined Examples
 
 ```bash
 # Build ARM binary with custom name
-GOARCH=arm OUTPUT=./dist/kubesolo-linux-arm make build
+make build GOARCH=arm OUTPUT=./dist/kubesolo-linux-arm
 
 # Build AMD64 binary for CI/CD
-GOARCH=amd64 OUTPUT=./artifacts/kubesolo-linux-amd64 make build
+make build GOARCH=amd64 OUTPUT=./artifacts/kubesolo-linux-amd64
 ```
 
 ### Development

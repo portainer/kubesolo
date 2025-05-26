@@ -25,4 +25,4 @@ jobs:
       - name: "Install cross-compilation toolchains"
         run: sudo make install-cross-compilers
       - name: "Build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
-        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} make build
+        run: make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
