@@ -20,7 +20,6 @@ const (
 	DefaultK8sNamespace                   = "k8s.io"
 	DefaultKubeletDir                     = "kubelet"
 	DefaultAPIServerDir                   = "apiserver"
-	DefaultAPIServerAddress               = "https://127.0.0.1:6443"
 	DefaultKineEndpoint                   = "127.0.0.1:2379"
 	DefaultPodCIDR                        = "10.42.0.0/16"
 	DefaultServiceClusterIPRange          = "10.43.0.0/16"

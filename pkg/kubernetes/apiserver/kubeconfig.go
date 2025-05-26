@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/portainer/kubesolo/types"
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/rs/zerolog/log"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -28,7 +28,12 @@ func (s *service) generateKubeConfig() error {
 		return err
 	}
 
-	kubeConfig := s.createKubeConfig(certData)
+	nodeIP, err := network.GetNodeIP()
+	if err != nil {
+		return fmt.Errorf("failed to get node IP address: %v", err)
+	}
+
+	kubeConfig := s.createKubeConfig(certData, nodeIP)
 	if err := s.writeKubeConfig(kubeConfig); err != nil {
 		return err
 	}
@@ -72,7 +77,7 @@ func (s *service) readCertificateFiles() (*certificateData, error) {
 }
 
 // createKubeConfig creates a new kubeconfig with the provided certificate data
-func (s *service) createKubeConfig(certData *certificateData) *api.Config {
+func (s *service) createKubeConfig(certData *certificateData, nodeIP string) *api.Config {
 	const (
 		clusterName  = "kubesolo"
 		userName     = "kubernetes-admin"
@@ -83,7 +88,7 @@ func (s *service) createKubeConfig(certData *certificateData) *api.Config {
 
 	kubeConfig := api.NewConfig()
 	kubeConfig.Clusters[clusterName] = &api.Cluster{
-		Server:                   types.DefaultAPIServerAddress,
+		Server:                   fmt.Sprintf("https://%s:6443", nodeIP),
 		CertificateAuthorityData: certData.ca,
 	}
 	kubeConfig.AuthInfos[userName] = &api.AuthInfo{
