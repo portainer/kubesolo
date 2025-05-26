@@ -19,6 +19,19 @@ install-cross-compilers:
 	apt-get update
 	apt-get install -y gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu gcc-arm-linux-gnueabihf
 
+# Install Docker client only (for debian:buster-slim containers - used by release workflows)
+.PHONY: install-docker-client
+install-docker-client:
+	apt-get update
+	apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+	curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+	echo "deb [arch=$(shell dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(shell lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+	apt-get update
+	apt-get install -y docker-ce-cli
+
+.PHONY: release-workflow-deps
+release-workflow-deps: install-docker-client install-cross-compilers
+
 .PHONY: deps
 deps:
 	./build/download-deps.sh --os=$(GOOS) --arch=$(GOARCH)
