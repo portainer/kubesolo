@@ -26,3 +26,4 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         pre_command: make release-workflow-deps
         build_command: 'make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo'
+        asset_name: kubesolo-${{ steps.get_version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
