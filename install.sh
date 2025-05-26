@@ -24,7 +24,7 @@ case $ARCH in
 esac
 
 # Default configuration from environment variables
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-0.1.0}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-0.1.1-beta}"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
 PORTAINER_EDGE_KEY="${KUBESOLO_PORTAINER_EDGE_KEY:-}"
@@ -89,7 +89,7 @@ done
 
 # Service configuration
 APP_NAME="kubesolo"
-BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION-beta/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH.tar.gz"
+BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH.tar.gz"
 INSTALL_PATH="/usr/local/bin/$APP_NAME"
 SERVICE_PATH="/etc/systemd/system/$APP_NAME.service"
 
