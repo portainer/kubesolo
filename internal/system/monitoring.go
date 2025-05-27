@@ -8,17 +8,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// EnablePProfServer enables the pprof server for debugging
-var EnablePProfServer = false
-
 // StartMonitoring starts the system monitoring services including pprof and memory monitoring
 func StartMonitoring() {
-	if EnablePProfServer {
-		go func() {
-			log.Debug().Msg("Starting pprof server on :6060")
-			http.ListenAndServe(":6060", nil)
-		}()
-	}
+	go func() {
+		log.Debug().Msg("Starting pprof server on :6060")
+		http.ListenAndServe(":6060", nil)
+	}()
 
 	go monitorMemory()
 }

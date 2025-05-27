@@ -32,9 +32,9 @@ const (
 	DefaultPortainerAgentImage            = "portainer/agent:2.29.2"
 	DefaultCoreDNSImage                   = "coredns/coredns:1.12.1"
 	DefaultLocalPathProvisionerImage      = "rancher/local-path-provisioner:v0.0.31"
-	DefaultGCPercent                      = 30
+	DefaultGCPercent                      = 50
 	DefaultContextTimeout                 = 15 * time.Second
-	DefaultMemoryLimit                    = 75 * 1024 * 1024
+	DefaultMemoryLimit                    = 160 * 1024 * 1024
 	DefaultComponentSleep                 = 5 * time.Second
 	DefaultRetryCount                     = 12
 )

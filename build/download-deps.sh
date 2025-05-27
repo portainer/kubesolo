@@ -11,6 +11,7 @@ CNI_VERSION="v1.3.0"
 PORTAINER_AGENT_VERSION="2.29.2"
 COREDNS_VERSION="1.12.1"
 LOCAL_PATH_PROVISIONER_VERSION="v0.0.31"
+PAUSE_IMAGE_VERSION="3.10"
 
 # Process command line arguments
 while [[ "$#" -gt 0 ]]; do
@@ -171,3 +172,18 @@ else
 fi
 
 echo "Dependencies downloaded successfully"
+
+
+# Download Kubernetes pause image
+echo "Downloading Kubernetes pause image ${PAUSE_IMAGE_VERSION}..."
+PAUSE_IMAGE="registry.k8s.io/pause:${PAUSE_IMAGE_VERSION}"
+if ! docker image pull --platform ${OS}/${ARCH} ${PAUSE_IMAGE}; then
+    echo "Error pulling Kubernetes pause image. Skipping."
+else
+    echo "Saving Kubernetes pause image to tar..."
+    if ! docker save ${PAUSE_IMAGE} | gzip > internal/core/embedded/bin/images/pause.tar.gz; then
+        echo "Error saving Kubernetes pause image. Skipping."
+    else
+        echo "Kubernetes pause image saved successfully."
+    fi
+fi

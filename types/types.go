@@ -102,8 +102,10 @@ type Embedded struct {
 	WebhookDir string
 
 	// Images
-	PortainerAgentImageFile string
-	CorednsImageFile        string
+	PortainerAgentImageFile       string
+	CorednsImageFile              string
+	SandboxImageFile              string
+	LocalPathProvisionerImageFile string
 
 	// Portainer Edge
 	IsPortainerEdge bool

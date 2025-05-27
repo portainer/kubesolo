@@ -1,7 +1,7 @@
 package embedded
 
 import (
-	"embed"
+	_ "embed"
 	"fmt"
 
 	"github.com/portainer/kubesolo/types"
@@ -14,8 +14,17 @@ var containerdShimBinary []byte
 //go:embed bin/runc
 var runcBinary []byte
 
-//go:embed bin/cni/*
-var cniPluginsFS embed.FS
+//go:embed bin/cni/bridge
+var cniPluginBridge []byte
+
+//go:embed bin/cni/host-local
+var cniPluginHostLocal []byte
+
+//go:embed bin/cni/portmap
+var cniPluginPortmap []byte
+
+//go:embed bin/cni/loopback
+var cniPluginLoopback []byte
 
 //go:embed bin/images/coredns.tar.gz
 var corednsImageFile []byte
@@ -25,6 +34,9 @@ var portainerAgentImageFile []byte
 
 //go:embed bin/images/local-path-provisioner.tar.gz
 var localPathProvisionerImageFile []byte
+
+//go:embed bin/images/pause.tar.gz
+var sandboxImageFile []byte
 
 // EnsureEmbeddedDependencies ensures all required components are available
 // it loads the containerd components, cni plugins, cni config, images, and kernel modules
