@@ -3,11 +3,9 @@ package embedded
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/types"
@@ -48,11 +46,6 @@ func loadContainerdComponents(embedded types.Embedded) error {
 // loadCNIPlugins creates the necessary directories and extracts and installs requried CNI plugins; "bridge", "host-local", "portmap", "loopback"
 // it then creates a symlink to the standard CNI bin directory
 func loadCNIPlugins(containerdCNIDir, containerdCNIPluginsDir string) error {
-	entries, err := fs.ReadDir(cniPluginsFS, types.DefaultEmbeddedCNIDir)
-	if err != nil {
-		return fmt.Errorf("failed to read embedded cni plugins... %v", err)
-	}
-
 	dirs := []string{
 		containerdCNIDir,
 		containerdCNIPluginsDir,
@@ -65,26 +58,20 @@ func loadCNIPlugins(containerdCNIDir, containerdCNIPluginsDir string) error {
 		}
 	}
 
-	for _, entry := range entries {
-		binaryName := entry.Name()
-		if entry.IsDir() || !slices.Contains(types.KubesoloRequiredCNIPlugins, binaryName) {
-			continue
-		}
+	plugins := []struct {
+		source      []byte
+		destination string
+		name        string
+	}{
+		{cniPluginBridge, filepath.Join(containerdCNIPluginsDir, "bridge"), "bridge"},
+		{cniPluginHostLocal, filepath.Join(containerdCNIPluginsDir, "host-local"), "host-local"},
+		{cniPluginPortmap, filepath.Join(containerdCNIPluginsDir, "portmap"), "portmap"},
+		{cniPluginLoopback, filepath.Join(containerdCNIPluginsDir, "loopback"), "loopback"},
+	}
 
-		srcFilePath := filepath.Join(types.DefaultEmbeddedCNIDir, binaryName)
-		destFilePath := filepath.Join(containerdCNIPluginsDir, binaryName)
-
-		if _, err := os.Stat(destFilePath); err == nil {
-			continue
-		}
-
-		binaryData, err := cniPluginsFS.ReadFile(srcFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to read embedded %s %s... %v", "cni plugins", binaryName, err)
-		}
-
-		if err := os.WriteFile(destFilePath, binaryData, 0755); err != nil {
-			return fmt.Errorf("failed to write %s %s... %v", "cni plugins", binaryName, err)
+	for _, plugin := range plugins {
+		if err := filesystem.ExtractBinary(plugin.source, plugin.destination); err != nil {
+			return fmt.Errorf("failed to extract %s binary: %v", plugin.name, err)
 		}
 	}
 
@@ -150,7 +137,7 @@ func loadKernelModules() error {
 	return nil
 }
 
-// loadImages loads the images; "portainer-agent", "coredns" and "local-path-provisioner" into the containerd images directory
+// loadImages loads the images; "portainer-agent", "coredns", "local-path-provisioner" and "pause" into the containerd images directory
 func loadImages(containerdImagesDir string) error {
 	if err := filesystem.EnsureDirectoryExists(containerdImagesDir); err != nil {
 		return fmt.Errorf("failed to create directory %s... %w", containerdImagesDir, err)
@@ -164,6 +151,7 @@ func loadImages(containerdImagesDir string) error {
 		{portainerAgentImageFile, filepath.Join(containerdImagesDir, "portainer-agent.tar.gz"), "portainer-agent"},
 		{corednsImageFile, filepath.Join(containerdImagesDir, "coredns.tar.gz"), "coredns"},
 		{localPathProvisionerImageFile, filepath.Join(containerdImagesDir, "local-path-provisioner.tar.gz"), "local-path-provisioner"},
+		{sandboxImageFile, filepath.Join(containerdImagesDir, "pause.tar.gz"), "pause"},
 	}
 
 	for _, image := range images {

@@ -141,7 +141,6 @@ After=network.target
 [Service]
 ExecStart=$INSTALL_PATH $CMD_ARGS
 Restart=always
-Environment="GODEBUG=madvdontneed=1"
 RestartSec=3
 OOMScoreAdjust=-500
 LimitNOFILE=65535

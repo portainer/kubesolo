@@ -85,3 +85,10 @@ dev:
 clean:
 	rm -rf ./dist/kubesolo*
 	rm -rf ./internal/core/embedded/bin
+
+.PHONY: archive
+archive:
+	tar -czf dist/kubesolo.tar.gz dist/kubesolo install.sh
+
+# Include custom make targets
+-include $(wildcard .dev/*.make)
