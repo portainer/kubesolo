@@ -132,11 +132,11 @@ APP_NAME="kubesolo"
 BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH.tar.gz"
 INSTALL_PATH="/usr/local/bin/$APP_NAME"
 
-echo "🔄 Installing $APP_NAME for $INIT_SYSTEM init system..."
+echo "🔄 Installing $APP_NAME $KUBESOLO_VERSION for $INIT_SYSTEM init system..."
 
 # Download and extract the archive
 TEMP_DIR=$(mktemp -d -p $HOME) || handle_error "Failed to create temporary directory"
-echo "📥 Downloading $APP_NAME..."
+echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION..."
 curl -sfL "$BIN_URL" -o "$TEMP_DIR/kubesolo.tar.gz" || handle_error "Failed to download $APP_NAME from $BIN_URL"
 
 echo "📦 Extracting $APP_NAME..."
