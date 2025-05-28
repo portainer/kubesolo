@@ -42,6 +42,10 @@ func createDeployment(ctx context.Context, clientset *kubernetes.Clientset) erro
 								Limits: corev1.ResourceList{
 									corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("20Mi"),
 								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("20Mi"),
+									corev1.ResourceCPU:    kubesolokubernetes.ParseResourceQuantity("50m"),
+								},
 							},
 							Command: []string{
 								"local-path-provisioner",

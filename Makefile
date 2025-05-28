@@ -85,3 +85,6 @@ dev:
 clean:
 	rm -rf ./dist/kubesolo*
 	rm -rf ./internal/core/embedded/bin
+
+# Include custom make targets
+-include $(wildcard .dev/*.make)
