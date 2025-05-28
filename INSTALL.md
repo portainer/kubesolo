@@ -68,7 +68,8 @@ KUBESOLO_VERSION=v0.1.2-beta KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
 Universal service management script that works with any supported init system:
 
 ```bash
-# Make executable
+# Download and make executable
+curl -sfL https://raw.githubusercontent.com/portainer/kubesolo/develop/kubesolo-service.sh -o kubesolo-service.sh
 chmod +x kubesolo-service.sh
 
 # Usage
@@ -267,4 +268,4 @@ To add support for additional init systems or platforms:
 2. Implement service creation function
 3. Add service management to `kubesolo-service.sh`
 4. Test on target platform
-5. Update documentation 
+5. Update documentation
