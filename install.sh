@@ -460,7 +460,11 @@ if [ "$RUN_MODE" != "foreground" ]; then
 fi
 
 # Check for kubectl and merge kubeconfig (same as original)
-KUBECTL_PATH=$(command -v kubectl 2>/dev/null)
+KUBECTL_PATH=""
+if command -v kubectl >/dev/null 2>&1; then
+    KUBECTL_PATH=$(command -v kubectl)
+fi
+
 if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foreground" ]; then
     echo "🔍 Detected kubectl installation at $KUBECTL_PATH"
     
@@ -490,11 +494,16 @@ if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foregro
         mkdir -p "$HOME/.kube" || handle_error "Failed to create .kube directory"
         
         # Merge the configs
-        KUBECONFIG="$HOME/.kube/config:$CONFIG_PATH/pki/admin/admin.kubeconfig" "$KUBECTL_PATH" config view --flatten > "$HOME/.kube/config.tmp" || handle_error "Failed to merge kubeconfigs"
-        mv "$HOME/.kube/config.tmp" "$HOME/.kube/config" || handle_error "Failed to update kubeconfig"
-        
-        echo "✅ Kubeconfig merged successfully"
-        echo "📝 Your existing kubeconfig has been backed up with timestamp"
+        export KUBECONFIG="$HOME/.kube/config:$CONFIG_PATH/pki/admin/admin.kubeconfig"
+        if "$KUBECTL_PATH" config view --flatten > "$HOME/.kube/config.tmp" 2>/dev/null; then
+            mv "$HOME/.kube/config.tmp" "$HOME/.kube/config" || handle_error "Failed to update kubeconfig"
+            echo "✅ Kubeconfig merged successfully"
+            echo "📝 Your existing kubeconfig has been backed up with timestamp"
+        else
+            echo "⚠️  Failed to merge kubeconfig, copying KubeSolo config as default"
+            cp "$CONFIG_PATH/pki/admin/admin.kubeconfig" "$HOME/.kube/config" || handle_error "Failed to copy kubeconfig"
+        fi
+        unset KUBECONFIG
     fi
 else
     if [ "$RUN_MODE" != "foreground" ]; then
