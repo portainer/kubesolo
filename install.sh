@@ -147,6 +147,12 @@ mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary t
 rm -rf "$TEMP_DIR"
 chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
 
+# Handle SELinux file contexts if SELinux tools are available
+if command -v restorecon >/dev/null 2>&1; then
+    echo "🔒 Restoring SELinux contexts for installed binary..."
+    restorecon -v "$INSTALL_PATH" || echo "⚠️  Could not restore SELinux context (this may be normal)"
+fi
+
 # Construct command arguments
 CMD_ARGS="--path=$CONFIG_PATH"
 
