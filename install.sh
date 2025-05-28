@@ -263,7 +263,12 @@ EOF
         chkconfig "$APP_NAME" on || handle_error "Failed to enable $APP_NAME service"
     fi
     
-    service "$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
+    # Start the service - try service command first, fall back to direct init script
+    if command -v service >/dev/null 2>&1; then
+        service "$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
+    else
+        "/etc/init.d/$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
+    fi
     echo "✅ $APP_NAME service created and started with SysV init"
 }
 
@@ -446,7 +451,11 @@ if [ "$RUN_MODE" != "foreground" ]; then
             echo "   Logs: journalctl -u $APP_NAME -f"
             ;;
         "sysvinit")
-            echo "   Status: service $APP_NAME status"
+            if command -v service >/dev/null 2>&1; then
+                echo "   Status: service $APP_NAME status"
+            else
+                echo "   Status: /etc/init.d/$APP_NAME status"
+            fi
             echo "   Logs: tail -f /var/log/syslog | grep $APP_NAME"
             ;;
         "openrc")
