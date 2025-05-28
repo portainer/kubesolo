@@ -41,7 +41,6 @@ func createDeployment(ctx context.Context, clientset *kubernetes.Clientset) erro
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("20Mi"),
-									corev1.ResourceCPU:    kubesolokubernetes.ParseResourceQuantity("100m"),
 								},
 								Requests: corev1.ResourceList{
 									corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("20Mi"),
