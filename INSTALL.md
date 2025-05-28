@@ -19,11 +19,11 @@ The main installer now automatically detects your init system and creates approp
 curl -sfL https://get.kubesolo.io | sudo sh -
 
 # Or download and run directly
-curl -sfL https://raw.githubusercontent.com/portainer/kubesolo/main/install.sh | sudo sh -
+curl -sfL https://raw.githubusercontent.com/portainer/kubesolo/develop/install.sh | sudo sh -
 
 # With options
 curl -sfL https://get.kubesolo.io | sudo sh -s -- \
-  --version=v0.1.1-beta \
+  --version=v0.1.2-beta \
   --path=/opt/kubesolo \
   --run-mode=service
 ```
@@ -49,10 +49,10 @@ This script provides basic installation with minimal dependencies for the most c
 
 ```bash
 # Download and run
-wget -O - https://raw.githubusercontent.com/portainer/kubesolo/main/install-minimal.sh | sh
+wget -O - https://raw.githubusercontent.com/portainer/kubesolo/develop/install-minimal.sh | sh
 
 # Or with environment variables
-KUBESOLO_VERSION=v0.1.1-beta KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
+KUBESOLO_VERSION=v0.1.2-beta KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
 ```
 
 **Features:**
@@ -86,8 +86,8 @@ chmod +x kubesolo-service.sh
 All installers support these environment variables:
 
 ```bash
-export KUBESOLO_VERSION="v0.1.1-beta"           # Version to install
-export KUBESOLO_PATH="/var/lib/kubesolo"         # Installation path
+export KUBESOLO_VERSION="v0.1.2-beta"           # Version to install
+export KUBESOLO_PATH="/var/lib/kubesolo"        # Installation path
 export KUBESOLO_PORTAINER_EDGE_ID="your-id"     # Portainer Edge ID
 export KUBESOLO_PORTAINER_EDGE_KEY="your-key"   # Portainer Edge Key
 export KUBESOLO_PORTAINER_EDGE_ASYNC="false"    # Async mode
@@ -130,7 +130,7 @@ For air-gapped installations:
 
 ```bash
 # Pre-download the binary
-wget https://github.com/portainer/kubesolo/releases/download/v0.1.1-beta/kubesolo-v0.1.1-beta-linux-arm64.tar.gz
+wget https://github.com/portainer/kubesolo/releases/download/v0.1.2-beta/kubesolo-v0.1.2-beta-linux-arm64.tar.gz
 
 # Extract and install manually
 tar -xzf kubesolo-*.tar.gz
@@ -217,7 +217,7 @@ cp /var/lib/kubesolo/pki/admin/admin.kubeconfig ~/.kube/config
 
 ```bash
 # In your Yocto recipe
-SRC_URI += "https://raw.githubusercontent.com/portainer/kubesolo/main/install-minimal.sh"
+SRC_URI += "https://raw.githubusercontent.com/portainer/kubesolo/develop/install-minimal.sh"
 
 do_install() {
     install -d ${D}${bindir}
@@ -242,39 +242,6 @@ define KUBESOLO_INSTALL_TARGET_CMDS
 endef
 ```
 
-### Docker/Container
-
-```bash
-# For containerized industrial applications
-FROM alpine:latest
-RUN apk add --no-cache curl
-RUN curl -sfL https://get.kubesolo.io | sh
-CMD ["/usr/local/bin/kubesolo-ctl", "start"]
-```
-
-## Security Considerations
-
-1. **Verify downloads**: Always verify checksums in production
-2. **Network access**: Consider firewall rules for Kubernetes API
-3. **File permissions**: Ensure proper permissions on config files
-4. **User context**: Run with appropriate user privileges
-
-## Performance Tuning for Industrial Devices
-
-```bash
-# Reduce memory usage
-export KUBESOLO_DEBUG="false"
-export KUBESOLO_PPROF_SERVER="false"
-
-# Optimize for single-node
-export KUBESOLO_LOCAL_STORAGE="true"
-
-# Custom resource limits (modify kubesolo source if needed)
-# - Reduce controller replicas
-# - Lower memory limits
-# - Disable unnecessary features
-```
-
 ## Support Matrix
 
 | Platform | Universal Installer | Minimal Installer | Service Manager |
@@ -291,20 +258,6 @@ export KUBESOLO_LOCAL_STORAGE="true"
 ✅ Full support  
 ⚠️ Limited support  
 ❌ Not supported  
-
-## Migration from Previous Versions
-
-If you previously used a systemd-only installer, the new universal installer is fully backward compatible:
-
-```bash
-# These commands work identically
-curl -sfL https://get.kubesolo.io | sudo sh -
-./install.sh --version=v0.1.1-beta --path=/opt/kubesolo
-
-# New features are available via environment variables
-export KUBESOLO_RUN_MODE="daemon"
-curl -sfL https://get.kubesolo.io | sudo sh -
-```
 
 ## Contributing
 
