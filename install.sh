@@ -468,6 +468,24 @@ fi
 if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foreground" ]; then
     echo "🔍 Detected kubectl installation at $KUBECTL_PATH"
     
+    # Detect real user when running under sudo
+    REAL_USER="$USER"
+    REAL_HOME="$HOME"
+    REAL_UID=""
+    REAL_GID=""
+    
+    if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+        REAL_USER="$SUDO_USER"
+        REAL_UID="$SUDO_UID"
+        REAL_GID="$SUDO_GID"
+        # Get the real user's home directory
+        REAL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+        if [ -z "$REAL_HOME" ]; then
+            REAL_HOME="/home/$SUDO_USER"
+        fi
+        echo "🔍 Detected sudo usage - using real user: $REAL_USER (home: $REAL_HOME)"
+    fi
+    
     # Wait for kubesolo to generate the kubeconfig
     echo "⏳ Waiting for kubesolo to generate kubeconfig..."
     i=1
@@ -485,25 +503,34 @@ if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foregro
 
     if [ -f "$CONFIG_PATH/pki/admin/admin.kubeconfig" ]; then
         echo "🔄 Merging kubeconfig..."
+        
         # Create backup of existing kubeconfig
-        if [ -f "$HOME/.kube/config" ]; then
-            cp "$HOME/.kube/config" "$HOME/.kube/config.backup-$(date +%Y%m%d%H%M%S)" || handle_error "Failed to backup existing kubeconfig"
+        if [ -f "$REAL_HOME/.kube/config" ]; then
+            cp "$REAL_HOME/.kube/config" "$REAL_HOME/.kube/config.backup-$(date +%Y%m%d%H%M%S)" || handle_error "Failed to backup existing kubeconfig"
         fi
         
         # Create .kube directory if it doesn't exist
-        mkdir -p "$HOME/.kube" || handle_error "Failed to create .kube directory"
+        mkdir -p "$REAL_HOME/.kube" || handle_error "Failed to create .kube directory"
         
         # Merge the configs
-        export KUBECONFIG="$HOME/.kube/config:$CONFIG_PATH/pki/admin/admin.kubeconfig"
-        if "$KUBECTL_PATH" config view --flatten > "$HOME/.kube/config.tmp" 2>/dev/null; then
-            mv "$HOME/.kube/config.tmp" "$HOME/.kube/config" || handle_error "Failed to update kubeconfig"
+        export KUBECONFIG="$REAL_HOME/.kube/config:$CONFIG_PATH/pki/admin/admin.kubeconfig"
+        if "$KUBECTL_PATH" config view --flatten > "$REAL_HOME/.kube/config.tmp" 2>/dev/null; then
+            mv "$REAL_HOME/.kube/config.tmp" "$REAL_HOME/.kube/config" || handle_error "Failed to update kubeconfig"
             echo "✅ Kubeconfig merged successfully"
             echo "📝 Your existing kubeconfig has been backed up with timestamp"
         else
             echo "⚠️  Failed to merge kubeconfig, copying KubeSolo config as default"
-            cp "$CONFIG_PATH/pki/admin/admin.kubeconfig" "$HOME/.kube/config" || handle_error "Failed to copy kubeconfig"
+            cp "$CONFIG_PATH/pki/admin/admin.kubeconfig" "$REAL_HOME/.kube/config" || handle_error "Failed to copy kubeconfig"
         fi
         unset KUBECONFIG
+        
+        # Fix ownership if we're running under sudo
+        if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ] && [ -n "$REAL_UID" ] && [ -n "$REAL_GID" ]; then
+            echo "🔧 Fixing kubeconfig ownership for user $REAL_USER..."
+            chown -R "$REAL_UID:$REAL_GID" "$REAL_HOME/.kube" || echo "⚠️  Could not fix kubeconfig ownership (this may be normal)"
+        fi
+        
+        echo "📁 Kubeconfig location: $REAL_HOME/.kube/config"
     fi
 else
     if [ "$RUN_MODE" != "foreground" ]; then
