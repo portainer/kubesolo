@@ -223,7 +223,7 @@ USER="root"
 case "\$1" in
     start)
         log_daemon_msg "Starting $APP_NAME"
-        GODEBUG=madvdontneed=1 start-stop-daemon --start --quiet --pidfile \$PIDFILE --make-pidfile --background --chuid \$USER --exec \$DAEMON -- \$DAEMON_ARGS
+        start-stop-daemon --start --quiet --pidfile \$PIDFILE --make-pidfile --background --chuid \$USER --exec \$DAEMON -- \$DAEMON_ARGS
         log_end_msg \$?
         ;;
     stop)
@@ -282,7 +282,6 @@ depend() {
 
 start_pre() {
     checkpath --directory --owner \$command_user --mode 0755 /var/run
-    export GODEBUG=madvdontneed=1
 }
 EOF
     
@@ -299,7 +298,6 @@ create_s6_service() {
     
     cat <<EOF > "$S6_SERVICE_DIR/run" || handle_error "Failed to create s6 run script"
 #!/bin/sh
-export GODEBUG=madvdontneed=1
 exec $INSTALL_PATH $CMD_ARGS
 EOF
     
@@ -330,7 +328,6 @@ create_runit_service() {
     
     cat <<EOF > "$RUNIT_SERVICE_DIR/run" || handle_error "Failed to create runit run script"
 #!/bin/sh
-export GODEBUG=madvdontneed=1
 exec $INSTALL_PATH $CMD_ARGS
 EOF
     
@@ -359,7 +356,6 @@ stop on runlevel [!2345]
 respawn
 respawn limit 10 5
 
-env GODEBUG=madvdontneed=1
 exec $INSTALL_PATH $CMD_ARGS
 EOF
     
@@ -373,8 +369,7 @@ run_foreground() {
     echo "🚀 Starting $APP_NAME in foreground mode..."
     echo "📝 Command: $INSTALL_PATH $CMD_ARGS"
     echo "⚠️  Press Ctrl+C to stop the service"
-    echo "💡 To run in background, use: GODEBUG=madvdontneed=1 nohup $INSTALL_PATH $CMD_ARGS > /var/log/$APP_NAME.log 2>&1 &"
-    export GODEBUG=madvdontneed=1
+    echo "💡 To run in background, use: nohup $INSTALL_PATH $CMD_ARGS > /var/log/$APP_NAME.log 2>&1 &"
     exec $INSTALL_PATH $CMD_ARGS
 }
 
@@ -389,7 +384,7 @@ run_daemon() {
     mkdir -p "$(dirname "$LOGFILE")" || handle_error "Failed to create log directory"
     
     # Start daemon
-    GODEBUG=madvdontneed=1 nohup $INSTALL_PATH $CMD_ARGS > "$LOGFILE" 2>&1 &
+    nohup $INSTALL_PATH $CMD_ARGS > "$LOGFILE" 2>&1 &
     echo $! > "$PIDFILE" || handle_error "Failed to write PID file"
     
     echo "✅ $APP_NAME started as daemon (PID: $(cat "$PIDFILE"))"
