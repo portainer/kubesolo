@@ -105,6 +105,7 @@ tar --no-xattr -xzf "$TEMP_DIR/kubesolo.tar.gz" -C "$TEMP_DIR" || handle_error "
 
 echo "📝 Installing binary..."
 mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+which restorecon >/dev/null 2>&1 && restorecon -r /usr/local/bin
 rm -rf "$TEMP_DIR"
 chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
 
