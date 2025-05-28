@@ -66,7 +66,7 @@ echo "🔍 Detected init system: $INIT_SYSTEM"
 echo "🔍 Detected environment: $ENVIRONMENT"
 
 # Default configuration from environment variables
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v0.1.1-beta}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v0.1.2-beta}"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
 PORTAINER_EDGE_KEY="${KUBESOLO_PORTAINER_EDGE_KEY:-}"
@@ -181,7 +181,6 @@ After=network.target
 [Service]
 ExecStart=$INSTALL_PATH $CMD_ARGS
 Restart=always
-Environment="GODEBUG=madvdontneed=1"
 RestartSec=3
 OOMScoreAdjust=-500
 LimitNOFILE=65535
