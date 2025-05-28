@@ -157,11 +157,11 @@ fi
 CMD_ARGS="--path=$CONFIG_PATH"
 
 if [ -n "$PORTAINER_EDGE_ID" ]; then
-  CMD_ARGS="$CMD_ARGS --portainer-edge-id=\"$PORTAINER_EDGE_ID\""
+  CMD_ARGS="$CMD_ARGS --portainer-edge-id=$PORTAINER_EDGE_ID"
 fi
 
 if [ -n "$PORTAINER_EDGE_KEY" ]; then
-  CMD_ARGS="$CMD_ARGS --portainer-edge-key=\"$PORTAINER_EDGE_KEY\""
+  CMD_ARGS="$CMD_ARGS --portainer-edge-key=$PORTAINER_EDGE_KEY"
 fi
 
 if [ "$LOCAL_STORAGE" = "true" ]; then
@@ -376,7 +376,7 @@ run_foreground() {
     echo "📝 Command: $INSTALL_PATH $CMD_ARGS"
     echo "⚠️  Press Ctrl+C to stop the service"
     echo "💡 To run in background, use: nohup $INSTALL_PATH $CMD_ARGS > /var/log/$APP_NAME.log 2>&1 &"
-    exec $INSTALL_PATH $CMD_ARGS
+    eval "exec \"$INSTALL_PATH\" $CMD_ARGS"
 }
 
 # Function to run as daemon
@@ -389,8 +389,8 @@ run_daemon() {
     # Create log directory if it doesn't exist
     mkdir -p "$(dirname "$LOGFILE")" || handle_error "Failed to create log directory"
     
-    # Start daemon
-    nohup $INSTALL_PATH $CMD_ARGS > "$LOGFILE" 2>&1 &
+    # Start daemon - use eval to properly handle arguments
+    eval "nohup \"$INSTALL_PATH\" $CMD_ARGS > \"$LOGFILE\" 2>&1 &"
     echo $! > "$PIDFILE" || handle_error "Failed to write PID file"
     
     echo "✅ $APP_NAME started as daemon (PID: $(cat "$PIDFILE"))"
@@ -505,3 +505,6 @@ else
 fi
 
 echo "✅ $APP_NAME installation completed!"
+
+# Exit with success code
+exit 0
