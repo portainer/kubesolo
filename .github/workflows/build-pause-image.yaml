@@ -83,8 +83,22 @@ jobs:
           mkdir -p ../build-image/cross
           echo "v1.34.0-go1.24.3-bullseye.0" > ../build-image/cross/VERSION
           
+          # The Kubernetes Makefile only defines TRIPLE for certain architectures
+          # We need to provide the missing ones for 386 and riscv64
+          case "${{ matrix.goarch }}" in
+            386)
+              EXTRA_TRIPLE="TRIPLE.linux-386=i386-linux-gnu"
+              ;;
+            riscv64)
+              EXTRA_TRIPLE="TRIPLE.linux-riscv64=riscv64-linux-gnu"
+              ;;
+            *)
+              EXTRA_TRIPLE=""
+              ;;
+          esac
+          
           # Build specific architecture binary using the correct target
-          make bin/pause-linux-${{ matrix.goarch }} OS=linux ARCH=${{ matrix.goarch }}
+          make bin/pause-linux-${{ matrix.goarch }} OS=linux ARCH=${{ matrix.goarch }} ${EXTRA_TRIPLE}
           
           # Check what was built
           echo "Built binary for ${{ matrix.goarch }}:"
