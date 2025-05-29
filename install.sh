@@ -234,8 +234,10 @@ case "\$1" in
         ;;
     stop)
         log_daemon_msg "Stopping $APP_NAME"
-        start-stop-daemon --stop --quiet --pidfile \$PIDFILE --remove-pidfile
-        log_end_msg \$?
+        start-stop-daemon --stop --quiet --pidfile \$PIDFILE
+        RETVAL=\$?
+        [ \$RETVAL -eq 0 ] && rm -f \$PIDFILE
+        log_end_msg \$RETVAL
         ;;
     restart)
         \$0 stop
