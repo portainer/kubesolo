@@ -125,8 +125,8 @@ jobs:
       - name: "build and push image"
         uses: docker/build-push-action@v6.7.0
         with:
-          platforms: ${{ matrix.config.platform }}/${{ matrix.config.arch }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.config.platform }}-${{ matrix.config.arch }}
+          platforms: ${{ matrix.platform }}/${{ matrix.arch }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}
           sbom: false
           provenance: false
           push: true
