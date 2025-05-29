@@ -17,26 +17,27 @@ jobs:
             goarch: amd64
             arch: amd64
             platform: linux/amd64
+            gcc: x86_64-linux-gnu-gcc
           - goos: linux
             goarch: arm64
             arch: arm64
             platform: linux/arm64
+            gcc: aarch64-linux-gnu-gcc
           - goos: linux
             goarch: arm
             arch: arm
             platform: linux/arm/v7
+            gcc: arm-linux-gnueabihf-gcc
           - goos: linux
             goarch: arm
             arch: armv6
             platform: linux/arm/v6
-          - goos: linux
-            goarch: 386
-            arch: 386
-            platform: linux/386
+            gcc: arm-linux-gnueabihf-gcc
           - goos: linux
             goarch: riscv64
             arch: riscv64
             platform: linux/riscv64
+            gcc: riscv64-linux-gnu-gcc
     permissions:
       contents: read
     
@@ -75,34 +76,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential
 
-      - name: Build pause binary using Kubernetes Makefile
+      - name: Build pause binary directly
         run: |
           cd ${{ github.workspace }}/pause-build
           
-          # Create the VERSION file that the Makefile expects
-          mkdir -p ../build-image/cross
-          echo "v1.34.0-go1.24.3-bullseye.0" > ../build-image/cross/VERSION
+          # Create bin directory
+          mkdir -p bin
           
-          # The Kubernetes Makefile only defines TRIPLE for certain architectures
-          # We need to provide the missing ones for 386 and riscv64
+          # Set version (matching Kubernetes pause version)
+          VERSION="v1.34.0-go1.24.3-bullseye.0"
+          
+          # Compile pause binary directly using the appropriate cross-compiler
+          echo "Building pause binary for ${{ matrix.goarch }} using ${{ matrix.gcc }}"
+          ${{ matrix.gcc }} -Os -Wall -Werror -static -DVERSION=${VERSION} -o bin/pause-linux-${{ matrix.goarch }} pause.c
+          
+          # Strip the binary to reduce size
           case "${{ matrix.goarch }}" in
-            386)
-              EXTRA_TRIPLE="TRIPLE.linux-386=i386-linux-gnu"
+            amd64)
+              x86_64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
+              ;;
+            arm64)
+              aarch64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
+              ;;
+            arm)
+              arm-linux-gnueabihf-strip bin/pause-linux-${{ matrix.goarch }}
               ;;
             riscv64)
-              EXTRA_TRIPLE="TRIPLE.linux-riscv64=riscv64-linux-gnu"
-              ;;
-            *)
-              EXTRA_TRIPLE=""
+              riscv64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
               ;;
           esac
-          
-          # Build specific architecture binary using the correct target
-          make bin/pause-linux-${{ matrix.goarch }} OS=linux ARCH=${{ matrix.goarch }} ${EXTRA_TRIPLE}
           
           # Check what was built
           echo "Built binary for ${{ matrix.goarch }}:"
           ls -la bin/
+          file bin/pause-linux-${{ matrix.goarch }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -161,7 +168,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-armv6 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-386 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-riscv64
 
           # Annotate each architecture in the manifest
@@ -173,8 +179,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm --arch arm --variant v7
           docker manifest annotate ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-armv6 --arch arm --variant v6
-          docker manifest annotate ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-386 --arch 386
           docker manifest annotate ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-riscv64 --arch riscv64
 
