@@ -84,12 +84,9 @@ jobs:
           # Create bin directory
           mkdir -p bin
           
-          # Set version (matching Kubernetes pause version)
-          VERSION="v1.34.0-go1.24.3-bullseye.0"
-          
           # Compile pause binary directly using the appropriate cross-compiler
           echo "Building pause binary for ${{ matrix.goarch }} using ${{ matrix.gcc }}"
-          ${{ matrix.gcc }} -Os -Wall -Werror -static -DVERSION=${VERSION} -o bin/pause-linux-${{ matrix.goarch }} pause.c
+          ${{ matrix.gcc }} -Os -Wall -Werror -static -DVERSION=latest -o bin/pause-linux-${{ matrix.goarch }} linux/pause.c
           
           # Strip the binary to reduce size
           case "${{ matrix.goarch }}" in
