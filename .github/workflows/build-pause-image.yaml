@@ -43,6 +43,29 @@ jobs:
           echo "Contents of pause directory:"
           ls -la ${{ github.workspace }}/pause-build/
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Build pause container using Kubernetes Makefile
+        run: |
+          cd ${{ github.workspace }}/pause-build
+          
+          # Use the Kubernetes Makefile to build the container
+          # This should handle multi-arch builds automatically
+          make container BASE=scratch
+          
+          # Check what was built
+          echo "Checking built artifacts:"
+          ls -la
+          
+          # If there are architecture-specific binaries, list them
+          if [ -d bin ]; then
+            echo "Binaries in bin directory:"
+            ls -la bin/
+          fi
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
