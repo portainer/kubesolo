@@ -52,8 +52,11 @@ jobs:
         run: |
           cd ${{ github.workspace }}/pause-build
           
+          # Create the VERSION file that the Makefile expects
+          mkdir -p ../build-image/cross
+          echo "v1.34.0-go1.24.3-bullseye.0" > ../build-image/cross/VERSION
+          
           # Use the Kubernetes Makefile to build the container
-          # This should handle multi-arch builds automatically
           make container BASE=scratch
           
           # Check what was built
