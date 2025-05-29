@@ -79,6 +79,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            BASE=scratch
 
       - name: Clean up
         if: always()
