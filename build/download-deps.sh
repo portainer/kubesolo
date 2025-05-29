@@ -175,8 +175,8 @@ echo "Dependencies downloaded successfully"
 
 
 # Download Kubernetes pause image
-echo "Downloading Kubernetes pause image ${PAUSE_IMAGE_VERSION}..."
-PAUSE_IMAGE="registry.k8s.io/pause:${PAUSE_IMAGE_VERSION}"
+echo "Downloading Portainer pause image..."
+PAUSE_IMAGE="portainer/pause:latest"
 if ! docker image pull --platform ${OS}/${ARCH} ${PAUSE_IMAGE}; then
     echo "Error pulling Kubernetes pause image. Skipping."
 else
