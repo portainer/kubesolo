@@ -75,7 +75,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential
 
-      - name: Build pause container using Kubernetes Makefile
+      - name: Build pause binary using Kubernetes Makefile
         run: |
           cd ${{ github.workspace }}/pause-build
           
@@ -83,11 +83,11 @@ jobs:
           mkdir -p ../build-image/cross
           echo "v1.34.0-go1.24.3-bullseye.0" > ../build-image/cross/VERSION
           
-          # Build binary for specific architecture
-          make bin/pause-${{ matrix.goos }}-${{ matrix.goarch }}
+          # Build specific architecture binary using the correct target
+          make bin/pause-linux-${{ matrix.goarch }} OS=linux ARCH=${{ matrix.goarch }}
           
           # Check what was built
-          echo "Checking built artifacts:"
+          echo "Built binary for ${{ matrix.goarch }}:"
           ls -la bin/
 
       - name: Set up QEMU
