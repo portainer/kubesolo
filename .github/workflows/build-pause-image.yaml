@@ -8,144 +8,134 @@ env:
   IMAGE_NAME: portainer/pause
 
 jobs:
-  # build-pause:
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     matrix:
-  #       include:
-  #         - goos: linux
-  #           goarch: amd64
-  #           arch: amd64
-  #           platform: linux/amd64
-  #           gcc: x86_64-linux-gnu-gcc
-  #         - goos: linux
-  #           goarch: arm64
-  #           arch: arm64
-  #           platform: linux/arm64
-  #           gcc: aarch64-linux-gnu-gcc
-  #         - goos: linux
-  #           goarch: arm
-  #           arch: arm
-  #           platform: linux/arm/v7
-  #           gcc: arm-linux-gnueabihf-gcc
-  #         - goos: linux
-  #           goarch: arm
-  #           arch: armv6
-  #           platform: linux/arm/v6
-  #           gcc: arm-linux-gnueabihf-gcc
-  #         - goos: linux
-  #           goarch: riscv64
-  #           arch: riscv64
-  #           platform: linux/riscv64
-  #           gcc: riscv64-linux-gnu-gcc
-  #   permissions:
-  #     contents: read
+  build-pause:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            arch: amd64
+            platform: linux/amd64
+            gcc: x86_64-linux-gnu-gcc
+          - goos: linux
+            goarch: arm64
+            arch: arm64
+            platform: linux/arm64
+            gcc: aarch64-linux-gnu-gcc
+          - goos: linux
+            goarch: arm
+            arch: arm
+            platform: linux/arm/v7
+            gcc: arm-linux-gnueabihf-gcc
+          - goos: linux
+            goarch: arm
+            arch: armv6
+            platform: linux/arm/v6
+            gcc: arm-linux-gnueabihf-gcc
+          - goos: linux
+            goarch: riscv64
+            arch: riscv64
+            platform: linux/riscv64
+            gcc: riscv64-linux-gnu-gcc
+    permissions:
+      contents: read
     
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-  #     - name: Sparse checkout kubernetes pause directory
-  #       run: |
-  #         # Create a temporary directory for the sparse checkout
-  #         mkdir -p /tmp/k8s-pause
-  #         cd /tmp/k8s-pause
+      - name: Sparse checkout kubernetes pause directory
+        run: |
+          # Create a temporary directory for the sparse checkout
+          mkdir -p /tmp/k8s-pause
+          cd /tmp/k8s-pause
           
-  #         # Initialize git and add kubernetes remote
-  #         git init
-  #         git remote add origin https://github.com/kubernetes/kubernetes.git
+          # Initialize git and add kubernetes remote
+          git init
+          git remote add origin https://github.com/kubernetes/kubernetes.git
           
-  #         # Configure sparse checkout to only get the pause directory
-  #         git config core.sparseCheckout true
-  #         echo "build/pause/*" > .git/info/sparse-checkout
+          # Configure sparse checkout to only get the pause directory
+          git config core.sparseCheckout true
+          echo "build/pause/*" > .git/info/sparse-checkout
           
-  #         # Fetch and checkout only the pause directory
-  #         git pull --depth=1 origin master
+          # Fetch and checkout only the pause directory
+          git pull --depth=1 origin master
           
-  #         # Copy the pause directory to our workspace
-  #         cp -r build/pause ${{ github.workspace }}/pause-build
+          # Copy the pause directory to our workspace
+          cp -r build/pause ${{ github.workspace }}/pause-build
           
-  #         # List contents to verify
-  #         echo "Contents of pause directory:"
-  #         ls -la ${{ github.workspace }}/pause-build/
+          # List contents to verify
+          echo "Contents of pause directory:"
+          ls -la ${{ github.workspace }}/pause-build/
 
-  #     - name: Install build dependencies
-  #       run: |
-  #         sudo apt-get update
-  #         sudo apt-get install -y build-essential
-  #         sudo make install-cross-compilers
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+          sudo make install-cross-compilers
 
-  #     - name: Build pause binary directly
-  #       run: |
-  #         cd ${{ github.workspace }}/pause-build
+      - name: Build pause binary
+        run: |
+          cd ${{ github.workspace }}/pause-build
           
-  #         # Create bin directory
-  #         mkdir -p bin
+          # Create bin directory
+          mkdir -p bin
           
-  #         # Compile pause binary directly using the appropriate cross-compiler
-  #         echo "Building pause binary for ${{ matrix.goarch }} using ${{ matrix.gcc }}"
-  #         ${{ matrix.gcc }} -Os -Wall -Werror -static -DVERSION=latest -o bin/pause-linux-${{ matrix.goarch }} linux/pause.c
+          # Compile pause binary directly using the appropriate cross-compiler
+          echo "Building pause binary for ${{ matrix.goarch }} using ${{ matrix.gcc }}"
+          ${{ matrix.gcc }} -Os -Wall -Werror -static -DVERSION=latest -o bin/pause-linux-${{ matrix.goarch }} linux/pause.c
           
-  #         # Strip the binary to reduce size
-  #         case "${{ matrix.goarch }}" in
-  #           amd64)
-  #             x86_64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
-  #             ;;
-  #           arm64)
-  #             aarch64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
-  #             ;;
-  #           arm)
-  #             arm-linux-gnueabihf-strip bin/pause-linux-${{ matrix.goarch }}
-  #             ;;
-  #           riscv64)
-  #             riscv64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
-  #             ;;
-  #         esac
+          # Strip the binary to reduce size
+          case "${{ matrix.goarch }}" in
+            amd64)
+              x86_64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
+              ;;
+            arm64)
+              aarch64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
+              ;;
+            arm)
+              arm-linux-gnueabihf-strip bin/pause-linux-${{ matrix.goarch }}
+              ;;
+            riscv64)
+              riscv64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }}
+              ;;
+          esac
           
-  #         # Check what was built
-  #         echo "Built binary for ${{ matrix.goarch }}:"
-  #         ls -la bin/
-  #         file bin/pause-linux-${{ matrix.goarch }}
+          # Check what was built
+          echo "Built binary for ${{ matrix.goarch }}:"
+          ls -la bin/
+          file bin/pause-linux-${{ matrix.goarch }}
 
-  #     - name: Set up QEMU
-  #       uses: docker/setup-qemu-action@v3
-  #       with:
-  #         platforms: ${{ matrix.platform }}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-  #     - name: Log in to Docker Hub
-  #       uses: docker/login-action@v3
-  #       with:
-  #         registry: ${{ env.REGISTRY }}
-  #         username: ${{ secrets.DOCKER_USERNAME }}
-  #         password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-  #     - name: Extract metadata
-  #       id: meta
-  #       uses: docker/metadata-action@v5
-  #       with:
-  #         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-  #         tags: |
-  #           type=raw,value=latest-${{ matrix.arch }}
-
-  #     - name: Build and push single-arch image
-  #       uses: docker/build-push-action@v5
-  #       with:
-  #         context: ./pause-build
-  #         platforms: ${{ matrix.platform }}
-  #         push: true
-  #         tags: ${{ steps.meta.outputs.tags }}
-  #         labels: ${{ steps.meta.outputs.labels }}
-  #         build-args: |
-  #           BASE=scratch
-  #           ARCH=${{ matrix.goarch }}
+      - name: "build and push image"
+        uses: docker/build-push-action@v6.7.0
+        with:
+          platforms: ${{ matrix.config.platform }}/${{ matrix.config.arch }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.config.platform }}-${{ matrix.config.arch }}
+          sbom: false
+          provenance: false
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=registry
 
   create-manifest:
-    # needs: build-pause
+    needs: build-pause
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -161,11 +151,11 @@ jobs:
       - name: Create and push multi-arch manifest
         run: |
           docker manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-armv6 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-riscv64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-arm64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-arm \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-armv6 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-riscv64
           docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Clean up
