@@ -75,7 +75,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential
-          make install-cross-compilers
+          sudo make install-cross-compilers
 
       - name: Build pause binary directly
         run: |
