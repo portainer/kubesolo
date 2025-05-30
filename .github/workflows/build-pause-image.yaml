@@ -13,30 +13,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - goos: linux
-            goarch: amd64
-            arch: amd64
-            platform: linux/amd64
+          - goarch: amd64
             gcc: x86_64-linux-gnu-gcc
-          - goos: linux
-            goarch: arm64
-            arch: arm64
-            platform: linux/arm64
+          - goarch: arm64
             gcc: aarch64-linux-gnu-gcc
-          - goos: linux
-            goarch: arm
-            arch: arm
-            platform: linux/arm/v7
+          - goarch: arm
             gcc: arm-linux-gnueabihf-gcc
-          - goos: linux
-            goarch: arm
-            arch: armv6
-            platform: linux/arm/v6
-            gcc: arm-linux-gnueabihf-gcc
-          - goos: linux
-            goarch: riscv64
-            arch: riscv64
-            platform: linux/riscv64
+          - goarch: riscv64
             gcc: riscv64-linux-gnu-gcc
     permissions:
       contents: read
@@ -125,8 +108,8 @@ jobs:
       - name: "build and push image"
         uses: docker/build-push-action@v6.7.0
         with:
-          platforms: ${{ matrix.platform }}/${{ matrix.arch }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}
+          platforms: linux/${{ matrix.goarch }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-linux-${{ matrix.goarch }}
           sbom: false
           provenance: false
           push: true
