@@ -110,7 +110,7 @@ jobs:
         with:
           context: ./pause-build
           platforms: linux/${{ matrix.goarch }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-linux-${{ matrix.goarch }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-${{ matrix.goarch }}
           sbom: false
           provenance: false
           push: true
@@ -138,11 +138,10 @@ jobs:
       - name: Create and push multi-arch manifest
         run: |
           docker manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-arm64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-arm \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-armv6 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-linux-riscv64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-riscv64
           docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Clean up
