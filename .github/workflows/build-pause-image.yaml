@@ -1,0 +1,107 @@
+name: Build Pause Image
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: portainer/pause
+
+jobs:
+  build-pause:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            gcc: x86_64-linux-gnu-gcc
+          - goarch: arm64
+            gcc: aarch64-linux-gnu-gcc
+          - goarch: arm
+            gcc: arm-linux-gnueabihf-gcc
+          - goarch: riscv64
+            gcc: riscv64-linux-gnu-gcc
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch Kubernetes pause source
+        run: |
+          mkdir -p /tmp/k8s-pause
+          cd /tmp/k8s-pause
+          git init
+          git remote add origin https://github.com/kubernetes/kubernetes.git
+          git config core.sparseCheckout true
+          echo "build/pause/*" > .git/info/sparse-checkout
+          git pull --depth=1 origin master
+          cp -r build/pause ${{ github.workspace }}/pause-build
+
+      - name: Install cross-compilers
+        run: sudo make install-cross-compilers
+
+      - name: Build pause binary
+        run: |
+          cd ${{ github.workspace }}/pause-build
+          mkdir -p bin
+          ${{ matrix.gcc }} -Os -Wall -Werror -static -DVERSION=latest \
+            -o bin/pause-linux-${{ matrix.goarch }} linux/pause.c
+          
+          # Strip binary to reduce size
+          case "${{ matrix.goarch }}" in
+            amd64)   x86_64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }} ;;
+            arm64)   aarch64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }} ;;
+            arm)     arm-linux-gnueabihf-strip bin/pause-linux-${{ matrix.goarch }} ;;
+            riscv64) riscv64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }} ;;
+          esac
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6.7.0
+        with:
+          context: ./pause-build
+          platforms: linux/${{ matrix.goarch }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-${{ matrix.goarch }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=registry
+          build-args: |
+            BASE=scratch
+            ARCH=${{ matrix.goarch }}
+
+  create-manifest:
+    needs: build-pause
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          docker manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-riscv64
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest 

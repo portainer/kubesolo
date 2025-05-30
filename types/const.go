@@ -28,7 +28,7 @@ const (
 	DefaultKineDir                        = "kine"
 	DefaultKineSocket                     = "kine.sock"
 	DefaultControllerManagerDir           = "controller-manager"
-	DefaultSandboxImage                   = "registry.k8s.io/pause:3.10"
+	DefaultSandboxImage                   = "portainer/pause:latest"
 	DefaultPortainerAgentImage            = "portainer/agent:2.29.2"
 	DefaultCoreDNSImage                   = "coredns/coredns:1.12.1"
 	DefaultLocalPathProvisionerImage      = "rancher/local-path-provisioner:v0.0.31"

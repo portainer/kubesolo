@@ -129,18 +129,22 @@ if ! command -v docker &> /dev/null; then
     exit 0
 fi
 
-# Download Portainer Agent
-echo "Downloading Portainer Agent ${PORTAINER_AGENT_VERSION}..."
-PORTAINER_IMAGE="portainer/agent:${PORTAINER_AGENT_VERSION}"
-if ! docker image pull --platform ${OS}/${ARCH} ${PORTAINER_IMAGE}; then
-    echo "Error pulling Portainer Agent image. Skipping."
-else
-    echo "Saving Portainer Agent image to tar..."
-    if ! docker save ${PORTAINER_IMAGE} | gzip > internal/core/embedded/bin/images/portainer-agent.tar.gz; then
-        echo "Error saving Portainer Agent image. Skipping."
+# Download Portainer Agent (skip for riscv64 as it's not supported)
+if [ "${ARCH}" != "riscv64" ]; then
+    echo "Downloading Portainer Agent ${PORTAINER_AGENT_VERSION}..."
+    PORTAINER_IMAGE="portainer/agent:${PORTAINER_AGENT_VERSION}"
+    if ! docker image pull --platform ${OS}/${ARCH} ${PORTAINER_IMAGE}; then
+        echo "Error pulling Portainer Agent image. Skipping."
     else
-        echo "Portainer Agent image saved successfully."
+        echo "Saving Portainer Agent image to tar..."
+        if ! docker save ${PORTAINER_IMAGE} | gzip > internal/core/embedded/bin/images/portainer-agent.tar.gz; then
+            echo "Error saving Portainer Agent image. Skipping."
+        else
+            echo "Portainer Agent image saved successfully."
+        fi
     fi
+else
+    echo "Skipping Portainer Agent download for ${ARCH} (not supported)"
 fi
 
 # Download CoreDNS
@@ -175,8 +179,8 @@ echo "Dependencies downloaded successfully"
 
 
 # Download Kubernetes pause image
-echo "Downloading Kubernetes pause image ${PAUSE_IMAGE_VERSION}..."
-PAUSE_IMAGE="registry.k8s.io/pause:${PAUSE_IMAGE_VERSION}"
+echo "Downloading Portainer pause image..."
+PAUSE_IMAGE="portainer/pause:latest"
 if ! docker image pull --platform ${OS}/${ARCH} ${PAUSE_IMAGE}; then
     echo "Error pulling Kubernetes pause image. Skipping."
 else
