@@ -70,7 +70,7 @@ KubeSolo is designed specifically for IoT or IIoT devices, such as embedded syst
 ### Quick Install
 
 > [!WARNING]
-> Warning: Ensure that no container engine (e.g., Docker, Podman, containerd) is installed or active on the target system prior to proceeding. This includes any background services or residual installations that could interfere with KubeSolo networking.
+> Ensure that no container engine (e.g., Docker, Podman, containerd) is installed or active on the target system prior to proceeding. This includes any background services or residual installations that could interfere with KubeSolo networking.
 
 ```bash
 # Download and install KubeSolo
