@@ -1,4 +1,4 @@
-//go:build (linux && amd64) || (linux && arm64) || (linux && arm)
+//go:build linux && riscv64
 
 package embedded
 
@@ -31,7 +31,7 @@ var cniPluginLoopback []byte
 //go:embed bin/images/coredns.tar.gz
 var corednsImageFile []byte
 
-//go:embed bin/images/portainer-agent.tar.gz
+// portainerAgentImageFile is empty for riscv64 as portainer-agent is not available for this architecture
 var portainerAgentImageFile []byte
 
 //go:embed bin/images/local-path-provisioner.tar.gz
