@@ -18,6 +18,9 @@ case $ARCH in
     aarch64)
         ARCH="arm64"
         ;;
+    riscv64)
+        ARCH="riscv64"
+        ;;
     *)
         handle_error "Unsupported architecture: $ARCH"
         ;;
