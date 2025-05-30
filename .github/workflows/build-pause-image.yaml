@@ -108,6 +108,7 @@ jobs:
       - name: "build and push image"
         uses: docker/build-push-action@v6.7.0
         with:
+          context: ./pause-build
           platforms: linux/${{ matrix.goarch }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-linux-${{ matrix.goarch }}
           sbom: false
