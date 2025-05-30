@@ -175,9 +175,6 @@ else
     fi
 fi
 
-echo "Dependencies downloaded successfully"
-
-
 # Download Kubernetes pause image
 echo "Downloading Portainer pause image..."
 PAUSE_IMAGE="portainer/pause:latest"
@@ -191,3 +188,5 @@ else
         echo "Kubernetes pause image saved successfully."
     fi
 fi
+
+echo "Dependencies downloaded successfully"
