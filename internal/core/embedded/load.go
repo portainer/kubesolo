@@ -155,8 +155,14 @@ func loadImages(containerdImagesDir string) error {
 	}
 
 	for _, image := range images {
+		// Skip writing empty image data (e.g., portainer-agent on riscv64)
+		if len(image.source) == 0 {
+			log.Debug().Str("component", "embedded").Msgf("skipping empty image: %s", image.name)
+			continue
+		}
+
 		if err := os.WriteFile(image.destination, image.source, 0644); err != nil {
-			return fmt.Errorf("failed to write %s %s... %v", "cni plugins", image.name, err)
+			return fmt.Errorf("failed to write image %s... %v", image.name, err)
 		}
 	}
 	return nil

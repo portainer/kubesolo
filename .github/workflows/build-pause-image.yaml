@@ -10,6 +10,17 @@ env:
 jobs:
   build-pause:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            gcc: x86_64-linux-gnu-gcc
+          - goarch: arm64
+            gcc: aarch64-linux-gnu-gcc
+          - goarch: arm
+            gcc: arm-linux-gnueabihf-gcc
+          - goarch: riscv64
+            gcc: riscv64-linux-gnu-gcc
     permissions:
       contents: read
     
@@ -19,40 +30,37 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Sparse checkout kubernetes pause directory
+      - name: Fetch Kubernetes pause source
         run: |
-          # Create a temporary directory for the sparse checkout
           mkdir -p /tmp/k8s-pause
           cd /tmp/k8s-pause
-          
-          # Initialize git and add kubernetes remote
           git init
           git remote add origin https://github.com/kubernetes/kubernetes.git
-          
-          # Configure sparse checkout to only get the pause directory
           git config core.sparseCheckout true
           echo "build/pause/*" > .git/info/sparse-checkout
-          
-          # Fetch and checkout only the pause directory
           git pull --depth=1 origin master
-          
-          # Copy the pause directory to our workspace
           cp -r build/pause ${{ github.workspace }}/pause-build
-          
-          # List contents to verify
-          echo "Contents of pause directory:"
-          ls -la ${{ github.workspace }}/pause-build/
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/386,linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/riscv64
+      - name: Install cross-compilers
+        run: sudo make install-cross-compilers
+
+      - name: Build pause binary
+        run: |
+          cd ${{ github.workspace }}/pause-build
+          mkdir -p bin
+          ${{ matrix.gcc }} -Os -Wall -Werror -static -DVERSION=latest \
+            -o bin/pause-linux-${{ matrix.goarch }} linux/pause.c
+          
+          # Strip binary to reduce size
+          case "${{ matrix.goarch }}" in
+            amd64)   x86_64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }} ;;
+            arm64)   aarch64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }} ;;
+            arm)     arm-linux-gnueabihf-strip bin/pause-linux-${{ matrix.goarch }} ;;
+            riscv64) riscv64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }} ;;
+          esac
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:buildx-stable-1
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -61,29 +69,39 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-
-      - name: Build and push multi-arch image
-        uses: docker/build-push-action@v5
+      - name: Build and push image
+        uses: docker/build-push-action@v6.7.0
         with:
           context: ./pause-build
-          platforms: linux/386,linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/riscv64
+          platforms: linux/${{ matrix.goarch }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-${{ matrix.goarch }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=registry
           build-args: |
             BASE=scratch
+            ARCH=${{ matrix.goarch }}
 
-      - name: Clean up
-        if: always()
+  create-manifest:
+    needs: build-pause
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Create and push multi-arch manifest
         run: |
-          rm -rf /tmp/k8s-pause
-          rm -rf ${{ github.workspace }}/pause-build 
+          docker manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-riscv64
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest 
