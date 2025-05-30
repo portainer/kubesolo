@@ -44,7 +44,7 @@ func (s *service) importImage(ctx context.Context, client *client.Client, image 
 
 	if _, err := os.Stat(image); err != nil {
 		if os.IsNotExist(err) {
-			log.Debug().Str("component", "containerd").Str("image", image).Msg("image file not found, skipping import (likely not embedded for this architecture)")
+			log.Warn().Str("component", "containerd").Str("image", image).Msg("image file not found, skipping import (likely not embedded for this architecture)")
 			return nil
 		} else {
 			return fmt.Errorf("failed to check image file %s: %v", image, err)
