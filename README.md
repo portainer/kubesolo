@@ -124,6 +124,7 @@ This installs:
 - `gcc-aarch64-linux-gnu` (for ARM64)
 - `gcc-x86-64-linux-gnu` (for AMD64)
 - `gcc-arm-linux-gnueabihf` (for ARM/ARMHF)
+- `riscv64-linux-gnu-gcc`(for RISCV64)
 
 ### Basic Build
 
@@ -146,6 +147,9 @@ make build GOARCH=amd64
 
 # Build for ARM (ARMHF)
 make build GOARCH=arm
+
+# Build for RISCV64
+make build GOARCH=riscv64
 ```
 
 ### Custom Output Path
