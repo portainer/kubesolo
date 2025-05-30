@@ -117,6 +117,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           outputs: type=registry
+          build-args: |
+            BASE=scratch
+            ARCH=${{ matrix.goarch }}
 
   create-manifest:
     needs: build-pause
