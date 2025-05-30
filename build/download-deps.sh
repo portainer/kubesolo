@@ -123,10 +123,8 @@ rm internal/core/embedded/bin/cni/cni-plugins.tgz
 # Download container images
 echo "Checking if Docker is available..."
 if ! command -v docker &> /dev/null; then
-    echo "Docker is not installed or not in PATH. Cannot download container images."
-    echo "Please install Docker to download container images, or run the script without image downloads."
-    echo "Other dependencies downloaded successfully."
-    exit 0
+    echo "Error: Docker is not installed or not in PATH. Docker is required to download container images for build-time embedding."
+    exit 1
 fi
 
 # Download Portainer Agent (skip for riscv64 as it's not supported)
@@ -134,15 +132,15 @@ if [ "${ARCH}" != "riscv64" ]; then
     echo "Downloading Portainer Agent ${PORTAINER_AGENT_VERSION}..."
     PORTAINER_IMAGE="portainer/agent:${PORTAINER_AGENT_VERSION}"
     if ! docker image pull --platform ${OS}/${ARCH} ${PORTAINER_IMAGE}; then
-        echo "Error pulling Portainer Agent image. Skipping."
-    else
-        echo "Saving Portainer Agent image to tar..."
-        if ! docker save ${PORTAINER_IMAGE} | gzip > internal/core/embedded/bin/images/portainer-agent.tar.gz; then
-            echo "Error saving Portainer Agent image. Skipping."
-        else
-            echo "Portainer Agent image saved successfully."
-        fi
+        echo "Error pulling Portainer Agent image."
+        exit 1
     fi
+    echo "Saving Portainer Agent image to tar..."
+    if ! docker save ${PORTAINER_IMAGE} | gzip > internal/core/embedded/bin/images/portainer-agent.tar.gz; then
+        echo "Error saving Portainer Agent image."
+        exit 1
+    fi
+    echo "Portainer Agent image saved successfully."
 else
     echo "Skipping Portainer Agent download for ${ARCH} (not supported)"
 fi
@@ -151,42 +149,42 @@ fi
 echo "Downloading CoreDNS ${COREDNS_VERSION}..."
 COREDNS_IMAGE="coredns/coredns:${COREDNS_VERSION}"
 if ! docker image pull --platform ${OS}/${ARCH} ${COREDNS_IMAGE}; then
-    echo "Error pulling CoreDNS image. Skipping."
-else
-    echo "Saving CoreDNS image to tar..."
-    if ! docker save ${COREDNS_IMAGE} | gzip > internal/core/embedded/bin/images/coredns.tar.gz; then
-        echo "Error saving CoreDNS image. Skipping."
-    else
-        echo "CoreDNS image saved successfully."
-    fi
+    echo "Error pulling CoreDNS image."
+    exit 1
 fi
+echo "Saving CoreDNS image to tar..."
+if ! docker save ${COREDNS_IMAGE} | gzip > internal/core/embedded/bin/images/coredns.tar.gz; then
+    echo "Error saving CoreDNS image."
+    exit 1
+fi
+echo "CoreDNS image saved successfully."
 
 # Download Local Path Provisioner
 echo "Downloading Local Path Provisioner ${LOCAL_PATH_PROVISIONER_VERSION}..."
 LOCAL_PATH_PROVISIONER_IMAGE="rancher/local-path-provisioner:${LOCAL_PATH_PROVISIONER_VERSION}"
 if ! docker image pull --platform ${OS}/${ARCH} ${LOCAL_PATH_PROVISIONER_IMAGE}; then
-    echo "Error pulling Local Path Provisioner image. Skipping."
-else
-    echo "Saving Local Path Provisioner image to tar..."
-    if ! docker save ${LOCAL_PATH_PROVISIONER_IMAGE} | gzip > internal/core/embedded/bin/images/local-path-provisioner.tar.gz; then
-        echo "Error saving Local Path Provisioner image. Skipping."
-    else
-        echo "Local Path Provisioner image saved successfully."
-    fi
+    echo "Error pulling Local Path Provisioner image."
+    exit 1
 fi
+echo "Saving Local Path Provisioner image to tar..."
+if ! docker save ${LOCAL_PATH_PROVISIONER_IMAGE} | gzip > internal/core/embedded/bin/images/local-path-provisioner.tar.gz; then
+    echo "Error saving Local Path Provisioner image."
+    exit 1
+fi
+echo "Local Path Provisioner image saved successfully."
 
 # Download Kubernetes pause image
 echo "Downloading Portainer pause image..."
 PAUSE_IMAGE="portainer/pause:latest"
 if ! docker image pull --platform ${OS}/${ARCH} ${PAUSE_IMAGE}; then
-    echo "Error pulling Kubernetes pause image. Skipping."
-else
-    echo "Saving Kubernetes pause image to tar..."
-    if ! docker save ${PAUSE_IMAGE} | gzip > internal/core/embedded/bin/images/pause.tar.gz; then
-        echo "Error saving Kubernetes pause image. Skipping."
-    else
-        echo "Kubernetes pause image saved successfully."
-    fi
+    echo "Error pulling Kubernetes pause image."
+    exit 1
 fi
+echo "Saving Kubernetes pause image to tar..."
+if ! docker save ${PAUSE_IMAGE} | gzip > internal/core/embedded/bin/images/pause.tar.gz; then
+    echo "Error saving Kubernetes pause image."
+    exit 1
+fi
+echo "Kubernetes pause image saved successfully."
 
 echo "Dependencies downloaded successfully"
