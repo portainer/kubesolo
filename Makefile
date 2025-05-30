@@ -12,6 +12,7 @@ LDFLAGS_STRING = -s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X ma
 CC_arm64 = aarch64-linux-gnu-gcc
 CC_amd64 = x86_64-linux-gnu-gcc
 CC_arm = arm-linux-gnueabihf-gcc  # ARM Hard Float (ARMHF) - targets ARMv7+ with hardware FPU
+CC_riscv64 = riscv64-linux-gnu-gcc
 
 # Install cross-compilation toolchains
 .PHONY: install-cross-compilers
@@ -49,6 +50,10 @@ else ifeq ($(GOARCH),amd64)
 	CC=$(CC_amd64) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING}" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),riscv64)
+	CC=$(CC_riscv64) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else ifeq ($(GOARCH),arm)
 	CC=$(CC_arm) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING}" -a \
@@ -68,7 +73,7 @@ build-using-image:
 		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
 		registry.k8s.io/build-image/kube-cross:v1.33.0-go1.24.2-bullseye.0 \
 		make build
-	
+
 .PHONY: lint
 lint:
 	go fmt ./...
