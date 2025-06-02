@@ -40,6 +40,30 @@ detect_environment() {
     fi
 }
 
+# Function to check for Docker prerequisite
+check_docker_prerequisite() {
+    echo "🔍 Checking for Docker prerequisite conflicts..."
+    
+    # Check if Docker command exists
+    if command -v docker >/dev/null 2>&1; then
+        handle_error "Docker is installed on this system. Please remove Docker before installing KubeSolo as it can interfere with KubeSolo networking. See: https://docs.kubesolo.io/prerequisites"
+    fi
+    
+    # Check if Docker daemon is running
+    if [ -S /var/run/docker.sock ]; then
+        handle_error "Docker daemon appears to be running (socket found at /var/run/docker.sock). Please stop and remove Docker before installing KubeSolo."
+    fi
+    
+    # Check for Docker systemd service
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl is-active --quiet docker 2>/dev/null; then
+            handle_error "Docker service is active. Please stop and remove Docker before installing KubeSolo."
+        fi
+    fi
+    
+    echo "✅ No Docker installation detected"
+}
+
 # Detect OS and architecture
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -129,6 +153,9 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Function to check for Docker prerequisite
+check_docker_prerequisite
 
 # Service configuration
 APP_NAME="kubesolo"
