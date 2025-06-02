@@ -53,6 +53,9 @@ case $ARCH in
     armv7l)
         ARCH="arm"
         ;;
+    riscv64)
+        ARCH="riscv64"
+        ;;
     *)
         handle_error "Unsupported architecture: $ARCH"
         ;;
