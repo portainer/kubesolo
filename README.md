@@ -81,6 +81,17 @@ A kubeconfig file is written to `/var/lib/kubesolo/pki/admin/admin.kubeconfig` a
 
 Note: If you're running KubeSolo on a device with less than 512MB of RAM, it's strongly advised to interact with KubeSolo using the `kubectl` command-line tool installed externally.
 
+### Advanced Installation
+
+For detailed installation instructions including support for industrial devices, embedded systems, different init systems, and custom configurations, see the [Installation Guide](INSTALL.md).
+
+The installation guide covers:
+- Universal installer with automatic init system detection
+- Minimal installer for constrained environments  
+- Service management across different platforms
+- Industrial device considerations (read-only filesystems, limited storage, air-gapped installations)
+- Architecture-specific installations
+
 ## Flags
 
 KubeSolo supports the following command-line flags:
