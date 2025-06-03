@@ -93,8 +93,9 @@ echo "🔍 Detected init system: $INIT_SYSTEM"
 echo "🔍 Detected environment: $ENVIRONMENT"
 
 # Default configuration from environment variables
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v0.1.3-beta}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v0.1.4-beta}"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
+APISERVER_EXTRA_SANS="${KUBESOLO_APISERVER_EXTRA_SANS:-}"
 PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
 PORTAINER_EDGE_KEY="${KUBESOLO_PORTAINER_EDGE_KEY:-}"
 PORTAINER_EDGE_ASYNC="${KUBESOLO_PORTAINER_EDGE_ASYNC:-false}"
@@ -111,6 +112,9 @@ for arg in "$@"; do
       ;;
     --path=*)
       CONFIG_PATH="${arg#*=}"
+      ;;
+    --apiserver-extra-sans=*)
+      APISERVER_EXTRA_SANS="${arg#*=}"
       ;;
     --portainer-edge-id=*)
       PORTAINER_EDGE_ID="${arg#*=}"
@@ -138,6 +142,7 @@ for arg in "$@"; do
       echo "Options:"
       echo "  --version=VERSION            Set KubeSolo version (default: $KUBESOLO_VERSION)"
       echo "  --path=PATH                  Set configuration path (default: $CONFIG_PATH)"
+      echo "  --apiserver-extra-sans=SANS  Set additional Subject Alternative Names for the API server"
       echo "  --portainer-edge-id=ID       Set Portainer Edge ID"
       echo "  --portainer-edge-key=KEY     Set Portainer Edge Key"
       echo "  --portainer-edge-async=true|false   Enable Portainer Edge Async (default: $PORTAINER_EDGE_ASYNC)"
@@ -185,6 +190,10 @@ fi
 
 # Construct command arguments
 CMD_ARGS="--path=$CONFIG_PATH"
+
+if [ -n "$APISERVER_EXTRA_SANS" ]; then
+  CMD_ARGS="$CMD_ARGS --apiserver-extra-sans=$APISERVER_EXTRA_SANS"
+fi
 
 if [ -n "$PORTAINER_EDGE_ID" ]; then
   CMD_ARGS="$CMD_ARGS --portainer-edge-id=$PORTAINER_EDGE_ID"
