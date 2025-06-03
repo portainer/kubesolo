@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"strings"
 
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
@@ -109,6 +110,11 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 // if the SAN is invalid, it logs a warning and skips it
 func addExtraSANs(opts *CertOptions, extraSANs []string) {
 	for _, san := range extraSANs {
+		san = strings.TrimSpace(san)
+		if san == "" {
+			continue
+		}
+
 		if network.IsIPv4Address(san) {
 			opts.IPAddresses = append(opts.IPAddresses, net.ParseIP(san))
 		} else if network.IsDNSName(san) {

@@ -6,6 +6,10 @@ import (
 	"regexp"
 )
 
+var (
+	rfc1123 = `^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`
+)
+
 // GetLocalIPs returns all non-loopback IPv4 addresses
 func GetLocalIPs() ([]net.IP, error) {
 	addrs, err := net.InterfaceAddrs()
@@ -53,7 +57,6 @@ func IsDNSName(name string) bool {
 	}
 
 	// RFC 1123 compliant DNS name pattern
-	pattern := `^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`
-	matched, _ := regexp.MatchString(pattern, name)
+	matched, _ := regexp.MatchString(rfc1123, name)
 	return matched
 }
