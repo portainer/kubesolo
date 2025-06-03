@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	rdebug "runtime/debug"
+	"strings"
 	"syscall"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -36,6 +37,7 @@ var (
 // the main struct for the kubesolo application
 type kubesolo struct {
 	hostName           string
+	extraSANs          string
 	debug              bool
 	pprofServer        bool
 	portainerEdgeID    string
@@ -59,6 +61,7 @@ var (
 func service() (*kubesolo, error) {
 	return &kubesolo{
 		hostName:           system.GetHostname(),
+		extraSANs:          *flags.APIServerExtraSANs,
 		debug:              *flags.Debug,
 		pprofServer:        *flags.PprofServer,
 		portainerEdgeID:    *flags.PortainerEdgeID,
@@ -334,6 +337,8 @@ func (s *kubesolo) bootstrap() {
 		// API Server paths
 		APIServerDir:          filepath.Join(basePath, types.DefaultAPIServerDir),
 		ServiceAccountKeyFile: filepath.Join(basePath, types.DefaultPKIDir, "apiserver", "service-account.key"),
+		// API Server extra SANs
+		APIServerExtraSANs: strings.Split(s.extraSANs, ","),
 
 		// Kine paths
 		KineDir:        filepath.Join(basePath, types.KubesoloKineDir),

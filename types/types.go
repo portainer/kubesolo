@@ -71,6 +71,7 @@ type Embedded struct {
 	ContainerdShimBinaryFile string
 	ContainerdRootDir        string
 	ContainerdStateDir       string
+
 	// Conitainerd CNI directories and files
 	ContainerdCNIDir        string
 	ContainerdCNIPluginsDir string
@@ -90,6 +91,8 @@ type Embedded struct {
 	// API Server directory
 	APIServerDir          string
 	ServiceAccountKeyFile string
+	// API Server extra SANs
+	APIServerExtraSANs []string
 
 	// Kine directories and files
 	KineDir        string
