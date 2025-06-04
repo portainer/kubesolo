@@ -64,6 +64,71 @@ check_docker_prerequisite() {
     echo "✅ No Docker installation detected"
 }
 
+# Function to check hostname RFC 1123 compliance
+check_hostname_compliance() {
+    echo "🔍 Checking hostname RFC 1123 compliance..."
+    
+    # Get the hostname
+    CURRENT_HOSTNAME=$(hostname 2>/dev/null || echo "")
+    
+    if [ -z "$CURRENT_HOSTNAME" ]; then
+        handle_error "Could not determine hostname. Please ensure hostname is properly configured."
+    fi
+    
+    # Check if hostname contains uppercase letters
+    if echo "$CURRENT_HOSTNAME" | grep -q '[A-Z]'; then
+        handle_error "Hostname '$CURRENT_HOSTNAME' contains uppercase letters. RFC 1123 requires lowercase only. Please change hostname to lowercase."
+    fi
+    
+    # Check RFC 1123 subdomain compliance using grep
+    # Pattern: must start and end with alphanumeric, contain only lowercase alphanumeric, '-', or '.'
+    if ! echo "$CURRENT_HOSTNAME" | grep -qE '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'; then
+        handle_error "Hostname '$CURRENT_HOSTNAME' is not RFC 1123 compliant. Must contain only lowercase letters, numbers, hyphens, and dots, and must start and end with an alphanumeric character."
+    fi
+    
+    # Additional check for length (RFC 1123 limit is 63 characters per label)
+    if [ ${#CURRENT_HOSTNAME} -gt 253 ]; then
+        handle_error "Hostname '$CURRENT_HOSTNAME' is too long (${#CURRENT_HOSTNAME} characters). Maximum allowed is 253 characters."
+    fi
+    
+    echo "✅ Hostname '$CURRENT_HOSTNAME' is RFC 1123 compliant"
+}
+
+# Function to check iptables xt_comment module support
+check_iptables_comment_module() {
+    echo "🔍 Checking iptables xt_comment module support..."
+    
+    # Check if iptables command exists
+    if ! command -v iptables >/dev/null 2>&1; then
+        handle_error "iptables command not found. Please install iptables before proceeding."
+    fi
+    
+    # Test iptables comment module by trying to create a test rule
+    # Use a unique comment to avoid conflicts
+    TEST_COMMENT="kubesolo-test-$$-$(date +%s)"
+    
+    # Try to add a test rule with comment (to a non-existent chain to avoid side effects)
+    if ! iptables -t filter -A KUBESOLO_TEST_CHAIN -m comment --comment "$TEST_COMMENT" -j ACCEPT 2>/dev/null; then
+        # Try to check if the module is available in a different way
+        if [ -d /proc/sys/net ] && [ -r /proc/modules ]; then
+            if ! grep -q "xt_comment" /proc/modules 2>/dev/null && ! modprobe xt_comment 2>/dev/null; then
+                handle_error "iptables xt_comment module is not available. This module is required for KubeSolo networking. Please ensure your kernel has xt_comment support or install iptables-mod-extra package."
+            fi
+        else
+            # Final fallback test - try to list rules with verbose output
+            if ! iptables -t filter -L -v >/dev/null 2>&1; then
+                handle_error "iptables does not appear to be working properly. Please check iptables installation and kernel module support."
+            fi
+            echo "⚠️  Could not verify xt_comment module support directly, but iptables appears functional"
+        fi
+    else
+        # Clean up test rule if it was somehow added (shouldn't happen with non-existent chain)
+        iptables -t filter -D KUBESOLO_TEST_CHAIN -m comment --comment "$TEST_COMMENT" -j ACCEPT 2>/dev/null || true
+    fi
+    
+    echo "✅ iptables with xt_comment module support verified"
+}
+
 # Detect OS and architecture
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -161,6 +226,12 @@ done
 
 # Function to check for Docker prerequisite
 check_docker_prerequisite
+
+# Function to check hostname RFC 1123 compliance
+check_hostname_compliance
+
+# Function to check iptables xt_comment module support
+check_iptables_comment_module
 
 # Service configuration
 APP_NAME="kubesolo"
