@@ -246,7 +246,7 @@ echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION..."
 curl -sfL "$BIN_URL" -o "$TEMP_DIR/kubesolo.tar.gz" || handle_error "Failed to download $APP_NAME from $BIN_URL"
 
 echo "📦 Extracting $APP_NAME..."
-tar --no-xattr -xzf "$TEMP_DIR/kubesolo.tar.gz" -C "$TEMP_DIR" || handle_error "Failed to extract $APP_NAME archive"
+tar -xzf "$TEMP_DIR/kubesolo.tar.gz" -C "$TEMP_DIR" || handle_error "Failed to extract $APP_NAME archive"
 
 echo "📝 Installing binary..."
 mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
