@@ -402,10 +402,6 @@ depend() {
     need net
     after firewall
 }
-
-start_pre() {
-    checkpath --directory --owner \$command_user --mode 0755 /var/run
-}
 EOF
     
     chmod +x "$SERVICE_PATH" || handle_error "Failed to make OpenRC service script executable"
