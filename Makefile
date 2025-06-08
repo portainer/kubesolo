@@ -14,11 +14,27 @@ CC_amd64 = x86_64-linux-gnu-gcc
 CC_arm = arm-linux-gnueabihf-gcc  # ARM Hard Float (ARMHF) - targets ARMv7+ with hardware FPU
 CC_riscv64 = riscv64-linux-gnu-gcc
 
+# musl cross-compilers (for Alpine Linux compatibility)
+CC_arm64_musl = aarch64-linux-musl-gcc
+CC_amd64_musl = x86_64-linux-musl-gcc
+
 # Install cross-compilation toolchains
 .PHONY: install-cross-compilers
 install-cross-compilers:
 	apt-get update
 	apt-get install -y gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu gcc-arm-linux-gnueabihf gcc-riscv64-linux-gnu
+
+# Install musl cross-compilation toolchains
+.PHONY: install-musl-cross-compilers
+install-musl-cross-compilers:
+	apt-get update
+	apt-get install -y musl-tools
+	# Install musl cross-compilers from musl.cc
+	wget -q https://musl.cc/aarch64-linux-musl-cross.tgz -O /tmp/aarch64-musl.tgz
+	wget -q https://musl.cc/x86_64-linux-musl-cross.tgz -O /tmp/x86_64-musl.tgz
+	cd /opt && tar -xzf /tmp/aarch64-musl.tgz && tar -xzf /tmp/x86_64-musl.tgz
+	ln -sf /opt/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc /usr/local/bin/aarch64-linux-musl-gcc
+	ln -sf /opt/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
 
 # Install Docker client only (for debian:buster-slim containers - used by release workflows)
 .PHONY: install-docker-client
@@ -32,7 +48,7 @@ install-docker-client:
 	apt-get install -y docker-ce-cli
 
 .PHONY: release-workflow-deps
-release-workflow-deps: install-docker-client install-cross-compilers
+release-workflow-deps: install-docker-client install-cross-compilers install-musl-cross-compilers
 
 .PHONY: deps
 deps:
@@ -63,6 +79,23 @@ else
 	@exit 1
 endif
 
+# Build with musl for Alpine Linux compatibility (amd64 and arm64 only)
+.PHONY: build-musl
+build-musl: lint deps
+	@mkdir -p $(dir $(OUTPUT))
+ifeq ($(GOARCH),arm64)
+	CC=$(CC_arm64_musl) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT)-musl ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),amd64)
+	CC=$(CC_amd64_musl) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT)-musl ./cmd/kubesolo/main.go
+else
+	@echo "musl builds only supported for amd64 and arm64 architectures"
+	@exit 1
+endif
+
 .PHONY: build-using-image
 build-using-image:
 	mkdir -p $(HOME)/.go-cache/mod $(HOME)/.go-cache/build
@@ -73,6 +106,17 @@ build-using-image:
 		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
 		registry.k8s.io/build-image/kube-cross:v1.33.0-go1.24.2-bullseye.0 \
 		make build
+
+.PHONY: build-using-alpine
+build-using-alpine:
+	mkdir -p $(HOME)/.go-cache/mod $(HOME)/.go-cache/build
+	docker run --platform $(GOOS)/$(GOARCH) --workdir /app --rm \
+		-v ${PWD}:/app \
+		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
+		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
+		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
+		golang:1.24-alpine \
+		sh -c "apk add --no-cache gcc musl-dev && go build -ldflags='${LDFLAGS_STRING} -linkmode external -extldflags \"-static\"' -a -o dist/kubesolo-musl ./cmd/kubesolo/main.go"
 
 .PHONY: lint
 lint:
@@ -91,9 +135,19 @@ clean:
 	rm -rf ./dist/kubesolo*
 	rm -rf ./internal/core/embedded/bin
 
+# Build all supported architectures with musl (amd64 and arm64)
+.PHONY: build-all-musl
+build-all-musl:
+	GOARCH=amd64 make build-musl
+	GOARCH=arm64 make build-musl
+
 .PHONY: archive
 archive:
 	tar -czf dist/kubesolo.tar.gz dist/kubesolo install.sh
+
+.PHONY: archive-musl
+archive-musl:
+	tar -czf dist/kubesolo-musl.tar.gz dist/kubesolo-musl install.sh
 
 # Include custom make targets
 -include $(wildcard .dev/*.make)
