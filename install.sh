@@ -14,14 +14,14 @@ detect_init_system() {
         echo "systemd"
     elif [ -f /sbin/init ] && /sbin/init --version 2>/dev/null | grep -q upstart; then
         echo "upstart"
-    elif [ -d /etc/init.d ]; then
-        echo "sysvinit"
+    elif command -v openrc >/dev/null 2>&1 || [ -f /sbin/openrc ]; then
+        echo "openrc"
     elif [ -d /etc/s6 ] || command -v s6-svc >/dev/null 2>&1; then
         echo "s6"
     elif command -v runit >/dev/null 2>&1 || [ -d /etc/runit ]; then
         echo "runit"
-    elif command -v openrc >/dev/null 2>&1 || [ -f /sbin/openrc ]; then
-        echo "openrc"
+    elif [ -d /etc/init.d ]; then
+        echo "sysvinit"
     else
         echo "unknown"
     fi
