@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -105,6 +106,8 @@ func (w *webhoook) serveMutate(resp http.ResponseWriter, req *http.Request) {
 		patches = w.processPodMutation(admissionReview)
 	case "PersistentVolumeClaim":
 		patches = w.processPVCMutation(admissionReview)
+	case "Job":
+		patches = w.processJobMutation(admissionReview)
 	}
 
 	w.sendResponse(resp, admissionReview, patches)
@@ -229,6 +232,37 @@ func (w *webhoook) processPVCMutation(admissionReview *admissionv1.AdmissionRevi
 	return []map[string]interface{}{patch}
 }
 
+// processJobMutation processes the job mutation
+func (w *webhoook) processJobMutation(admissionReview *admissionv1.AdmissionReview) []map[string]interface{} {
+	var job batchv1.Job
+	if err := json.Unmarshal(admissionReview.Request.Object.Raw, &job); err != nil {
+		log.Error().Str("component", "webhook").Err(err).Msg("failed to unmarshal job")
+		return nil
+	}
+
+	log.Debug().Str("component", "webhook").
+		Str("job", job.Name).
+		Str("namespace", job.Namespace).
+		Msg("processing job")
+
+	// Add node selector to ensure the job's pods run on our node
+	patch := map[string]interface{}{
+		"op":   "add",
+		"path": "/spec/template/spec/nodeSelector",
+		"value": map[string]string{
+			"kubernetes.io/hostname": w.nodeName,
+		},
+	}
+
+	log.Info().Str("component", "webhook").
+		Str("job", job.Name).
+		Str("namespace", job.Namespace).
+		Str("node", w.nodeName).
+		Msg("setting node selector for job")
+
+	return []map[string]interface{}{patch}
+}
+
 // sendResponse sends the response to the admission review
 func (w *webhoook) sendResponse(resp http.ResponseWriter, admissionReview *admissionv1.AdmissionReview, patches []map[string]interface{}) {
 	admissionResponse := w.createAdmissionResponse(admissionReview, patches)
@@ -305,9 +339,9 @@ func (w *webhoook) createConfiguration() (*admissionregistrationv1.MutatingWebho
 							admissionregistrationv1.Create,
 						},
 						Rule: admissionregistrationv1.Rule{
-							APIGroups:   []string{"", "apps"},
+							APIGroups:   []string{"", "apps", "batch"},
 							APIVersions: []string{"v1"},
-							Resources:   []string{"pods", "persistentvolumeclaims"},
+							Resources:   []string{"pods", "persistentvolumeclaims", "jobs"},
 						},
 					},
 				},
@@ -324,7 +358,7 @@ func (w *webhoook) createConfiguration() (*admissionregistrationv1.MutatingWebho
 
 // createOrUpdateConfig creates or updates the webhook configuration
 func (w *webhoook) createOrUpdateConfig(webhookConfig *admissionregistrationv1.MutatingWebhookConfiguration) error {
-	_, err := w.clientset.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(
+	existingConfig, err := w.clientset.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(
 		context.Background(),
 		types.DefaultWebhookName,
 		metav1.GetOptions{},
@@ -333,10 +367,14 @@ func (w *webhoook) createOrUpdateConfig(webhookConfig *admissionregistrationv1.M
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return w.createConfig(webhookConfig)
-		} else if k8serrors.IsAlreadyExists(err) {
-			return w.updateConfig(webhookConfig)
 		}
 		return fmt.Errorf("failed to get webhook configuration: %v", err)
+	}
+
+	webhookConfig.ResourceVersion = existingConfig.ResourceVersion
+	err = w.updateConfig(webhookConfig)
+	if err != nil {
+		return err
 	}
 
 	log.Info().Str("component", "webhook").Msgf("webhook %s registered with API server", types.DefaultWebhookName)
