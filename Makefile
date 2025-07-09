@@ -87,11 +87,11 @@ build-musl: lint deps
 ifeq ($(GOARCH),arm64)
 	CC=$(CC_arm64_musl) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
-		-o $(OUTPUT)-musl ./cmd/kubesolo/main.go
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else ifeq ($(GOARCH),amd64)
 	CC=$(CC_amd64_musl) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
-		-o $(OUTPUT)-musl ./cmd/kubesolo/main.go
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else
 	@echo "musl builds only supported for amd64 and arm64 architectures"
 	@exit 1
@@ -117,7 +117,7 @@ build-using-alpine:
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
 		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
 		golang:1.24-alpine \
-		sh -c "apk add --no-cache gcc musl-dev && go build -ldflags='${LDFLAGS_STRING} -linkmode external -extldflags \"-static\"' -a -o dist/kubesolo-musl ./cmd/kubesolo/main.go"
+		sh -c "apk add --no-cache gcc musl-dev && go build -ldflags='${LDFLAGS_STRING} -linkmode external -extldflags \"-static\"' -a -o dist/kubesolo ./cmd/kubesolo/main.go"
 
 .PHONY: lint
 lint:
@@ -148,7 +148,7 @@ archive:
 
 .PHONY: archive-musl
 archive-musl:
-	tar -czf dist/kubesolo-musl.tar.gz dist/kubesolo-musl install.sh
+	tar -czf dist/kubesolo-musl.tar.gz dist/kubesolo install.sh
 
 # Include custom make targets
 -include $(wildcard .dev/*.make)
