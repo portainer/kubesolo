@@ -150,6 +150,20 @@ case $ARCH in
         ;;
 esac
 
+# Detect libc type (glibc vs musl)
+LIBC_SUFFIX=""
+if [ -f /lib/ld-musl-*.so.1 ] || [ -f /usr/lib/ld-musl-*.so.1 ]; then
+    # Check if musl builds are available for this architecture
+    if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
+        LIBC_SUFFIX="-musl"
+        echo "🔍 Detected musl libc system - will download musl-compatible binary"
+    else
+        handle_error "musl libc detected but musl builds are only available for amd64 and arm64 architectures. Current architecture: $ARCH"
+    fi
+else
+    echo "🔍 Detected glibc system - will download standard binary"
+fi
+
 # Detect init system and environment
 INIT_SYSTEM=$(detect_init_system)
 ENVIRONMENT=$(detect_environment)
@@ -235,7 +249,7 @@ check_iptables_comment_module
 
 # Service configuration
 APP_NAME="kubesolo"
-BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH.tar.gz"
+BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH$LIBC_SUFFIX.tar.gz"
 INSTALL_PATH="/usr/local/bin/$APP_NAME"
 
 echo "🔄 Installing $APP_NAME $KUBESOLO_VERSION for $INIT_SYSTEM init system..."

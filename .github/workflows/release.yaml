@@ -13,8 +13,33 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux]
-        goarch: [amd64, arm64, arm, riscv64]
+        include:
+          # glibc builds (all architectures)
+          - goos: linux
+            goarch: amd64
+            libc: glibc
+            build_target: build
+          - goos: linux
+            goarch: arm64
+            libc: glibc
+            build_target: build
+          - goos: linux
+            goarch: arm
+            libc: glibc
+            build_target: build
+          - goos: linux
+            goarch: riscv64
+            libc: glibc
+            build_target: build
+          # musl builds (amd64 and arm64 only)
+          - goos: linux
+            goarch: amd64
+            libc: musl
+            build_target: build-musl
+          - goos: linux
+            goarch: arm64
+            libc: musl
+            build_target: build-musl
     steps:
     - uses: actions/checkout@v4
     - id: get_version
@@ -25,5 +50,5 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         pre_command: make release-workflow-deps
-        build_command: 'make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo'
-        asset_name: kubesolo-${{ steps.get_version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
+        build_command: 'make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo'
+        asset_name: kubesolo-${{ steps.get_version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}

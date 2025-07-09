@@ -12,7 +12,7 @@ KubeSolo now includes universal installation support that automatically detects 
 
 **Best for:** All systems - automatically detects and adapts to your environment
 
-The main installer now automatically detects your init system and creates appropriate service files:
+The main installer automatically detects your init system, libc type, and creates appropriate service files. It downloads the correct binary variant for your system:
 
 ```bash
 # Standard installation (works everywhere)
@@ -28,13 +28,15 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- \
   --run-mode=service
 ```
 
-**Supported Init Systems:**
-- systemd (standard Linux distributions)
-- SysV init (older distributions, some embedded systems)
-- OpenRC (Alpine Linux, Gentoo)
-- s6 (some embedded distributions)
-- runit (Void Linux, some embedded systems)
-- upstart (older Ubuntu versions)
+**Automatic Detection:**
+- **Init System**: systemd, SysV init, OpenRC, s6, runit, upstart
+- **libc Type**: Automatically downloads glibc or musl binaries
+- **Architecture**: amd64, arm64, arm, riscv64
+
+**Supported Systems:**
+- **glibc systems**: Ubuntu, CentOS, Debian, RHEL, SUSE, etc.
+- **musl systems**: Alpine Linux, Void Linux (musl), embedded systems
+- **Mixed environments**: Automatically selects correct binary variant
 
 **Run Modes:**
 - `service` (default): Creates proper service files for your init system
@@ -166,10 +168,19 @@ echo $! > /var/run/kubesolo.pid
 
 ## Architecture Support
 
-All installers support:
-- `x86_64` (amd64)
-- `aarch64` (arm64)
-- `armv7l` (arm)
+All installers support multiple architectures with automatic binary selection:
+
+### glibc Binaries (Standard)
+- `x86_64` (amd64) - Ubuntu, CentOS, Debian, etc.
+- `aarch64` (arm64) - ARM64 systems with glibc
+- `armv7l` (arm) - ARM 32-bit systems with glibc
+- `riscv64` - RISC-V 64-bit systems
+
+### musl Binaries (Alpine Linux Compatible)
+- `x86_64` (amd64) - Alpine Linux x86_64
+- `aarch64` (arm64) - Alpine Linux ARM64
+
+**Note:** The installer automatically detects your system type and downloads the appropriate binary. musl binaries are static and work on any musl-based system without additional dependencies.
 
 ## Troubleshooting
 
@@ -229,10 +240,21 @@ do_install() {
 ### Alpine Linux
 
 ```bash
-# Alpine uses OpenRC - universal installer detects this automatically
+# Alpine uses OpenRC and musl libc - installer detects both automatically
 apk add curl
 curl -sfL https://get.kubesolo.io | sh
+
+# The installer will:
+# 1. Detect OpenRC init system
+# 2. Detect musl libc and download musl-compatible binary
+# 3. Create appropriate OpenRC service file
 ```
+
+**Alpine-specific features:**
+- Automatically downloads musl-compatible static binary
+- Creates OpenRC service configuration
+- Works on both x86_64 and aarch64 Alpine systems
+- No additional dependencies required
 
 ### Buildroot
 
@@ -245,20 +267,26 @@ endef
 
 ## Support Matrix
 
-| Platform | Universal Installer | Minimal Installer | Service Manager |
-|----------|-------------------|------------------|-----------------|
-| systemd | ✅ | ✅ | ✅ |
-| SysV init | ✅ | ✅ | ✅ |
-| OpenRC | ✅ | ✅ | ✅ |
-| s6 | ✅ | ❌ | ✅ |
-| runit | ✅ | ❌ | ✅ |
-| upstart | ✅ | ❌ | ✅ |
-| busybox | ⚠️ | ✅ | ⚠️ |
-| custom | ❌ | ✅ | ❌ |
+| Platform | Universal Installer | Minimal Installer | Service Manager | Binary Type |
+|----------|-------------------|------------------|-----------------|-------------|
+| Ubuntu/Debian (glibc) | ✅ | ✅ | ✅ | glibc |
+| CentOS/RHEL (glibc) | ✅ | ✅ | ✅ | glibc |
+| Alpine Linux (musl) | ✅ | ✅ | ✅ | musl |
+| Void Linux (musl) | ✅ | ✅ | ✅ | musl |
+| systemd | ✅ | ✅ | ✅ | auto |
+| SysV init | ✅ | ✅ | ✅ | auto |
+| OpenRC | ✅ | ✅ | ✅ | auto |
+| s6 | ✅ | ❌ | ✅ | auto |
+| runit | ✅ | ❌ | ✅ | auto |
+| upstart | ✅ | ❌ | ✅ | auto |
+| busybox | ⚠️ | ✅ | ⚠️ | auto |
+| custom | ❌ | ✅ | ❌ | manual |
 
 ✅ Full support  
 ⚠️ Limited support  
 ❌ Not supported  
+auto = Automatically detects and downloads correct binary  
+manual = Manual binary selection required  
 
 ## Contributing
 

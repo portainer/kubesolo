@@ -77,9 +77,13 @@ KubeSolo is designed specifically for IoT or IIoT devices, such as embedded syst
 curl -sfL https://get.kubesolo.io | sudo sh -
 ```
 
+The installer automatically detects your system and downloads the appropriate binary:
+- **glibc systems** (Ubuntu, CentOS, Debian, etc.): Downloads standard binary
+- **musl systems** (Alpine Linux): Downloads musl-compatible binary
+
 A kubeconfig file is written to `/var/lib/kubesolo/pki/admin/admin.kubeconfig` and the service is automatically started.
 
-Note: If you're running KubeSolo on a device with less than 512MB of RAM, it's strongly advised to interact with KubeSolo using the `kubectl` command-line tool installed externally.
+**Note:** If you're running KubeSolo on a device with less than 512MB of RAM, it's strongly advised to interact with KubeSolo using the `kubectl` command-line tool installed externally.
 
 ### Advanced Installation
 
@@ -166,6 +170,24 @@ make build GOARCH=arm
 # Build for RISCV64
 make build GOARCH=riscv64
 ```
+
+### Alpine Linux / musl Builds
+
+For Alpine Linux compatibility, build musl-compatible static binaries:
+
+```bash
+# Install musl cross-compilers (one-time setup)
+sudo make install-musl-cross-compilers
+
+# Build musl binary for specific architecture
+make build-musl GOARCH=amd64
+make build-musl GOARCH=arm64
+
+# Build all supported musl architectures
+make build-all-musl
+```
+
+**Note:** musl builds are currently supported for `amd64` and `arm64` architectures only.
 
 ### Custom Output Path
 
