@@ -3,10 +3,11 @@ GOARCH ?= $(shell go env GOARCH)
 OUTPUT ?= ./dist/kubesolo
 
 VERSION ?= $(shell git describe --tags --always --dirty)
+K8S_VERSION ?= $(shell grep -Po '(?<=k8s\.io/kubernetes )v.*' ./go.mod)
 COMMIT ?= $(shell git rev-parse --short HEAD)
 BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-LDFLAGS_STRING = -s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE}
+LDFLAGS_STRING = -s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE} -X k8s.io/component-base/version.gitVersion=${K8S_VERSION}+kubesolo-${VERSION}
 
 # Cross-compilation settings
 CC_arm64 = aarch64-linux-gnu-gcc
