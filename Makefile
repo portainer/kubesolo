@@ -3,7 +3,7 @@ GOARCH ?= $(shell go env GOARCH)
 OUTPUT ?= ./dist/kubesolo
 
 VERSION ?= $(shell git describe --tags --always --dirty)
-K8S_VERSION ?= $(shell grep -Po '(?<=k8s\.io/kubernetes )v.*' ./go.mod)
+K8S_VERSION ?= $(shell awk '/k8s\.io\/kubernetes/ && !/>/ {print $2}' go.mod)
 COMMIT ?= $(shell git rev-parse --short HEAD)
 BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
