@@ -323,6 +323,15 @@ generate_proxy_exports() {
     fi
 }
 
+# Function to generate proxy environment variables for upstart
+generate_proxy_env_upstart() {
+    if [ -n "$PROXY" ]; then
+        echo "env HTTP_PROXY=\"$PROXY\""
+        echo "env HTTPS_PROXY=\"$PROXY\""
+        echo "env NO_PROXY=\"localhost,127.0.0.1\""
+    fi
+}
+
 # Function to create systemd service
 create_systemd_service() {
     SERVICE_PATH="/etc/systemd/system/$APP_NAME.service"
@@ -519,11 +528,7 @@ stop on runlevel [!2345]
 respawn
 respawn limit 10 5
 
-$(if [ -n "$PROXY" ]; then
-    echo "env HTTP_PROXY=\"$PROXY\""
-    echo "env HTTPS_PROXY=\"$PROXY\""
-    echo "env NO_PROXY=\"localhost,127.0.0.1\""
-fi)
+$(generate_proxy_env_upstart)
 
 exec $INSTALL_PATH $CMD_ARGS
 EOF
