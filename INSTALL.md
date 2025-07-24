@@ -26,6 +26,10 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- \
   --version=v0.1.5-beta \
   --path=/opt/kubesolo \
   --run-mode=service
+
+# With proxy
+curl -sfL https://get.kubesolo.io | sudo sh -s -- \
+  --proxy=http://proxy.company.com:8080
 ```
 
 **Automatic Detection:**
@@ -98,6 +102,7 @@ export KUBESOLO_LOCAL_STORAGE="false"           # Enable local storage
 export KUBESOLO_DEBUG="false"                   # Debug logging
 export KUBESOLO_PPROF_SERVER="false"            # Enable pprof
 export KUBESOLO_RUN_MODE="service"              # Run mode (universal installer only)
+export KUBESOLO_PROXY="http://proxy.company.com:8080"  # Corporate proxy for HTTP/HTTPS requests
 ```
 
 ## Industrial Device Considerations
@@ -152,7 +157,42 @@ EOF
 chmod +x /etc/init.d/kubesolo
 ```
 
-### 4. **Custom Init Systems**
+### 4. **Corporate Proxy Support**
+
+For environments requiring corporate proxy access:
+
+```bash
+# Using command-line flag
+curl -sfL https://get.kubesolo.io | sudo sh -s -- \
+  --proxy=http://proxy.company.com:8080
+
+# Using environment variable
+export KUBESOLO_PROXY="http://proxy.company.com:8080"
+curl -sfL https://get.kubesolo.io | sudo sh -
+
+# Combined with other options
+curl -sfL https://get.kubesolo.io | sudo sh -s -- \
+  --proxy=http://proxy.company.com:8080 \
+  --version=v0.1.5-beta \
+  --path=/opt/kubesolo
+```
+
+The proxy configuration automatically sets the following environment variables for all supported init systems:
+- `HTTP_PROXY=http://your.proxy.server:port`
+- `HTTPS_PROXY=http://your.proxy.server:port`
+- `NO_PROXY=localhost,127.0.0.1`
+
+**Supported across all init systems:**
+- systemd (via Environment directives)
+- SysV init (via export statements)
+- OpenRC (via export statements)
+- s6 (via export statements)
+- runit (via export statements)
+- upstart (via env directives)
+- daemon mode (via export statements)
+- foreground mode (via export statements)
+
+### 5. **Custom Init Systems**
 
 For completely custom init systems:
 
