@@ -94,6 +94,7 @@ The installation guide covers:
 - Minimal installer for constrained environments  
 - Service management across different platforms
 - Industrial device considerations (read-only filesystems, limited storage, air-gapped installations)
+- Corporate proxy support for environments behind firewalls
 - Architecture-specific installations
 
 ## Flags
@@ -110,6 +111,7 @@ KubeSolo supports the following command-line flags:
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | Enable local storage | `true` |
 | `--debug` | `KUBESOLO_DEBUG` | Enable debug logging | `false` |
 | `--pprof-server` | `KUBESOLO_PPROF_SERVER` | Enable pprof server for profiling | `false` |
+| `--proxy` | `KUBESOLO_PROXY` | Corporate proxy for HTTP/HTTPS requests (installer only) | `""` |
 
 Example:
 

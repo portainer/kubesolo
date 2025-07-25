@@ -182,6 +182,7 @@ LOCAL_STORAGE="${KUBESOLO_LOCAL_STORAGE:-false}"
 DEBUG="${KUBESOLO_DEBUG:-false}"
 PPROF_SERVER="${KUBESOLO_PPROF_SERVER:-false}"
 RUN_MODE="${KUBESOLO_RUN_MODE:-service}"  # service, foreground, or daemon
+PROXY="${KUBESOLO_PROXY:-}"
 
 # Parse command line arguments
 for arg in "$@"; do
@@ -216,6 +217,9 @@ for arg in "$@"; do
     --run-mode=*)
       RUN_MODE="${arg#*=}"
       ;;
+    --proxy=*)
+      PROXY="${arg#*=}"
+      ;;
     --help)
       echo "Usage: $0 [options]"
       echo "Options:"
@@ -229,6 +233,7 @@ for arg in "$@"; do
       echo "  --debug=true|false           Enable debug logging (default: $DEBUG)"
       echo "  --pprof-server=true|false    Enable pprof server (default: $PPROF_SERVER)"
       echo "  --run-mode=MODE              Run mode: service, foreground, or daemon (default: $RUN_MODE)"
+      echo "  --proxy=URL                  Set proxy for HTTP/HTTPS requests"
       echo "  --help                       Show this help message"
       echo ""
       echo "Supported Init Systems: systemd, sysvinit, s6, runit, openrc, upstart"
@@ -300,6 +305,33 @@ if [ "$PPROF_SERVER" = "true" ]; then
   CMD_ARGS="$CMD_ARGS --pprof-server=$PPROF_SERVER"
 fi
 
+# Function to generate proxy environment variables
+generate_proxy_env() {
+    if [ -n "$PROXY" ]; then
+        echo "Environment=\"HTTP_PROXY=$PROXY\""
+        echo "Environment=\"HTTPS_PROXY=$PROXY\""
+        echo "Environment=\"NO_PROXY=localhost,127.0.0.1\""
+    fi
+}
+
+# Function to generate proxy exports for shell scripts
+generate_proxy_exports() {
+    if [ -n "$PROXY" ]; then
+        echo "export HTTP_PROXY=\"$PROXY\""
+        echo "export HTTPS_PROXY=\"$PROXY\""
+        echo "export NO_PROXY=\"localhost,127.0.0.1\""
+    fi
+}
+
+# Function to generate proxy environment variables for upstart
+generate_proxy_env_upstart() {
+    if [ -n "$PROXY" ]; then
+        echo "env HTTP_PROXY=\"$PROXY\""
+        echo "env HTTPS_PROXY=\"$PROXY\""
+        echo "env NO_PROXY=\"localhost,127.0.0.1\""
+    fi
+}
+
 # Function to create systemd service
 create_systemd_service() {
     SERVICE_PATH="/etc/systemd/system/$APP_NAME.service"
@@ -316,6 +348,7 @@ OOMScoreAdjust=-500
 LimitNOFILE=65535
 StandardOutput=journal
 StandardError=journal
+$(generate_proxy_env)
 
 [Install]
 WantedBy=multi-user.target
@@ -342,6 +375,8 @@ create_sysvinit_service() {
 # Short-Description: $APP_NAME service
 # Description:       KubeSolo single-node Kubernetes distribution
 ### END INIT INFO
+
+$(generate_proxy_exports)
 
 DAEMON="$INSTALL_PATH"
 DAEMON_ARGS="$CMD_ARGS"
@@ -404,6 +439,8 @@ create_openrc_service() {
     cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create OpenRC service script"
 #!/sbin/openrc-run
 
+$(generate_proxy_exports)
+
 name="$APP_NAME"
 description="KubeSolo single-node Kubernetes distribution"
 command="$INSTALL_PATH"
@@ -431,6 +468,7 @@ create_s6_service() {
     
     cat <<EOF > "$S6_SERVICE_DIR/run" || handle_error "Failed to create s6 run script"
 #!/bin/sh
+$(generate_proxy_exports)
 exec $INSTALL_PATH $CMD_ARGS
 EOF
     
@@ -461,6 +499,7 @@ create_runit_service() {
     
     cat <<EOF > "$RUNIT_SERVICE_DIR/run" || handle_error "Failed to create runit run script"
 #!/bin/sh
+$(generate_proxy_exports)
 exec $INSTALL_PATH $CMD_ARGS
 EOF
     
@@ -489,6 +528,8 @@ stop on runlevel [!2345]
 respawn
 respawn limit 10 5
 
+$(generate_proxy_env_upstart)
+
 exec $INSTALL_PATH $CMD_ARGS
 EOF
     
@@ -503,6 +544,14 @@ run_foreground() {
     echo "📝 Command: $INSTALL_PATH $CMD_ARGS"
     echo "⚠️  Press Ctrl+C to stop the service"
     echo "💡 To run in background, use: nohup $INSTALL_PATH $CMD_ARGS > /var/log/$APP_NAME.log 2>&1 &"
+    
+    # Set proxy environment variables if configured
+    if [ -n "$PROXY" ]; then
+        export HTTP_PROXY="$PROXY"
+        export HTTPS_PROXY="$PROXY"
+        export NO_PROXY="localhost,127.0.0.1"
+    fi
+    
     eval "exec \"$INSTALL_PATH\" $CMD_ARGS"
 }
 
@@ -515,6 +564,13 @@ run_daemon() {
     
     # Create log directory if it doesn't exist
     mkdir -p "$(dirname "$LOGFILE")" || handle_error "Failed to create log directory"
+    
+    # Set proxy environment variables if configured
+    if [ -n "$PROXY" ]; then
+        export HTTP_PROXY="$PROXY"
+        export HTTPS_PROXY="$PROXY"
+        export NO_PROXY="localhost,127.0.0.1"
+    fi
     
     # Start daemon - use eval to properly handle arguments
     eval "nohup \"$INSTALL_PATH\" $CMD_ARGS > \"$LOGFILE\" 2>&1 &"
