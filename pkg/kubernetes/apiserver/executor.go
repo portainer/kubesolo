@@ -36,7 +36,7 @@ func (s *service) Run(kineReadyCh chan struct{}) error {
 		return err
 	}
 
-	if err := s.kubeSoloWebhook.start(s.ctx); err != nil {
+	if err := s.kubeSoloWebhook.Start(s.ctx); err != nil {
 		log.Error().Str("component", "apiserver").Msgf("failed to start kubesolo webhook: %v...", err)
 		s.terminate()
 		return err

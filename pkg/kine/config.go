@@ -17,10 +17,10 @@ func (s *service) generateKineConfig() endpoint.Config {
 		Endpoint: fmt.Sprintf("sqlite://%s/state.db?_journal=WAL&cache=shared&_busy_timeout=30000&_txlock=immediate", s.databaseDir),
 		Listener: types.DefaultKineEndpoint,
 		ConnectionPoolConfig: generic.ConnectionPoolConfig{
-			MaxIdle:     2,
-			MaxOpen:     3,
-			MaxLifetime: 10 * time.Second,
+			MaxIdle:     3,
+			MaxOpen:     5,
+			MaxLifetime: 60 * time.Second,
 		},
-		NotifyInterval: 10 * time.Second,
+		NotifyInterval: 15 * time.Second,
 	}
 }
