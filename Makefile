@@ -7,9 +7,7 @@ K8S_VERSION ?= $(shell awk '/k8s\.io\/kubernetes/ && !/>/ {gsub(/^[ \t]+|[ \t]+$
 COMMIT ?= $(shell git rev-parse --short HEAD)
 BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-# LDFLAGS_STRING = -s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE} -X k8s.io/component-base/version.gitVersion=${K8S_VERSION}+kubesolo-${VERSION}
-
-LDFLAGS_STRING = -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE} -X k8s.io/component-base/version.gitVersion=${K8S_VERSION}+kubesolo-${VERSION}
+DFLAGS_STRING = -s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE} -X k8s.io/component-base/version.gitVersion=${K8S_VERSION}+kubesolo-${VERSION}
 
 # Cross-compilation settings
 CC_arm64 = aarch64-linux-gnu-gcc
@@ -59,7 +57,7 @@ deps:
 
 # Generic build function that uses the correct cross-compiler based on GOARCH
 .PHONY: build
-build: lint
+build: lint deps
 	@mkdir -p $(dir $(OUTPUT))
 ifeq ($(GOARCH),arm64)
 	CC=$(CC_arm64) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
