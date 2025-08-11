@@ -196,11 +196,12 @@ func (w *Service) sendResponse(resp http.ResponseWriter, admissionReview *admiss
 
 	resp.Header().Set("Content-Type", "application/json")
 
-	// Use more efficient JSON encoding to reduce CPU usage
-	encoder := json.NewEncoder(resp)
-	encoder.SetIndent("", "") // Disable indentation to reduce CPU
-	encoder.Encode(admissionReview)
-
+	data, err := json.Marshal(admissionReview)
+	if err != nil {
+		http.Error(resp, fmt.Sprintf("failed to marshal response: %v", err), http.StatusInternalServerError)
+		return
+	}
+	resp.Write(data)
 	log.Debug().Str("component", "webhook").Msg("webhook response sent")
 }
 

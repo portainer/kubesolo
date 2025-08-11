@@ -18,7 +18,13 @@ func (w *Service) createNodeNamePatch(pod corev1.Pod) []map[string]any {
 
 	// Use pre-computed patch to reduce CPU usage
 	var patch []map[string]any
-	json.Unmarshal(w.nodeNamePatch, &patch)
+	if err := json.Unmarshal(w.nodeNamePatch, &patch); err != nil {
+		log.Error().Err(err).Str("component", "webhook").
+			Str("pod", pod.Name).
+			Str("namespace", pod.Namespace).
+			Msg("failed to unmarshal nodeNamePatch")
+		return []map[string]any{}
+	}
 	return patch
 }
 
@@ -31,6 +37,12 @@ func (w *Service) createNodeSelectorPatch(job batchv1.Job) []map[string]any {
 		Msg("setting node selector for job")
 
 	var patch []map[string]any
-	json.Unmarshal(w.nodeSelectorPatch, &patch)
+	if err := json.Unmarshal(w.nodeSelectorPatch, &patch); err != nil {
+		log.Error().Err(err).Str("component", "webhook").
+			Str("job", job.Name).
+			Str("namespace", job.Namespace).
+			Msg("failed to unmarshal nodeSelectorPatch")
+		return []map[string]any{}
+	}
 	return patch
 }

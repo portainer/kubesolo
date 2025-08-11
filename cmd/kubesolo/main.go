@@ -369,7 +369,7 @@ func configureRuntime() {
 	}
 
 	if v.Total < types.DefaultOSMemoryLimit {
-		log.Info().Str("component", "kubesolo").Msgf("host memory is less than the default OS memory limit, setting garbage collection to %d%% and memory limit to %dMB", types.DefaultGCPercent, types.DefaultKubesoloMemoryLimit)
+		log.Info().Str("component", "kubesolo").Msgf("host memory is less than the base kubesolo OS memory limit, setting garbage collection to %d%% and memory limit to %dMB", types.DefaultGCPercent, types.DefaultKubesoloMemoryLimit/(1024*1024))
 		rdebug.SetGCPercent(types.DefaultGCPercent)
 		rdebug.SetMemoryLimit(types.DefaultKubesoloMemoryLimit)
 		runtime.GOMAXPROCS(1)
@@ -377,5 +377,5 @@ func configureRuntime() {
 		return
 	}
 
-	log.Info().Str("component", "kubesolo").Msg("host memory is greater than the default OS memory limit, proceeding without any runtime optimizations")
+	log.Info().Str("component", "kubesolo").Msg("host memory is greater than the base kubesolo OS memory limit, proceeding without any runtime optimizations")
 }
