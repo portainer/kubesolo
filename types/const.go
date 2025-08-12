@@ -29,12 +29,13 @@ const (
 	DefaultKineSocket                     = "kine.sock"
 	DefaultControllerManagerDir           = "controller-manager"
 	DefaultSandboxImage                   = "portainer/pause:latest"
-	DefaultPortainerAgentImage            = "portainer/agent:2.29.2"
-	DefaultCoreDNSImage                   = "coredns/coredns:1.12.1"
+	DefaultPortainerAgentImage            = "portainer/agent:2.32.0"
+	DefaultCoreDNSImage                   = "coredns/coredns:1.12.2"
 	DefaultLocalPathProvisionerImage      = "rancher/local-path-provisioner:v0.0.31"
-	DefaultGCPercent                      = 50
+	DefaultGCPercent                      = 100
 	DefaultContextTimeout                 = 15 * time.Second
-	DefaultMemoryLimit                    = 160 * 1024 * 1024
+	DefaultKubesoloMemoryLimit            = 200 * 1024 * 1024
+	DefaultOSMemoryLimit                  = 512 * 1024 * 1024
 	DefaultComponentSleep                 = 5 * time.Second
-	DefaultRetryCount                     = 12
+	DefaultRetryCount                     = 5
 )

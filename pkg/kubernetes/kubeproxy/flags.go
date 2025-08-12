@@ -7,11 +7,17 @@ import (
 
 func (s *service) configureKubeProxyFlags(command *cobra.Command) {
 	flags := command.Flags()
+
+	// networking settings
 	_ = flags.Set("kubeconfig", s.adminKubeconfigFile)
 	_ = flags.Set("cluster-cidr", types.DefaultPodCIDR)
-	_ = flags.Set("oom-score-adj", "-998")
 	_ = flags.Set("metrics-bind-address", "")
+
+	// performance settings
+	_ = flags.Set("oom-score-adj", "-998")
 	_ = flags.Set("profiling", "false")
+
+	// iptables settings
 	_ = flags.Set("iptables-masquerade-bit", "14")
 	_ = flags.Set("masquerade-all", "true")
 	_ = flags.Set("proxy-mode", "iptables")

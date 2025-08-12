@@ -80,31 +80,41 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"registerNode":                   true,
 		"readOnlyPort":                   0,
 		"port":                           10250,
+		"syncFrequency":                  "5m0s",
+		"fileCheckFrequency":             "2m0s",
+		"httpCheckFrequency":             "2m0s",
+		"nodeStatusUpdateFrequency":      "60s",
+		"nodeStatusReportFrequency":      "15m0s",
+		"volumeStatsAggPeriod":           "5m0s",
+		"imageMinimumGCAge":              "10m0s",
+		"imageMaximumGCAge":              "0s",
+		"imageGCHighThresholdPercent":    95,
+		"imageGCLowThresholdPercent":     80,
+		"runtimeRequestTimeout":          "60s",
+		"cpuManagerReconcilePeriod":      "60s",
 		"streamingConnectionIdleTimeout": "1h0m0s",
 		"rotateCertificates":             true,
 
 		"registerWithTaints": []map[string]any{},
 
 		"evictionHard": map[string]string{
-			"memory.available": "25Mi",
-			"nodefs.available": "200Mi",
+			"memory.available": "75Mi",
+			"nodefs.available": "50Mi",
 		},
 		"systemReserved": map[string]string{"memory": "25Mi"},
 		"kubeReserved":   map[string]string{"memory": "25Mi"},
 		"failSwapOn":     false,
 
-		"kubeAPIQPS":                1,
-		"kubeAPIBurst":              2,
+		"kubeAPIQPS":                10,
+		"kubeAPIBurst":              20,
 		"serializeImagePulls":       true,
 		"imagePullProgressDeadline": "1m",
 
-		"imageGCHighThresholdPercent": 95,
-		"imageGCLowThresholdPercent":  80,
-		"registryPullQPS":             1,
-		"registryBurst":               2,
+		"registryPullQPS": 5,
+		"registryBurst":   10,
 
-		"eventRecordQPS": 1,
-		"eventBurst":     1,
+		"eventRecordQPS": 5,
+		"eventBurst":     10,
 
 		"containerLogMaxSize":     "512Ki",
 		"enableProfilingHandler":  false,
@@ -113,6 +123,8 @@ func (s *service) generateKubeletConfig() map[string]any {
 
 		"featureGates": map[string]bool{
 			"RotateKubeletServerCertificate": true,
+			"APIServerTracing":               false,
+			"KubeletTracing":                 false,
 		},
 	}
 }

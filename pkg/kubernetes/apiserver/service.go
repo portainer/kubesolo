@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 
+	"github.com/portainer/kubesolo/pkg/kubernetes/webhook"
 	"github.com/portainer/kubesolo/types"
 )
 
@@ -21,7 +22,7 @@ type service struct {
 	adminKeyFile          string
 	adminKubeconfig       string
 	serviceAccountKeyFile string
-	kubeSoloWebhook       *webhoook
+	kubeSoloWebhook       *webhook.Service
 }
 
 // NewService creates a new API server service
@@ -40,6 +41,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, apiServerReady c
 		adminKeyFile:          embedded.AdminCerts.Key,
 		adminKubeconfig:       embedded.AdminKubeconfigFile,
 		serviceAccountKeyFile: embedded.ServiceAccountKeyFile,
-		kubeSoloWebhook:       newWebhook(nodeName, embedded.PKIDir),
+		kubeSoloWebhook:       webhook.NewService(nodeName, embedded.PKIDir),
 	}
 }

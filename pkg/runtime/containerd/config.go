@@ -57,10 +57,10 @@ func (s *service) generateContainerdConfig() map[string]any {
 				"snapshotter":                  "overlayfs",
 				"disable_snapshot_annotations": true,
 				"discard_unpacked_layers":      false,
-				"max_concurrent_downloads":     3,
-				"image_pull_progress_timeout":  "5m0s",
+				"max_concurrent_downloads":     1,
+				"image_pull_progress_timeout":  "2m0s",
 				"image_pull_with_sync_fs":      false,
-				"stats_collect_period":         10,
+				"stats_collect_period":         120,
 				"pinned_images": map[string]any{
 					"sandbox": types.DefaultSandboxImage,
 				},
@@ -126,11 +126,11 @@ func (s *service) generateContainerdConfig() map[string]any {
 			},
 
 			"io.containerd.gc.v1.scheduler": map[string]any{
-				"pause_threshold":    0.02,
+				"pause_threshold":    0.01,
 				"deletion_threshold": 0,
-				"mutation_threshold": 100,
-				"schedule_delay":     "0s",
-				"startup_delay":      "100ms",
+				"mutation_threshold": 50,
+				"schedule_delay":     "5s",
+				"startup_delay":      "200ms",
 			},
 
 			"io.containerd.grpc.v1.cri": map[string]any{
