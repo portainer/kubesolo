@@ -58,7 +58,7 @@ jobs:
         go-version-file: go.mod
         cache-dependency-path: go.sum
     - name: "[preparation] release-workflow-deps"
-      run: make release-workflow-deps
+      run: sudo make release-workflow-deps
     - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
       run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo
     - name: "[execution] upload artifact"
