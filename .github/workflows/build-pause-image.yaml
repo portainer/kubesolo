@@ -1,4 +1,4 @@
-name: Build Pause Image
+name: pause-image
 
 on:
   workflow_dispatch:

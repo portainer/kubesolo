@@ -1,4 +1,4 @@
-name: Release
+name: release
 
 on:
   release:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   releases-matrix:
-    name: Release Go Binary
+    name: release for kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
