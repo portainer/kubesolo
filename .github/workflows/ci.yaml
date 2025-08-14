@@ -1,4 +1,4 @@
-name: CI
+name: ci
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [ "develop" ]
     types: [opened, reopened, synchronize]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,18 +16,19 @@ jobs:
         goos: [linux]
         goarch: [amd64, arm64, arm, riscv64]
     steps:
-      - name: "checkout the current branch"
+      - name: "[preparation] checkout the current branch"
         uses: actions/checkout@v4
-      - name: "set up golang"
-        uses: actions/setup-go@v5.0.0
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - name: "Install cross-compilation toolchains"
+      - name: "[preparation] install cross-compilation toolchains"
         run: sudo make install-cross-compilers
-      - name: "Build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
+      - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
         run: make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
-      - uses: actions/upload-artifact@v4
+      - name: "[execution] upload artifact"
+        uses: actions/upload-artifact@v4
         with:
           name: kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ./dist/kubesolo
