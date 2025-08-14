@@ -3,6 +3,7 @@ name: Release
 on:
   release:
     types: [created]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -41,14 +42,28 @@ jobs:
             libc: musl
             build_target: build-musl
     steps:
-    - uses: actions/checkout@v4
-    - id: get_version
-      uses: battila7/get-version-action@v2
-    - name: Set build time
+    - name: "[preparation] checkout the current branch"
+      uses: actions/checkout@v4
+    - name: "[preparation] set build time"
       run: echo BUILD_TIME=$(date) >> ${GITHUB_ENV}
-    - uses: wangyoucao577/go-release-action@v1
+    - name: "[preparation] get the kubesolo version"
+      id: get_version
+      run: |
+        VERSION=$(echo "${{ github.ref }}" | sed 's/refs\/tags\/v//')
+        echo "Extracted version: $VERSION"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT" # Set output for subsequent steps
+    - name: "[preparation] set up golang"
+      uses: actions/setup-go@v5
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        pre_command: make release-workflow-deps
-        build_command: 'make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo'
-        asset_name: kubesolo-${{ steps.get_version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
+        go-version-file: go.mod
+        cache-dependency-path: go.sum
+    - name: "[preparation] release-workflow-deps"
+      run: make release-workflow-deps
+    - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
+      run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo
+    - name: "[execution] upload artifact"
+      uses: actions/upload-artifact@v4
+      with:
+        name: kubesolo-${{ steps.get_version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
+        path: ./dist/kubesolo
+        retention-days: 30
