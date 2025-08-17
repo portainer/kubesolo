@@ -1,4 +1,4 @@
-name: ci
+name: ci-kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}
 
 on:
   push:
