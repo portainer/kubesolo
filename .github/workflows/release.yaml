@@ -1,4 +1,4 @@
-name: release-${{ github.event.inputs.kubesolo_version }}
+name: release
 
 on:
   workflow_dispatch:
