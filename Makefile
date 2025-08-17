@@ -31,8 +31,8 @@ install-musl-cross-compilers:
 	apt-get update
 	apt-get install -y musl-tools
 	# Install musl cross-compilers from musl.cc
-	wget -q https://musl.cc/aarch64-linux-musl-cross.tgz -O /tmp/aarch64-musl.tgz
-	wget -q https://musl.cc/x86_64-linux-musl-cross.tgz -O /tmp/x86_64-musl.tgz
+	wget -q https://kubesolo-io-assets.sfo3.cdn.digitaloceanspaces.com/musl/aarch64-linux-musl-cross.tgz -O /tmp/aarch64-musl.tgz
+	wget -q https://kubesolo-io-assets.sfo3.cdn.digitaloceanspaces.com/musl/x86_64-linux-musl-cross.tgz -O /tmp/x86_64-musl.tgz
 	cd /opt && tar -xzf /tmp/aarch64-musl.tgz && tar -xzf /tmp/x86_64-musl.tgz
 	ln -sf /opt/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc /usr/local/bin/aarch64-linux-musl-gcc
 	ln -sf /opt/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
