@@ -11,21 +11,6 @@ permissions:
   contents: write
 
 jobs:
-  release:
-      name: create a pre-release
-      runs-on: ubuntu-latest
-      steps:
-        - name: "[execution] create a pre-release"
-          run: |
-            gh release create \
-              ${{ github.event.inputs.kubesolo_version }} \
-              --repo portainer/kubesolo \
-              --title ${{ github.event.inputs.kubesolo_version }} \
-              --target develop \
-              --prerelease \
-              --generate-notes
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build:
     name: release for kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
     runs-on: ubuntu-latest
