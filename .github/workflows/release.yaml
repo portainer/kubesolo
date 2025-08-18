@@ -12,52 +12,52 @@ permissions:
 
 jobs:
   release:
-      name: create a pre-release
-      runs-on: ubuntu-latest
-      steps:
-        - name: "[execution] create a pre-release"
-          run: |
-            gh release create \
-              ${{ github.event.inputs.kubesolo_version }} \
-              --repo portainer/kubesolo \
-              --title ${{ github.event.inputs.kubesolo_version }} \
-              --target develop \
-              --prerelease \
-              --generate-notes
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    name: create a pre-release
+    runs-on: ubuntu-latest
+    steps:
+    - name: "[execution] create a pre-release"
+      run: |
+        gh release create \
+          ${{ github.event.inputs.kubesolo_version }} \
+          --repo portainer/kubesolo \
+          --title ${{ github.event.inputs.kubesolo_version }} \
+          --target develop \
+          --prerelease \
+          --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build:
     name: release for kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          # glibc builds (all architectures)
-          - goos: linux
-            goarch: amd64
-            libc: glibc
-            build_target: build
-          - goos: linux
-            goarch: arm64
-            libc: glibc
-            build_target: build
-          - goos: linux
-            goarch: arm
-            libc: glibc
-            build_target: build
-          - goos: linux
-            goarch: riscv64
-            libc: glibc
-            build_target: build
-          # musl builds (amd64 and arm64 only)
-          - goos: linux
-            goarch: amd64
-            libc: musl
-            build_target: build-musl
-          - goos: linux
-            goarch: arm64
-            libc: musl
-            build_target: build-musl
+        # glibc builds (all architectures)
+        - goos: linux
+          goarch: amd64
+          libc: glibc
+          build_target: build
+        - goos: linux
+          goarch: arm64
+          libc: glibc
+          build_target: build
+        - goos: linux
+          goarch: arm
+          libc: glibc
+          build_target: build
+        - goos: linux
+          goarch: riscv64
+          libc: glibc
+          build_target: build
+        # musl builds (amd64 and arm64 only)
+        - goos: linux
+          goarch: amd64
+          libc: musl
+          build_target: build-musl
+        - goos: linux
+          goarch: arm64
+          libc: musl
+          build_target: build-musl
     steps:
     - name: "[preparation] checkout the current branch"
       uses: actions/checkout@v4
