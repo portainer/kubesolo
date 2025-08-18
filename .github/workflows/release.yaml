@@ -78,6 +78,7 @@ jobs:
         dist=kubesolo-${{ github.event.inputs.kubesolo_version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
 
         mv kubesolo $dist
-        gh release upload --clobber --repo portainer/kubesolo ${{ github.event.inputs.kubesolo_version }} $dist
+        tar -czf $dist.tar.gz $dist
+        gh release upload --clobber --repo portainer/kubesolo ${{ github.event.inputs.kubesolo_version }} $dist.tar.gz
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
