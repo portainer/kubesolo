@@ -75,10 +75,8 @@ jobs:
       run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo
     - name: "[post] upload artifacts to github release"
       run: |
-        dist=kubesolo-${{ github.event.inputs.kubesolo_version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
-
-        mv kubesolo $dist
-        tar -czf $dist.tar.gz $dist
+        dist=kubesolo-${{ github.event.inputs.kubesolo_version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}        
+        tar -czf $dist.tar.gz kubesolo
         gh release upload --clobber --repo portainer/kubesolo ${{ github.event.inputs.kubesolo_version }} $dist.tar.gz
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
