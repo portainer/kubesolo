@@ -1,55 +1,83 @@
-name: Release
+name: release
 
 on:
-  release:
-    types: [created]
   workflow_dispatch:
+    inputs:
+      kubesolo_version:
+        description: "kubesolo version. e.g. v0.x.x, v0.x.x-beta"
+        required: true
 
 permissions:
   contents: write
 
 jobs:
-  releases-matrix:
-    name: Release Go Binary
+  release:
+    name: create a pre-release
     runs-on: ubuntu-latest
+    steps:
+    - name: "[execution] create a pre-release"
+      run: |
+        gh release create \
+          ${{ github.event.inputs.kubesolo_version }} \
+          --repo portainer/kubesolo \
+          --title ${{ github.event.inputs.kubesolo_version }} \
+          --target develop \
+          --prerelease \
+          --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build:
+    name: release for kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
+    runs-on: ubuntu-latest
+    needs: [release]
     strategy:
       matrix:
         include:
-          # glibc builds (all architectures)
-          - goos: linux
-            goarch: amd64
-            libc: glibc
-            build_target: build
-          - goos: linux
-            goarch: arm64
-            libc: glibc
-            build_target: build
-          - goos: linux
-            goarch: arm
-            libc: glibc
-            build_target: build
-          - goos: linux
-            goarch: riscv64
-            libc: glibc
-            build_target: build
-          # musl builds (amd64 and arm64 only)
-          - goos: linux
-            goarch: amd64
-            libc: musl
-            build_target: build-musl
-          - goos: linux
-            goarch: arm64
-            libc: musl
-            build_target: build-musl
+        # glibc builds (all architectures)
+        - goos: linux
+          goarch: amd64
+          libc: glibc
+          build_target: build
+        - goos: linux
+          goarch: arm64
+          libc: glibc
+          build_target: build
+        - goos: linux
+          goarch: arm
+          libc: glibc
+          build_target: build
+        - goos: linux
+          goarch: riscv64
+          libc: glibc
+          build_target: build
+        # musl builds (amd64 and arm64 only)
+        - goos: linux
+          goarch: amd64
+          libc: musl
+          build_target: build-musl
+        - goos: linux
+          goarch: arm64
+          libc: musl
+          build_target: build-musl
     steps:
-    - uses: actions/checkout@v4
-    - id: get_version
-      uses: battila7/get-version-action@v2
-    - name: Set build time
+    - name: "[preparation] checkout the current branch"
+      uses: actions/checkout@v4
+    - name: "[preparation] set build time"
       run: echo BUILD_TIME=$(date) >> ${GITHUB_ENV}
-    - uses: wangyoucao577/go-release-action@v1
+    - name: "[preparation] set up golang"
+      uses: actions/setup-go@v5
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        pre_command: make release-workflow-deps
-        build_command: 'make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo'
-        asset_name: kubesolo-${{ steps.get_version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
+        go-version-file: go.mod
+        cache-dependency-path: go.sum
+    - name: "[preparation] release-workflow-deps"
+      run: sudo make release-workflow-deps
+    - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
+      run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo
+    - name: "[post] upload artifacts to github release"
+      run: |
+        dist=kubesolo-${{ github.event.inputs.kubesolo_version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
+
+        mv kubesolo $dist
+        gh release upload --clobber --repo portainer/kubesolo ${{ github.event.inputs.kubesolo_version }} $dist
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
