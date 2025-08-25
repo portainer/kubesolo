@@ -17,6 +17,7 @@ case $ARCH in
     x86_64) ARCH="amd64" ;;
     aarch64) ARCH="arm64" ;;
     armv7l) ARCH="arm" ;;
+    riscv64) ARCH="riscv64" ;;
     *) die "Unsupported architecture: $ARCH" ;;
 esac
 
