@@ -46,7 +46,7 @@ deps:
 
 # Generic build function that uses the correct cross-compiler based on GOARCH
 .PHONY: build
-build: lint deps
+build: lint
 	@mkdir -p $(dir $(OUTPUT))
 ifeq ($(GOARCH),arm64)
 	CC=$(CC_arm64) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \

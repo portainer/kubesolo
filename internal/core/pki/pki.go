@@ -216,7 +216,7 @@ func signCertificate(opts CertOptions, template *x509.Certificate, privateKey *r
 	var cert []byte
 	var err error
 
-	if opts.Type == CACert {
+	if opts.Type == CACert || opts.Type == RequestHeaderCACert {
 		cert, err = x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create self-signed certificate: %v", err)
