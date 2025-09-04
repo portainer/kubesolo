@@ -38,18 +38,27 @@ type WebhookCertificatePaths struct {
 	CertificatePaths
 }
 
+// RequestHeaderCertificatePaths defines paths for request header CA and client certificates
+type RequestHeaderCertificatePaths struct {
+	CACert     string
+	CAKey      string
+	ClientCert string
+	ClientKey  string
+}
+
 type Embedded struct {
 	// System paths (not managed by kubesolo)
 	SystemCNIDir string
 
 	// PKI directories
-	PKIDir           string
-	PKICADir         string
-	PKIAdminDir      string
-	PKIAPIServerDir  string
-	PKIControllerDir string
-	PKIKubeletDir    string
-	PKIWebhookDir    string
+	PKIDir              string
+	PKICADir            string
+	PKIAdminDir         string
+	PKIAPIServerDir     string
+	PKIControllerDir    string
+	PKIKubeletDir       string
+	PKIWebhookDir       string
+	PKIRequestHeaderDir string
 
 	// Admin kubeconfig file
 	AdminKubeconfigFile string
@@ -61,6 +70,7 @@ type Embedded struct {
 	AdminCerts             AdminCertificatePaths
 	WebhookCerts           WebhookCertificatePaths
 	CACerts                CACertificatePaths
+	RequestHeaderCerts     RequestHeaderCertificatePaths
 
 	// Containerd directories and files
 	ContainerdDir            string

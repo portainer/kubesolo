@@ -20,6 +20,10 @@ const (
 	AdminCert CertificateType = "admin"
 	// WebhookCert is for the webhook
 	WebhookCert CertificateType = "webhook"
+	// RequestHeaderCACert is the request header CA certificate
+	RequestHeaderCACert CertificateType = "request-header-ca"
+	// RequestHeaderClientCert is the request header client certificate
+	RequestHeaderClientCert CertificateType = "request-header-client"
 )
 
 // CertOptions holds configuration for certificate generation

@@ -14,7 +14,7 @@ import (
 
 // defaultCertOptions returns default options for the specified certificate type
 // it sets the relevant fields for the certificate type, including the local IPv4 addresses
-// the supported certificate types are CACert, KubeletCert, APIServerCert, ControllerManagerCert, AdminCert, and WebhookCert
+// the supported certificate types are CACert, KubeletCert, APIServerCert, ControllerManagerCert, AdminCert, WebhookCert, RequestHeaderCACert, and RequestHeaderClientCert
 func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertOptions {
 	opts := CertOptions{
 		Type:         certType,
@@ -98,6 +98,21 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 		opts.SignerKeyDir = embedded.CACerts.Key
 		opts.CertDir = filepath.Join(embedded.PKIWebhookDir, "webhook.crt")
 		opts.KeyDir = filepath.Join(embedded.PKIWebhookDir, "webhook.key")
+
+	case RequestHeaderCACert:
+		opts.CommonName = "request-header-ca"
+		opts.Organization = []string{"Kubernetes"}
+		opts.NotAfterDays = 3650
+		opts.CertDir = embedded.RequestHeaderCerts.CACert
+		opts.KeyDir = embedded.RequestHeaderCerts.CAKey
+
+	case RequestHeaderClientCert:
+		opts.CommonName = "system:auth-proxy"
+		opts.Organization = []string{"system:auth-proxy"}
+		opts.SignerCertDir = embedded.RequestHeaderCerts.CACert
+		opts.SignerKeyDir = embedded.RequestHeaderCerts.CAKey
+		opts.CertDir = embedded.RequestHeaderCerts.ClientCert
+		opts.KeyDir = embedded.RequestHeaderCerts.ClientKey
 	}
 
 	return opts

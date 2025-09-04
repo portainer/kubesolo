@@ -260,13 +260,14 @@ func (s *kubesolo) bootstrap() {
 		AdminKubeconfigFile: filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.kubeconfig"),
 
 		// PKI paths
-		PKIDir:           filepath.Join(basePath, types.DefaultPKIDir),
-		PKICADir:         filepath.Join(basePath, types.DefaultPKIDir, "ca"),
-		PKIAdminDir:      filepath.Join(basePath, types.DefaultPKIDir, "admin"),
-		PKIAPIServerDir:  filepath.Join(basePath, types.DefaultPKIDir, "apiserver"),
-		PKIControllerDir: filepath.Join(basePath, types.DefaultPKIDir, "controller-manager"),
-		PKIKubeletDir:    filepath.Join(basePath, types.DefaultPKIDir, "kubelet"),
-		PKIWebhookDir:    filepath.Join(basePath, types.DefaultPKIDir, "webhook"),
+		PKIDir:              filepath.Join(basePath, types.DefaultPKIDir),
+		PKICADir:            filepath.Join(basePath, types.DefaultPKIDir, "ca"),
+		PKIAdminDir:         filepath.Join(basePath, types.DefaultPKIDir, "admin"),
+		PKIAPIServerDir:     filepath.Join(basePath, types.DefaultPKIDir, "apiserver"),
+		PKIControllerDir:    filepath.Join(basePath, types.DefaultPKIDir, "controller-manager"),
+		PKIKubeletDir:       filepath.Join(basePath, types.DefaultPKIDir, "kubelet"),
+		PKIWebhookDir:       filepath.Join(basePath, types.DefaultPKIDir, "webhook"),
+		PKIRequestHeaderDir: filepath.Join(basePath, types.DefaultPKIDir, "request-header"),
 
 		// Certificate paths
 		KubeletCerts: types.KubeletCertificatePaths{
@@ -307,6 +308,12 @@ func (s *kubesolo) bootstrap() {
 		CACerts: types.CACertificatePaths{
 			Cert: filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
 			Key:  filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.key"),
+		},
+		RequestHeaderCerts: types.RequestHeaderCertificatePaths{
+			CACert:     filepath.Join(basePath, types.DefaultPKIDir, "request-header", "request-header-ca.crt"),
+			CAKey:      filepath.Join(basePath, types.DefaultPKIDir, "request-header", "request-header-ca.key"),
+			ClientCert: filepath.Join(basePath, types.DefaultPKIDir, "request-header", "request-header-client.crt"),
+			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, "request-header", "request-header-client.key"),
 		},
 
 		// Containerd paths

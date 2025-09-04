@@ -17,7 +17,7 @@ import (
 )
 
 // GenerateAllCertificates creates all certificates needed for the specified component
-// it generates the CA certificate, kubelet certificate, apiserver certificate, controller-manager certificate, admin certificate, and webhook certificate
+// it generates the CA certificate, kubelet certificate, apiserver certificate, controller-manager certificate, admin certificate, webhook certificate, and request header certificates
 // all certificates are generated as self-signed certificates
 func GenerateAllCertificates(embedded types.Embedded) error {
 	caOpts := defaultCertOptions(CACert, embedded)
@@ -48,6 +48,18 @@ func GenerateAllCertificates(embedded types.Embedded) error {
 	webhookOpts := defaultCertOptions(WebhookCert, embedded)
 	if err := generateCertificate(webhookOpts); err != nil {
 		return fmt.Errorf("failed to generate webhook certificate: %v", err)
+	}
+
+	// Generate request header CA certificate
+	requestHeaderCAOpts := defaultCertOptions(RequestHeaderCACert, embedded)
+	if err := generateCertificate(requestHeaderCAOpts); err != nil {
+		return fmt.Errorf("failed to generate request header CA certificate: %v", err)
+	}
+
+	// Generate request header client certificate
+	requestHeaderClientOpts := defaultCertOptions(RequestHeaderClientCert, embedded)
+	if err := generateCertificate(requestHeaderClientOpts); err != nil {
+		return fmt.Errorf("failed to generate request header client certificate: %v", err)
 	}
 
 	return nil
@@ -187,6 +199,14 @@ func configureCertificateByType(template *x509.Certificate, certType Certificate
 	case WebhookCert:
 		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
 		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+
+	case RequestHeaderCACert:
+		template.IsCA = true
+		template.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature
+
+	case RequestHeaderClientCert:
+		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
+		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 	}
 }
 

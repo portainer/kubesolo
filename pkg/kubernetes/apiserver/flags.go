@@ -41,6 +41,15 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	_ = flags.Set("service-account-key-file", s.serviceAccountKeyFile)
 	_ = flags.Set("api-audiences", "kubernetes.default.svc")
 
+	// request header authentication (aggregation layer)
+	_ = flags.Set("requestheader-client-ca-file", s.requestHeaderCAFile)
+	_ = flags.Set("requestheader-allowed-names", "system:auth-proxy")
+	_ = flags.Set("requestheader-extra-headers-prefix", "X-Remote-Extra-")
+	_ = flags.Set("requestheader-group-headers", "X-Remote-Group")
+	_ = flags.Set("requestheader-username-headers", "X-Remote-User")
+	_ = flags.Set("proxy-client-cert-file", s.requestHeaderClientCert)
+	_ = flags.Set("proxy-client-key-file", s.requestHeaderClientKey)
+
 	// authorization and admission
 	_ = flags.Set("allow-privileged", "true")
 	_ = flags.Set("authorization-mode", "Node,RBAC")
