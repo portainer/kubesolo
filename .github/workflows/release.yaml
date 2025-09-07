@@ -1,5 +1,5 @@
 name: release
-run-name: "${{ github.event.inputs.kubesolo_version }} release 🚀""
+run-name: "${{ github.event.inputs.kubesolo_version }} release 🚀"
 
 on:
   workflow_dispatch:
