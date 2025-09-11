@@ -54,4 +54,5 @@ func (s *service) Run() error {
 func (s *service) terminate() {
 	log.Info().Str("component", "kine").Msg("terminating the kine process...")
 	s.cancel()
+	s.wg.Wait() // Wait for all goroutines to complete
 }

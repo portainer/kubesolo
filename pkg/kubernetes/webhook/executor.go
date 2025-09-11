@@ -50,19 +50,19 @@ func (s *Service) Start(ctx context.Context) error {
 
 // startServer starts the webhook server
 func (s *Service) startServer(certPath, keyPath string) {
-	go func() {
+	s.wg.Go(func() {
 		if err := s.server.ListenAndServeTLS(certPath, keyPath); err != nil && err != http.ErrServerClosed {
 			log.Error().Str("component", "webhook").Err(err).Msg("webhook server failed")
 		}
-	}()
+	})
 }
 
 // handleShutdown handles the shutdown of the webhook server
 func (s *Service) handleShutdown(ctx context.Context) {
-	go func() {
+	s.wg.Go(func() {
 		<-ctx.Done()
 		if err := s.server.Shutdown(context.Background()); err != nil {
 			log.Error().Str("component", "webhook").Err(err).Msg("error shutting down webhook server")
 		}
-	}()
+	})
 }

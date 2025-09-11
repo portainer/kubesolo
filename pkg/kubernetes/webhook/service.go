@@ -19,6 +19,7 @@ var (
 
 // Service is a webhook that handles pod mutations for KubeSolo
 type Service struct {
+	wg                 sync.WaitGroup
 	server             *http.Server
 	nodeName           string
 	pkiPath            string

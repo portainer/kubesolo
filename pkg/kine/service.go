@@ -2,10 +2,12 @@ package kine
 
 import (
 	"context"
+	"sync"
 )
 
 // service is the service for the kine server
 type service struct {
+	wg          sync.WaitGroup
 	databaseDir string
 	kineReady   chan struct{}
 	ctx         context.Context

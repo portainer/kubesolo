@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"sync"
 
 	"github.com/portainer/kubesolo/pkg/kubernetes/webhook"
 	"github.com/portainer/kubesolo/types"
@@ -9,6 +10,7 @@ import (
 
 // service is the service for the API server
 type service struct {
+	wg                      sync.WaitGroup
 	apiServerReady          chan struct{}
 	ctx                     context.Context
 	cancel                  context.CancelFunc

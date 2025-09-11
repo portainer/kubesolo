@@ -36,21 +36,21 @@ func (s *service) Run() error {
 	app := command.App()
 	app.Flags = s.generateCustomFlags()
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
-		go func() {
+		s.wg.Go(func() {
 			if err := app.Run(nil); err != nil {
 				log.Error().Str("component", "containerd").Msgf("failed to start containerd: %v...", err)
 				s.terminate()
 			}
-		}()
+		})
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	go func() {
+	s.wg.Go(func() {
 		s.postSetup()
 		close(s.containerdReady)
-	}()
+	})
 	log.Info().Str("component", "containerd").Msg("containerd started successfully...")
 
 	signals := make(chan os.Signal, 1)
@@ -101,4 +101,5 @@ func (s *service) postSetup() {
 func (s *service) terminate() {
 	log.Info().Str("component", "containerd").Msg("terminating containerd...")
 	s.cancel()
+	s.wg.Wait() // Wait for all goroutines to complete
 }
