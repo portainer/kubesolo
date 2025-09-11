@@ -172,7 +172,7 @@ echo "🔍 Detected init system: $INIT_SYSTEM"
 echo "🔍 Detected environment: $ENVIRONMENT"
 
 # Default configuration from environment variables
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v0.1.6-beta}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v0.1.7-beta}"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 APISERVER_EXTRA_SANS="${KUBESOLO_APISERVER_EXTRA_SANS:-}"
 PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
