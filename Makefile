@@ -46,7 +46,7 @@ deps:
 
 # Generic build function that uses the correct cross-compiler based on GOARCH
 .PHONY: build
-build: lint
+build: lint deps
 	@mkdir -p $(dir $(OUTPUT))
 ifeq ($(GOARCH),arm64)
 	CC=$(CC_arm64) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
@@ -94,7 +94,7 @@ build-using-image:
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
 		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
-		registry.k8s.io/build-image/kube-cross:v1.34.0-go1.25rc2-bullseye.0 \
+		registry.k8s.io/build-image/kube-cross:v1.34.0-go1.25.1-bullseye.0 \
 		make build
 
 .PHONY: build-using-alpine
