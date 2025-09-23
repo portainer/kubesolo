@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/cmd/containerd/command"
@@ -65,7 +66,7 @@ func (s *service) Run() error {
 
 func (s *service) postSetup() {
 	log.Debug().Str("component", "containerd").Msg("waiting for containerd to be ready...")
-	ctx, cancel := context.WithTimeout(context.Background(), types.DefaultContextTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	client, err := client.New(s.containerdSocketFile)
