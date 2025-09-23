@@ -124,7 +124,7 @@ rm internal/core/embedded/bin/cni/cni-plugins.tgz
 echo "Checking if Crane is available..."
 if ! command -v crane &> /dev/null; then
     VERSION=$(curl -s "https://api.github.com/repos/google/go-containerregistry/releases/latest" | jq -r '.tag_name')
-    curl -sL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_${OS}_${ARCH}.tar.gz" > go-containerregistry.tar.gz
+    curl -sL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_${ARCH}.tar.gz" > go-containerregistry.tar.gz
     tar -zxvf go-containerregistry.tar.gz -C /usr/local/bin/ crane
     rm -f go-containerregistry.tar.gz
 fi
@@ -184,7 +184,7 @@ if ! crane pull --platform ${OS}/${ARCH} ${PAUSE_IMAGE} internal/core/embedded/b
     exit 1
 fi
 # Compress it to save space
-if ! gzip -f internal/core/embedded/bin/images/pause.tar; then
+if ! gzip internal/core/embedded/bin/images/pause.tar; then
     echo "Error compressing Kubernetes pause image."
     exit 1
 fi
