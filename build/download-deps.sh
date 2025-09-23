@@ -124,7 +124,7 @@ rm internal/core/embedded/bin/cni/cni-plugins.tgz
 echo "Checking if Crane is available..."
 if ! command -v crane &> /dev/null; then
     VERSION=$(curl -s "https://api.github.com/repos/google/go-containerregistry/releases/latest" | jq -r '.tag_name')
-    curl -sL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_${ARCH}.tar.gz" > go-containerregistry.tar.gz
+    curl -sL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" > go-containerregistry.tar.gz
     tar -zxvf go-containerregistry.tar.gz -C /usr/local/bin/ crane
     rm -f go-containerregistry.tar.gz
 fi
