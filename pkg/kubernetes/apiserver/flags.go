@@ -5,8 +5,6 @@ import (
 
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
-	"github.com/rs/zerolog/log"
-	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/spf13/cobra"
 )
 
@@ -63,18 +61,7 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	_ = flags.Set("min-request-timeout", "180")
 	_ = flags.Set("request-timeout", "900s")
 	_ = flags.Set("kubelet-timeout", "30s")
-
-	// caching and storage
-	v, err := mem.VirtualMemory()
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get host memory")
-	}
-
-	watchCache := "true"
-	if v.Total < types.DefaultOSMemoryLimit {
-		watchCache = "false"
-	}
-	_ = flags.Set("watch-cache", watchCache)
+	_ = flags.Set("watch-cache", "true")
 	_ = flags.Set("event-ttl", "1h")
 
 	// features and garbage collection

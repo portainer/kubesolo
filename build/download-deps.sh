@@ -184,7 +184,7 @@ if ! crane pull --platform ${OS}/${ARCH} ${PAUSE_IMAGE} internal/core/embedded/b
     exit 1
 fi
 # Compress it to save space
-if ! gzip internal/core/embedded/bin/images/pause.tar; then
+if ! gzip -f internal/core/embedded/bin/images/pause.tar; then
     echo "Error compressing Kubernetes pause image."
     exit 1
 fi

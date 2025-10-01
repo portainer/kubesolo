@@ -5,12 +5,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	rdebug "runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
-
-	"runtime"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/portainer/kubesolo/internal/config/flags"
@@ -29,7 +26,6 @@ import (
 	"github.com/portainer/kubesolo/pkg/runtime/containerd"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
-	"github.com/shirou/gopsutil/v3/mem"
 )
 
 var (
@@ -260,9 +256,6 @@ func (s *kubesolo) bootstrap() {
 		system.StartMonitoring()
 	}
 
-	// Configure runtime
-	configureRuntime()
-
 	// Setup logging
 	logging.ConfigureLogger()
 	logging.SetLoggingMode("PRETTY")
@@ -386,22 +379,4 @@ func (s *kubesolo) bootstrap() {
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
 	}
-}
-
-func configureRuntime() {
-	v, err := mem.VirtualMemory()
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get host memory")
-	}
-
-	if v.Total < types.DefaultOSMemoryLimit {
-		log.Info().Str("component", "kubesolo").Msgf("host memory is less than the base kubesolo OS memory limit, setting garbage collection to %d%% and memory limit to %dMB", types.DefaultGCPercent, types.DefaultKubesoloMemoryLimit/(1024*1024))
-		rdebug.SetGCPercent(types.DefaultGCPercent)
-		rdebug.SetMemoryLimit(types.DefaultKubesoloMemoryLimit)
-		runtime.GOMAXPROCS(1)
-
-		return
-	}
-
-	log.Info().Str("component", "kubesolo").Msg("host memory is greater than the base kubesolo OS memory limit, proceeding without any runtime optimizations")
 }
