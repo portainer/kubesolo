@@ -121,26 +121,29 @@ tar -xzf internal/core/embedded/bin/cni/cni-plugins.tgz -C internal/core/embedde
 rm internal/core/embedded/bin/cni/cni-plugins.tgz
 
 # Download container images
-echo "Checking if Docker is available..."
-if ! command -v docker &> /dev/null; then
-    echo "Error: Docker is not installed or not in PATH. Docker is required to download container images for build-time embedding."
-    exit 1
+echo "Checking if Crane is available..."
+if ! command -v crane &> /dev/null; then
+    VERSION=$(curl -s "https://api.github.com/repos/google/go-containerregistry/releases/latest" | jq -r '.tag_name')
+    curl -sL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" > go-containerregistry.tar.gz
+    tar -zxvf go-containerregistry.tar.gz -C /usr/local/bin/ crane
+    rm -f go-containerregistry.tar.gz
 fi
 
 # Download Portainer Agent (skip for riscv64 as it's not supported)
 if [ "${ARCH}" != "riscv64" ]; then
     echo "Downloading Portainer Agent ${PORTAINER_AGENT_VERSION}..."
     PORTAINER_IMAGE="portainer/agent:${PORTAINER_AGENT_VERSION}"
-    if ! docker image pull --platform ${OS}/${ARCH} ${PORTAINER_IMAGE}; then
+    # Pull the image as uncompressed tar
+    if ! crane pull --platform ${OS}/${ARCH} ${PORTAINER_IMAGE} internal/core/embedded/bin/images/portainer-agent.tar; then
         echo "Error pulling Portainer Agent image."
         exit 1
     fi
-    echo "Saving Portainer Agent image to tar..."
-    if ! docker save ${PORTAINER_IMAGE} | gzip > internal/core/embedded/bin/images/portainer-agent.tar.gz; then
-        echo "Error saving Portainer Agent image."
+    # Compress it to save space
+    if ! gzip -f internal/core/embedded/bin/images/portainer-agent.tar; then
+        echo "Error compressing Portainer Agent image."
         exit 1
     fi
-    echo "Portainer Agent image saved successfully."
+    echo "Portainer Agent image saved and compressed successfully."
 else
     echo "Skipping Portainer Agent download for ${ARCH} (not supported)"
 fi
@@ -148,13 +151,13 @@ fi
 # Download CoreDNS
 echo "Downloading CoreDNS ${COREDNS_VERSION}..."
 COREDNS_IMAGE="coredns/coredns:${COREDNS_VERSION}"
-if ! docker image pull --platform ${OS}/${ARCH} ${COREDNS_IMAGE}; then
+if ! crane pull --platform ${OS}/${ARCH} ${COREDNS_IMAGE} internal/core/embedded/bin/images/coredns.tar; then
     echo "Error pulling CoreDNS image."
     exit 1
 fi
-echo "Saving CoreDNS image to tar..."
-if ! docker save ${COREDNS_IMAGE} | gzip > internal/core/embedded/bin/images/coredns.tar.gz; then
-    echo "Error saving CoreDNS image."
+# Compress it to save space
+if ! gzip -f internal/core/embedded/bin/images/coredns.tar; then
+    echo "Error compressing CoreDNS image."
     exit 1
 fi
 echo "CoreDNS image saved successfully."
@@ -162,13 +165,13 @@ echo "CoreDNS image saved successfully."
 # Download Local Path Provisioner
 echo "Downloading Local Path Provisioner ${LOCAL_PATH_PROVISIONER_VERSION}..."
 LOCAL_PATH_PROVISIONER_IMAGE="rancher/local-path-provisioner:${LOCAL_PATH_PROVISIONER_VERSION}"
-if ! docker image pull --platform ${OS}/${ARCH} ${LOCAL_PATH_PROVISIONER_IMAGE}; then
+if ! crane pull --platform ${OS}/${ARCH} ${LOCAL_PATH_PROVISIONER_IMAGE} internal/core/embedded/bin/images/local-path-provisioner.tar; then
     echo "Error pulling Local Path Provisioner image."
     exit 1
 fi
-echo "Saving Local Path Provisioner image to tar..."
-if ! docker save ${LOCAL_PATH_PROVISIONER_IMAGE} | gzip > internal/core/embedded/bin/images/local-path-provisioner.tar.gz; then
-    echo "Error saving Local Path Provisioner image."
+# Compress it to save space
+if ! gzip -f internal/core/embedded/bin/images/local-path-provisioner.tar; then
+    echo "Error compressing Local Path Provisioner image."
     exit 1
 fi
 echo "Local Path Provisioner image saved successfully."
@@ -176,13 +179,13 @@ echo "Local Path Provisioner image saved successfully."
 # Download Kubernetes pause image
 echo "Downloading Portainer pause image..."
 PAUSE_IMAGE="portainer/pause:latest"
-if ! docker image pull --platform ${OS}/${ARCH} ${PAUSE_IMAGE}; then
+if ! crane pull --platform ${OS}/${ARCH} ${PAUSE_IMAGE} internal/core/embedded/bin/images/pause.tar; then
     echo "Error pulling Kubernetes pause image."
     exit 1
 fi
-echo "Saving Kubernetes pause image to tar..."
-if ! docker save ${PAUSE_IMAGE} | gzip > internal/core/embedded/bin/images/pause.tar.gz; then
-    echo "Error saving Kubernetes pause image."
+# Compress it to save space
+if ! gzip -f internal/core/embedded/bin/images/pause.tar; then
+    echo "Error compressing Kubernetes pause image."
     exit 1
 fi
 echo "Kubernetes pause image saved successfully."

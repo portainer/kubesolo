@@ -94,7 +94,7 @@ build-using-image:
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
 		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
-		registry.k8s.io/build-image/kube-cross:v1.33.0-go1.24.5-bullseye.0 \
+		registry.k8s.io/build-image/kube-cross:v1.34.0-go1.25.1-bullseye.0 \
 		make build
 
 .PHONY: build-using-alpine

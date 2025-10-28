@@ -46,21 +46,21 @@ func (s *service) Run(apiServerReady chan struct{}) error {
 	time.Sleep(types.DefaultComponentSleep)
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		<-apiServerReady
-		go func() {
+		s.wg.Go(func() {
 			if err := command.ExecuteContext(s.ctx); err != nil {
 				log.Error().Str("component", "kubelet").Msgf("kubelet exited with error: %v", err)
 			}
-		}()
+		})
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	go func() {
+	s.wg.Go(func() {
 		s.postSetup()
 		log.Info().Str("component", "kubelet").Msg("kubelet started successfully...")
 		close(s.kubeletReady)
-	}()
+	})
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
@@ -88,4 +88,5 @@ func (s *service) postSetup() {
 func (s *service) terminate() {
 	log.Info().Str("component", "kubelet").Msg("terminating kubelet...")
 	s.cancel()
+	s.wg.Wait() // Wait for all goroutines to complete
 }

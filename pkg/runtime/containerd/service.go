@@ -2,12 +2,14 @@ package containerd
 
 import (
 	"context"
+	"sync"
 
 	"github.com/portainer/kubesolo/types"
 )
 
 // service is the service for the containerd
 type service struct {
+	wg                            sync.WaitGroup
 	ctx                           context.Context
 	cancel                        context.CancelFunc
 	containerdReady               chan<- struct{}

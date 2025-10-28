@@ -45,21 +45,21 @@ func (s *service) Run(kineReadyCh chan struct{}) error {
 	time.Sleep(types.DefaultComponentSleep)
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		<-kineReadyCh
-		go func() {
+		s.wg.Go(func() {
 			if err := command.ExecuteContext(s.ctx); err != nil {
 				log.Error().Str("component", "apiserver").Msgf("API server exited with error: %v", err)
 			}
-		}()
+		})
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	go func() {
+	s.wg.Go(func() {
 		s.postSetup()
 		log.Info().Str("component", "apiserver").Msg("API server ready...")
 		close(s.apiServerReady)
-	}()
+	})
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
@@ -95,4 +95,5 @@ func (s *service) postSetup() {
 func (s *service) terminate() {
 	log.Info().Str("component", "apiserver").Msg("terminating the API server...")
 	s.cancel()
+	s.wg.Wait() // Wait for all goroutines to complete
 }

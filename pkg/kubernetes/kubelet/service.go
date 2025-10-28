@@ -2,6 +2,7 @@ package kubelet
 
 import (
 	"context"
+	"sync"
 
 	client "github.com/containerd/containerd/v2/client"
 	"github.com/portainer/kubesolo/internal/system"
@@ -10,6 +11,7 @@ import (
 
 // service is the service for the kubelet
 type service struct {
+	wg                    sync.WaitGroup
 	client                *client.Client
 	ctx                   context.Context
 	cancel                context.CancelFunc

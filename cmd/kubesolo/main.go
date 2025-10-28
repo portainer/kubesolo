@@ -5,11 +5,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	rdebug "runtime/debug"
 	"strings"
+	"sync"
 	"syscall"
-
-	"runtime"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/portainer/kubesolo/internal/config/flags"
@@ -28,7 +26,6 @@ import (
 	"github.com/portainer/kubesolo/pkg/runtime/containerd"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
-	"github.com/shirou/gopsutil/v3/mem"
 )
 
 var (
@@ -39,6 +36,7 @@ var (
 
 // the main struct for the kubesolo application
 type kubesolo struct {
+	wg                 sync.WaitGroup
 	hostName           string
 	extraSANs          string
 	debug              bool
@@ -132,7 +130,9 @@ func (s *kubesolo) run() {
 			name: "containerd",
 			start: func() {
 				containerdService := containerd.NewService(ctx, cancel, containerdReadyCh, &s.embedded)
-				go containerdService.Run()
+				s.wg.Go(func() {
+					containerdService.Run()
+				})
 			},
 			readyCh: containerdReadyCh,
 		},
@@ -140,7 +140,9 @@ func (s *kubesolo) run() {
 			name: "kine",
 			start: func() {
 				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh)
-				go kineService.Run()
+				s.wg.Go(func() {
+					kineService.Run()
+				})
 			},
 			readyCh: kineReadyCh,
 		},
@@ -148,7 +150,9 @@ func (s *kubesolo) run() {
 			name: "apiserver",
 			start: func() {
 				apiserverService := apiserver.NewService(ctx, cancel, apiServerReadyCh, s.hostName, s.embedded)
-				go apiserverService.Run(kineReadyCh)
+				s.wg.Go(func() {
+					apiserverService.Run(kineReadyCh)
+				})
 			},
 			readyCh: apiServerReadyCh,
 		},
@@ -156,7 +160,9 @@ func (s *kubesolo) run() {
 			name: "controller",
 			start: func() {
 				controllerService := controller.NewService(ctx, cancel, controllerReadyCh, s.embedded.ControllerDir, s.embedded)
-				go controllerService.Run(apiServerReadyCh)
+				s.wg.Go(func() {
+					controllerService.Run(apiServerReadyCh)
+				})
 			},
 			readyCh: controllerReadyCh,
 		},
@@ -164,7 +170,9 @@ func (s *kubesolo) run() {
 			name: "kubelet",
 			start: func() {
 				kubeletService := kubelet.NewService(ctx, cancel, kubeletReadyCh, &s.embedded)
-				go kubeletService.Run(apiServerReadyCh)
+				s.wg.Go(func() {
+					kubeletService.Run(apiServerReadyCh)
+				})
 			},
 			readyCh: kubeletReadyCh,
 		},
@@ -172,7 +180,9 @@ func (s *kubesolo) run() {
 			name: "kubeproxy",
 			start: func() {
 				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile)
-				go kubeproxyService.Run(kubeletReadyCh)
+				s.wg.Go(func() {
+					kubeproxyService.Run(kubeletReadyCh)
+				})
 			},
 			readyCh: kubeproxyReadyCh,
 		},
@@ -212,6 +222,11 @@ func (s *kubesolo) run() {
 
 	<-sigCh
 	log.Info().Str("component", "kubesolo").Msg("shutting down...")
+
+	// Wait for all service goroutines to complete gracefully
+	log.Info().Str("component", "kubesolo").Msg("waiting for all services to shutdown...")
+	s.wg.Wait()
+	log.Info().Str("component", "kubesolo").Msg("all services have shutdown gracefully")
 }
 
 // waitForService waits for a service to be ready
@@ -240,9 +255,6 @@ func (s *kubesolo) bootstrap() {
 	if s.pprofServer {
 		system.StartMonitoring()
 	}
-
-	// Configure runtime
-	configureRuntime()
 
 	// Setup logging
 	logging.ConfigureLogger()
@@ -367,22 +379,4 @@ func (s *kubesolo) bootstrap() {
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
 	}
-}
-
-func configureRuntime() {
-	v, err := mem.VirtualMemory()
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get host memory")
-	}
-
-	if v.Total < types.DefaultOSMemoryLimit {
-		log.Info().Str("component", "kubesolo").Msgf("host memory is less than the base kubesolo OS memory limit, setting garbage collection to %d%% and memory limit to %dMB", types.DefaultGCPercent, types.DefaultKubesoloMemoryLimit/(1024*1024))
-		rdebug.SetGCPercent(types.DefaultGCPercent)
-		rdebug.SetMemoryLimit(types.DefaultKubesoloMemoryLimit)
-		runtime.GOMAXPROCS(1)
-
-		return
-	}
-
-	log.Info().Str("component", "kubesolo").Msg("host memory is greater than the base kubesolo OS memory limit, proceeding without any runtime optimizations")
 }

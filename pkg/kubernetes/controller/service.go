@@ -2,12 +2,14 @@ package controller
 
 import (
 	"context"
+	"sync"
 
 	"github.com/portainer/kubesolo/types"
 )
 
 // service is the service for the controller manager
 type service struct {
+	wg                        sync.WaitGroup
 	ctx                       context.Context
 	cancel                    context.CancelFunc
 	controllerReady           chan<- struct{}

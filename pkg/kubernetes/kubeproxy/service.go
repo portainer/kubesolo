@@ -1,9 +1,13 @@
 package kubeproxy
 
-import "context"
+import (
+	"context"
+	"sync"
+)
 
 // service is the service for the kube proxy
 type service struct {
+	wg                  sync.WaitGroup
 	ctx                 context.Context
 	cancel              context.CancelFunc
 	kubeproxyReady      chan<- struct{}

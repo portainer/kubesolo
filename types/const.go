@@ -34,8 +34,6 @@ const (
 	DefaultLocalPathProvisionerImage      = "rancher/local-path-provisioner:v0.0.31"
 	DefaultGCPercent                      = 100
 	DefaultContextTimeout                 = 15 * time.Second
-	DefaultKubesoloMemoryLimit            = 200 * 1024 * 1024
-	DefaultOSMemoryLimit                  = 512 * 1024 * 1024
 	DefaultComponentSleep                 = 5 * time.Second
 	DefaultRetryCount                     = 5
 )
