@@ -3,13 +3,11 @@ package containerd
 import (
 	"compress/gzip"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 
 	"github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
-	"github.com/containerd/errdefs"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
@@ -51,27 +49,21 @@ func (s *service) importImage(ctx context.Context, client *client.Client, image 
 		}
 	}
 
-	if _, err := client.ImageService().Get(ctx, image); err != nil {
-		if errors.Is(err, errdefs.ErrNotFound) {
-			log.Debug().Str("component", "containerd").Str("image", image).Msg("image not found, importing")
-			imageFile, err := os.Open(image)
-			if err != nil {
-				return fmt.Errorf("failed to open image file: %v", err)
-			}
-			defer imageFile.Close()
+	log.Debug().Str("component", "containerd").Str("image", image).Msg("importing image")
+	imageFile, err := os.Open(image)
+	if err != nil {
+		return fmt.Errorf("failed to open image file: %v", err)
+	}
+	defer imageFile.Close()
 
-			gzipReader, err := gzip.NewReader(imageFile)
-			if err != nil {
-				return err
-			}
-			defer gzipReader.Close()
+	gzipReader, err := gzip.NewReader(imageFile)
+	if err != nil {
+		return err
+	}
+	defer gzipReader.Close()
 
-			if _, err := client.Import(ctx, gzipReader); err != nil {
-				return fmt.Errorf("failed to import image: %v", err)
-			}
-		} else {
-			return fmt.Errorf("failed to get image: %v", err)
-		}
+	if _, err := client.Import(ctx, gzipReader); err != nil {
+		return fmt.Errorf("failed to import image: %v", err)
 	}
 
 	return nil
