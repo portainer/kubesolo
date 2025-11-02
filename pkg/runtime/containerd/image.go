@@ -49,7 +49,7 @@ func (s *service) importImage(ctx context.Context, client *client.Client, image 
 		}
 	}
 
-	log.Debug().Str("component", "containerd").Str("image", image).Msg("image not found, importing")
+	log.Debug().Str("component", "containerd").Str("image", image).Msg("importing image")
 	imageFile, err := os.Open(image)
 	if err != nil {
 		return fmt.Errorf("failed to open image file: %v", err)
