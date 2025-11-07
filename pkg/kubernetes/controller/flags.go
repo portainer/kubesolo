@@ -27,7 +27,7 @@ func (s *service) configureControllerManagerFlags(command *cobra.Command) {
 	_ = flags.Set("use-service-account-credentials", "true")
 
 	// controllers
-	_ = flags.Set("controllers", "deployment,replicaset,service,serviceaccount,namespace,attachdetach,endpoint,daemonset,statefulset,root-ca-certificate-publisher-controller,serviceaccount-token-controller,node-ipam-controller,endpointslice-controller,persistentvolume-binder-controller,job-controller,cronjob-controller")
+	_ = flags.Set("controllers", "deployment,replicaset,service,serviceaccount,namespace,attachdetach,endpoint,daemonset,statefulset,root-ca-certificate-publisher-controller,serviceaccount-token-controller,node-ipam-controller,endpointslice-controller,persistentvolume-binder-controller,job-controller,cronjob-controller,garbage-collector-controller")
 
 	// thresholds
 	_ = flags.Set("terminated-pod-gc-threshold", "0")
