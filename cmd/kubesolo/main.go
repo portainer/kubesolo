@@ -378,5 +378,8 @@ func (s *kubesolo) bootstrap() {
 
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+
+		// Nvidia Runtime
+		IsNvidiaRuntime: *flags.NvidiaRuntime,
 	}
 }

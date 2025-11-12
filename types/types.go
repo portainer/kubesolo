@@ -122,6 +122,9 @@ type Embedded struct {
 
 	// Portainer Edge
 	IsPortainerEdge bool
+
+	// Nvidia Runtime
+	IsNvidiaRuntime bool
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent

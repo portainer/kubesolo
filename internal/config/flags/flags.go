@@ -5,6 +5,7 @@ import "github.com/alecthomas/kingpin/v2"
 // the full list of flags for the kubesolo application
 // Path is the path to the directory containing the kubesolo configuration files
 // APIServerExtraSANs is the flag to add extra SANs to the API Server certificate
+// NvidiaRuntime is the flag to enable Nvidia Runtime
 // PortainerEdgeID is the Edge ID for the Portainer Edge Agent
 // PortainerEdgeKey is the Edge Key for the Portainer Edge Agent that can be used to register the Edge Agent with the Portainer Server
 // PortainerEdgeAsync is the flag to enable Portainer Edge Async Mode
@@ -15,6 +16,7 @@ var (
 	Application        = kingpin.New("kubesolo", "Ultra-lightweight, OCI-compliant, single-node Kubernetes built for constrained environments such as IoT or IIoT devices running in embedded environments.")
 	Path               = Application.Flag("path", "Path to the directory containing the kubesolo configuration files. Defaults to /var/lib/kubesolo.").Envar("KUBESOLO_PATH").Default("/var/lib/kubesolo").String()
 	APIServerExtraSANs = Application.Flag("apiserver-extra-sans", "A comma-separated list of additional Subject Alternative Names (SANs) to include in the API server's TLS certificate. These SANs can be IP addresses or DNS names (e.g., 10.0.0.4,kubesolo.local).").Envar("KUBESOLO_APISERVER_EXTRA_SANS").Default("").String()
+	NvidiaRuntime      = Application.Flag("nvidia-runtime", "Enable Nvidia Runtime. Defaults to false.").Envar("KUBESOLO_NVIDIA_RUNTIME").Default("false").Bool()
 	PortainerEdgeID    = Application.Flag("portainer-edge-id", "Portainer Edge ID. Defaults to empty string.").Envar("KUBESOLO_PORTAINER_EDGE_ID").Default("").String()
 	PortainerEdgeKey   = Application.Flag("portainer-edge-key", "Portainer Edge Key. Defaults to empty string.").Envar("KUBESOLO_PORTAINER_EDGE_KEY").Default("").String()
 	PortainerEdgeAsync = Application.Flag("portainer-edge-async", "Enable Portainer Edge Async Mode. Defaults to false.").Envar("KUBESOLO_PORTAINER_EDGE_ASYNC").Default("false").Bool()

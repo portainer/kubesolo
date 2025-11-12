@@ -35,6 +35,35 @@ func (s *service) writeContainerdConfigFile() error {
 
 // generateConfig generates the containerd config
 func (s *service) generateContainerdConfig() map[string]any {
+	containerdRuntimes := map[string]any{
+		"runc": map[string]any{
+			"runtime_type":                    "io.containerd.runc.v2",
+			"runtime_path":                    "",
+			"pod_annotations":                 []string{},
+			"container_annotations":           []string{},
+			"privileged_without_host_devices": false,
+			"privileged_without_host_devices_all_devices_allowed": false,
+			"base_runtime_spec": "",
+			"cni_conf_dir":      "",
+			"cni_max_conf_num":  0,
+			"snapshotter":       "",
+			"sandboxer":         "podsandbox",
+			"io_type":           "",
+			"options": map[string]any{
+				"BinaryName": s.runcBinaryFile,
+			},
+		},
+	}
+
+	if s.isNvidiaRuntime {
+		containerdRuntimes["nvidia"] = map[string]any{
+			"runtime_type": "io.containerd.runc.v2",
+			"options": map[string]any{
+				"BinaryName": types.DefaultNvidiaContainerRuntimeBinaryFile,
+			},
+		}
+	}
+
 	return map[string]any{
 		"version":          3,
 		"root":             s.containerdRootDir,
@@ -94,25 +123,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"default_runtime_name":              "runc",
 					"ignore_blockio_not_enabled_errors": false,
 					"ignore_rdt_not_enabled_errors":     false,
-					"runtimes": map[string]any{
-						"runc": map[string]any{
-							"runtime_type":                    "io.containerd.runc.v2",
-							"runtime_path":                    "",
-							"pod_annotations":                 []string{},
-							"container_annotations":           []string{},
-							"privileged_without_host_devices": false,
-							"privileged_without_host_devices_all_devices_allowed": false,
-							"base_runtime_spec": "",
-							"cni_conf_dir":      "",
-							"cni_max_conf_num":  0,
-							"snapshotter":       "",
-							"sandboxer":         "podsandbox",
-							"io_type":           "",
-							"options": map[string]any{
-								"BinaryName": s.runcBinaryFile,
-							},
-						},
-					},
+					"runtimes":                          containerdRuntimes,
 				},
 				"cni": map[string]any{
 					"bin_dir":               types.DefaultStandardCNIBinDir,
