@@ -14,6 +14,7 @@ const (
 	DefaultSystemContainerdSock           = "/run/containerd/containerd.sock"
 	DefaultStandardCNIBinDir              = "/opt/cni/bin"
 	DefaultStandardCNIConfDir             = "/etc/cni/net.d"
+	DefaultContainerdConfigDir            = "/etc/containerd/config.d"
 	DefaultStandardRuncFile               = "/usr/local/bin/runc"
 	DefaultStandardContainerdShimRuncFile = "/usr/local/bin/containerd-shim-runc-v2"
 	DefaultCNIConfigName                  = "10-bridge.conflist"
