@@ -20,6 +20,7 @@ type service struct {
 	containerdStateDir            string
 	containerdSocketFile          string
 	runcBinaryFile                string
+	containerdShimBinaryFile      string
 	portainerAgentImageFile       string
 	corednsImageFile              string
 	sandboxImageFile              string
@@ -40,6 +41,7 @@ func NewService(ctx context.Context, cancel context.CancelFunc, containerdReady 
 		containerdStateDir:            embedded.ContainerdStateDir,
 		containerdSocketFile:          embedded.ContainerdSocketFile,
 		runcBinaryFile:                embedded.RuncBinaryFile,
+		containerdShimBinaryFile:      embedded.ContainerdShimBinaryFile,
 		portainerAgentImageFile:       embedded.PortainerAgentImageFile,
 		corednsImageFile:              embedded.CorednsImageFile,
 		sandboxImageFile:              embedded.SandboxImageFile,

@@ -32,14 +32,6 @@ func loadContainerdComponents(embedded types.Embedded) error {
 			return fmt.Errorf("failed to extract %s binary: %v", binary.name, err)
 		}
 	}
-
-	if err := filesystem.EnsureSymbolicLink(embedded.RuncBinaryFile, types.DefaultStandardRuncFile); err != nil {
-		return fmt.Errorf("failed to create symlink for runc: %v", err)
-	}
-
-	if err := filesystem.EnsureSymbolicLink(embedded.ContainerdShimBinaryFile, types.DefaultStandardContainerdShimRuncFile); err != nil {
-		return fmt.Errorf("failed to create symlink for containerd-shim-runc-v2: %v", err)
-	}
 	return nil
 }
 

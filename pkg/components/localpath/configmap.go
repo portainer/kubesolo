@@ -20,7 +20,8 @@ func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset) error
     "nodePathMap":[
     {
         "node":"DEFAULT_PATH_FOR_NON_LISTED_NODES",
-        "paths":["/opt/local-path-provisioner"]
+        "paths":["/opt/local-path-provisioner"],
+		"sharedFileSystemPath": "/opt/local-path-provisioner"
     }
     ]
 }`,

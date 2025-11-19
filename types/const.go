@@ -30,10 +30,9 @@ const (
 	DefaultKineSocket                     = "kine.sock"
 	DefaultControllerManagerDir           = "controller-manager"
 	DefaultSandboxImage                   = "portainer/pause:latest"
-	DefaultPortainerAgentImage            = "portainer/agent:2.32.0"
-	DefaultCoreDNSImage                   = "coredns/coredns:1.12.2"
-	DefaultLocalPathProvisionerImage      = "rancher/local-path-provisioner:v0.0.31"
-	DefaultGCPercent                      = 100
+	DefaultPortainerAgentImage            = "portainer/agent:2.33.4"
+	DefaultCoreDNSImage                   = "coredns/coredns:1.13.1"
+	DefaultLocalPathProvisionerImage      = "rancher/local-path-provisioner:v0.0.32"
 	DefaultContextTimeout                 = 15 * time.Second
 	DefaultComponentSleep                 = 5 * time.Second
 	DefaultRetryCount                     = 5
