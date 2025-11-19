@@ -129,6 +129,222 @@ check_iptables_comment_module() {
     echo "✅ iptables with xt_comment module support verified"
 }
 
+# Function to stop running KubeSolo processes
+stop_running_processes() {
+    echo "🔍 Checking for running KubeSolo processes..."
+    
+    # Try to stop service first (graceful shutdown)
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl is-active --quiet kubesolo 2>/dev/null; then
+            echo "🛑 Stopping KubeSolo service (systemd)..."
+            systemctl stop kubesolo 2>/dev/null || true
+            sleep 2
+        fi
+    elif [ -f "/etc/init.d/kubesolo" ]; then
+        if command -v service >/dev/null 2>&1; then
+            if service kubesolo status >/dev/null 2>&1; then
+                echo "🛑 Stopping KubeSolo service (init.d)..."
+                service kubesolo stop 2>/dev/null || true
+                sleep 2
+            fi
+        fi
+    fi
+    
+    # Find all remaining processes with kubesolo in the command line
+    local pids
+    pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
+    
+    if [ -n "$pids" ]; then
+        echo "🛑 Stopping remaining KubeSolo processes..."
+        for pid in $pids; do
+            if kill -0 "$pid" 2>/dev/null; then
+                if [ -f "/proc/$pid/cmdline" ]; then
+                    local cmdline
+                    cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "unknown")
+                    echo "   Stopping PID $pid: $cmdline"
+                else
+                    echo "   Stopping PID $pid"
+                fi
+                kill -TERM "$pid" 2>/dev/null || true
+            fi
+        done
+        
+        # Wait a bit for graceful shutdown
+        sleep 2
+        
+        # Force kill any that are still running
+        pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
+        if [ -n "$pids" ]; then
+            echo "🛑 Force stopping remaining processes..."
+            for pid in $pids; do
+                kill -KILL "$pid" 2>/dev/null || true
+            done
+            sleep 1
+        fi
+        
+        echo "✅ KubeSolo processes stopped"
+    else
+        echo "✅ No running KubeSolo processes found"
+    fi
+}
+
+# Function to stop processes holding KubeSolo ports
+stop_port_processes() {
+    echo "🔍 Checking for processes holding KubeSolo ports..."
+    
+    # KubeSolo ports: 2379 (Kine), 6443 (API Server), 10443 (Webhook), 6060 (pprof)
+    local ports="2379 6443 10443 6060"
+    local found_processes=false
+    
+    for port in $ports; do
+        local pids=""
+        local port_name=""
+        
+        case $port in
+            2379) port_name="Kine (etcd replacement)" ;;
+            6443) port_name="API Server" ;;
+            10443) port_name="Webhook" ;;
+            6060) port_name="pprof server" ;;
+        esac
+        
+        # Try lsof first (more reliable)
+        if command -v lsof >/dev/null 2>&1; then
+            pids=$(lsof -ti ":$port" 2>/dev/null || true)
+        # Fallback to ss
+        elif command -v ss >/dev/null 2>&1; then
+            pids=$(ss -lptn "sport = :$port" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true)
+        # Fallback to netstat
+        elif command -v netstat >/dev/null 2>&1; then
+            pids=$(netstat -tlnp 2>/dev/null | grep ":$port " | awk '{print $7}' | cut -d'/' -f1 | grep -E '^[0-9]+$' | sort -u || true)
+        fi
+        
+        if [ -n "$pids" ]; then
+            found_processes=true
+            echo "🛑 Stopping processes holding port $port ($port_name)..."
+            for pid in $pids; do
+                # Check if it's actually a kubesolo-related process
+                local cmdline=""
+                local procname=""
+                local is_kubesolo=false
+                
+                if [ -f "/proc/$pid/cmdline" ]; then
+                    cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+                fi
+                
+                if [ -f "/proc/$pid/comm" ]; then
+                    procname=$(cat "/proc/$pid/comm" 2>/dev/null || echo "")
+                fi
+                
+                # Check if it's a kubesolo process
+                if echo "$cmdline" | grep -q "kubesolo" || echo "$procname" | grep -qi "kubesolo"; then
+                    is_kubesolo=true
+                fi
+                
+                # For KubeSolo-specific ports, be more aggressive if we can't determine the process
+                # Port 2379 is Kine (KubeSolo-specific), so if something is holding it, it's likely leftover
+                if [ "$is_kubesolo" = "true" ] || ([ "$port" = "2379" ] && [ -z "$cmdline" ]); then
+                    echo "   Stopping PID $pid"
+                    kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+                else
+                    echo "⚠️  Process $pid is holding port $port but doesn't appear to be KubeSolo-related (skipping)"
+                fi
+            done
+        fi
+    done
+    
+    if [ "$found_processes" = "true" ]; then
+        echo "⏳ Waiting for ports to be released..."
+        sleep 2
+        echo "✅ Port processes stopped"
+    else
+        echo "✅ No processes found holding KubeSolo ports"
+    fi
+}
+
+# Function to clean up file conflicts
+cleanup_file_conflicts() {
+    echo "🔍 Checking for file conflicts..."
+    
+    # Use CONFIG_PATH which is set earlier in the script
+    local install_path="/usr/local/bin/kubesolo"
+    local config_path="$CONFIG_PATH"
+    local cleanup_needed=false
+    
+    # Check if binary exists and is in use
+    if [ -f "$install_path" ]; then
+        # Check if file is locked or in use (only if lsof is available)
+        if command -v lsof >/dev/null 2>&1; then
+            local binary_pids
+            binary_pids=$(lsof -t "$install_path" 2>/dev/null || true)
+            if [ -n "$binary_pids" ]; then
+                cleanup_needed=true
+                echo "🛑 Stopping processes using binary $install_path..."
+                for pid in $binary_pids; do
+                    kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+                done
+                sleep 1
+            else
+                echo "ℹ️  Binary $install_path exists (will be replaced during installation)"
+            fi
+        else
+            # If lsof is not available, just note that binary exists
+            echo "ℹ️  Binary $install_path exists (will be replaced during installation)"
+        fi
+    fi
+    
+    # Check for socket files that might be in use
+    local socket_files="
+        $config_path/containerd/containerd.sock
+        $config_path/kine/socket
+        /run/containerd/containerd.sock
+    "
+    
+    for socket_file in $socket_files; do
+        if [ -S "$socket_file" ]; then
+            if command -v lsof >/dev/null 2>&1; then
+                local socket_pids
+                socket_pids=$(lsof -t "$socket_file" 2>/dev/null || true)
+                if [ -n "$socket_pids" ]; then
+                    cleanup_needed=true
+                    echo "🛑 Stopping processes using socket $socket_file..."
+                    for pid in $socket_pids; do
+                        kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+                    done
+                    sleep 1
+                fi
+            else
+                # If lsof is not available, try to remove socket (it will be recreated)
+                echo "ℹ️  Socket file $socket_file exists (will be cleaned up)"
+                rm -f "$socket_file" 2>/dev/null || true
+            fi
+        fi
+    done
+    
+    # Clean up PID file
+    local pidfile="/var/run/kubesolo.pid"
+    if [ -f "$pidfile" ]; then
+        local pid
+        pid=$(cat "$pidfile" 2>/dev/null || echo "")
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            cleanup_needed=true
+            echo "🛑 Stopping process from PID file $pidfile (PID: $pid)..."
+            kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+            sleep 1
+        fi
+        # Remove stale PID file
+        rm -f "$pidfile" 2>/dev/null || true
+        echo "ℹ️  Cleaned up PID file"
+    fi
+    
+    if [ "$cleanup_needed" = "true" ]; then
+        echo "⏳ Waiting for file handles to be released..."
+        sleep 2
+        echo "✅ File conflicts resolved"
+    else
+        echo "✅ No file conflicts detected"
+    fi
+}
+
 # Detect OS and architecture
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -251,6 +467,15 @@ check_hostname_compliance
 
 # Function to check iptables xt_comment module support
 check_iptables_comment_module
+
+# Function to stop running KubeSolo processes
+stop_running_processes
+
+# Function to stop processes holding KubeSolo ports
+stop_port_processes
+
+# Function to clean up file conflicts
+cleanup_file_conflicts
 
 # Service configuration
 APP_NAME="kubesolo"
