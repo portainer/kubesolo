@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, sharedPath string) error {
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "local-path-config",
@@ -20,7 +20,8 @@ func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset) error
     "nodePathMap":[
     {
         "node":"DEFAULT_PATH_FOR_NON_LISTED_NODES",
-        "paths":["/opt/local-path-provisioner"]
+        "paths":["/opt/local-path-provisioner"],
+		"sharedFileSystemPath": "` + sharedPath + `"
     }
     ]
 }`,
