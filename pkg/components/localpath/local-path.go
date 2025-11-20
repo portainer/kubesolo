@@ -10,7 +10,7 @@ import (
 )
 
 // Deploy creates all the necessary components for local-path-provisioner
-func Deploy(adminKubeconfig string) error {
+func Deploy(adminKubeconfig, sharedPath string) error {
 	time.Sleep(types.DefaultComponentSleep)
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.DefaultContextTimeout)
@@ -45,7 +45,7 @@ func Deploy(adminKubeconfig string) error {
 		return err
 	}
 
-	if err := createConfigMap(ctx, clientset); err != nil {
+	if err := createConfigMap(ctx, clientset, sharedPath); err != nil {
 		return err
 	}
 
