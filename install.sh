@@ -286,21 +286,100 @@ cleanup_file_conflicts() {
             if [ -n "$binary_pids" ]; then
                 cleanup_needed=true
                 echo "🛑 Stopping processes using binary $install_path..."
-                for pid in $binary_pids; do
-                    # Verify PID is still valid before attempting to kill
-                    if kill -0 "$pid" 2>/dev/null; then
-                        # Try graceful termination first
-                        if ! kill -TERM "$pid" 2>/dev/null; then
-                            # If TERM fails, try KILL
-                            kill -KILL "$pid" 2>/dev/null || true
-                        fi
+                
+                # Get current script PID and parent PID to avoid killing ourselves
+                local current_pid=$$
+                local parent_pid="${PPID:-}"
+                
+                # Check if we're running under kubesolo by checking current and parent processes
+                local skip_binary_cleanup=false
+                
+                # Check current process
+                if [ -f "/proc/$current_pid/cmdline" ]; then
+                    local current_cmdline
+                    current_cmdline=$(cat "/proc/$current_pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+                    if echo "$current_cmdline" | grep -q "kubesolo"; then
+                        skip_binary_cleanup=true
+                        echo "⚠️  Script appears to be running under kubesolo - skipping binary cleanup to avoid termination"
                     fi
-                done
+                fi
+                
+                # Check parent process
+                if [ "$skip_binary_cleanup" = "false" ] && [ -n "$parent_pid" ] && [ -f "/proc/$parent_pid/cmdline" ]; then
+                    local parent_cmdline
+                    parent_cmdline=$(cat "/proc/$parent_pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+                    if echo "$parent_cmdline" | grep -q "kubesolo"; then
+                        skip_binary_cleanup=true
+                        echo "⚠️  Script is running under kubesolo - skipping binary cleanup to avoid termination"
+                    fi
+                fi
+                
+                # Also check if any of the PIDs using the binary are in our process tree
+                if [ "$skip_binary_cleanup" = "false" ]; then
+                    for pid in $binary_pids; do
+                        if [ "$pid" = "$current_pid" ] || [ "$pid" = "$parent_pid" ]; then
+                            skip_binary_cleanup=true
+                            echo "⚠️  Current process or parent is using the binary - skipping cleanup to avoid termination"
+                            break
+                        fi
+                    done
+                fi
+                
+                if [ "$skip_binary_cleanup" = "false" ]; then
+                    for pid in $binary_pids; do
+                        # Skip if this is the current script or its parent
+                        if [ "$pid" = "$current_pid" ] || [ "$pid" = "$parent_pid" ]; then
+                            continue
+                        fi
+                        
+                        # Check if this PID is in our process tree (avoid killing ancestors)
+                        # Check parent, grandparent, and a few levels up
+                        local is_ancestor=false
+                        local check_pid="$parent_pid"
+                        local depth=0
+                        while [ -n "$check_pid" ] && [ "$check_pid" != "1" ] && [ "$depth" -lt 10 ]; do
+                            if [ "$check_pid" = "$pid" ]; then
+                                is_ancestor=true
+                                break
+                            fi
+                            # Get parent of check_pid from /proc/pid/stat (4th field)
+                            if [ -f "/proc/$check_pid/stat" ]; then
+                                # Read stat file and extract parent PID (4th field)
+                                local stat_content
+                                stat_content=$(cat "/proc/$check_pid/stat" 2>/dev/null || echo "")
+                                if [ -n "$stat_content" ]; then
+                                    check_pid=$(echo "$stat_content" | awk '{print $4}' 2>/dev/null || echo "")
+                                else
+                                    break
+                                fi
+                            else
+                                break
+                            fi
+                            depth=$((depth + 1))
+                        done
+                        
+                        if [ "$is_ancestor" = "true" ]; then
+                            continue
+                        fi
+                        
+                        # Verify PID is still valid before attempting to kill
+                        if kill -0 "$pid" 2>/dev/null; then
+                            # Try graceful termination first (suppress any errors)
+                            (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
+                        fi
+                    done
+                fi
                 # Wait for processes to terminate
                 sleep 2
-                # Verify file is no longer in use
+                # Verify file is no longer in use (excluding current script and parent)
                 binary_pids=$(lsof -t "$install_path" 2>/dev/null || true)
-                if [ -n "$binary_pids" ]; then
+                local remaining_pids=""
+                for pid in $binary_pids; do
+                    if [ "$pid" != "$current_pid" ] && [ "$pid" != "$parent_pid" ]; then
+                        remaining_pids="$remaining_pids $pid"
+                    fi
+                done
+                if [ -n "$remaining_pids" ]; then
                     echo "⚠️  Some processes may still be using the binary, but continuing..."
                 fi
             else
