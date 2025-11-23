@@ -268,6 +268,69 @@ stop_port_processes() {
     fi
 }
 
+# Helper function to check if a PID is in our process tree (ancestor)
+# Returns 0 (true) if PID is an ancestor, 1 (false) otherwise
+is_pid_in_process_tree() {
+    local target_pid="$1"
+    local current_pid=$$
+    local parent_pid="${PPID:-}"
+    
+    # Check if it's current or parent
+    if [ "$target_pid" = "$current_pid" ] || [ "$target_pid" = "$parent_pid" ]; then
+        return 0
+    fi
+    
+    # Walk up the process tree to check if target_pid is an ancestor
+    local check_pid="$parent_pid"
+    local depth=0
+    while [ -n "$check_pid" ] && [ "$check_pid" != "1" ] && [ "$depth" -lt 10 ]; do
+        if [ "$check_pid" = "$target_pid" ]; then
+            return 0
+        fi
+        # Get parent of check_pid from /proc/pid/stat (4th field)
+        if [ -f "/proc/$check_pid/stat" ]; then
+            local stat_content
+            stat_content=$(cat "/proc/$check_pid/stat" 2>/dev/null || echo "")
+            if [ -n "$stat_content" ]; then
+                check_pid=$(echo "$stat_content" | awk '{print $4}' 2>/dev/null || echo "")
+            else
+                break
+            fi
+        else
+            break
+        fi
+        depth=$((depth + 1))
+    done
+    
+    return 1
+}
+
+# Helper function to check if we're running under kubesolo
+should_skip_cleanup() {
+    local current_pid=$$
+    local parent_pid="${PPID:-}"
+    
+    # Check current process
+    if [ -f "/proc/$current_pid/cmdline" ]; then
+        local current_cmdline
+        current_cmdline=$(cat "/proc/$current_pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+        if echo "$current_cmdline" | grep -q "kubesolo"; then
+            return 0
+        fi
+    fi
+    
+    # Check parent process
+    if [ -n "$parent_pid" ] && [ -f "/proc/$parent_pid/cmdline" ]; then
+        local parent_cmdline
+        parent_cmdline=$(cat "/proc/$parent_pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+        if echo "$parent_cmdline" | grep -q "kubesolo"; then
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
 # Function to clean up file conflicts
 cleanup_file_conflicts() {
     echo "🔍 Checking for file conflicts..."
@@ -276,6 +339,10 @@ cleanup_file_conflicts() {
     local install_path="/usr/local/bin/kubesolo"
     local config_path="$CONFIG_PATH"
     local cleanup_needed=false
+    
+    # Get current script PID and parent PID for safety checks
+    local current_pid=$$
+    local parent_pid="${PPID:-}"
     
     # Check if binary exists and is in use
     if [ -f "$install_path" ]; then
@@ -287,87 +354,34 @@ cleanup_file_conflicts() {
                 cleanup_needed=true
                 echo "🛑 Stopping processes using binary $install_path..."
                 
-                # Get current script PID and parent PID to avoid killing ourselves
-                local current_pid=$$
-                local parent_pid="${PPID:-}"
-                
-                # Check if we're running under kubesolo by checking current and parent processes
-                local skip_binary_cleanup=false
-                
-                # Check current process
-                if [ -f "/proc/$current_pid/cmdline" ]; then
-                    local current_cmdline
-                    current_cmdline=$(cat "/proc/$current_pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
-                    if echo "$current_cmdline" | grep -q "kubesolo"; then
-                        skip_binary_cleanup=true
-                        echo "⚠️  Script appears to be running under kubesolo - skipping binary cleanup to avoid termination"
-                    fi
-                fi
-                
-                # Check parent process
-                if [ "$skip_binary_cleanup" = "false" ] && [ -n "$parent_pid" ] && [ -f "/proc/$parent_pid/cmdline" ]; then
-                    local parent_cmdline
-                    parent_cmdline=$(cat "/proc/$parent_pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
-                    if echo "$parent_cmdline" | grep -q "kubesolo"; then
-                        skip_binary_cleanup=true
-                        echo "⚠️  Script is running under kubesolo - skipping binary cleanup to avoid termination"
-                    fi
-                fi
-                
-                # Also check if any of the PIDs using the binary are in our process tree
-                if [ "$skip_binary_cleanup" = "false" ]; then
+                # Check if we're running under kubesolo
+                if should_skip_cleanup; then
+                    echo "⚠️  Script is running under kubesolo - skipping binary cleanup to avoid termination"
+                else
+                    # Also check if any of the PIDs using the binary are in our process tree
+                    local skip_binary_cleanup=false
                     for pid in $binary_pids; do
-                        if [ "$pid" = "$current_pid" ] || [ "$pid" = "$parent_pid" ]; then
+                        if is_pid_in_process_tree "$pid"; then
                             skip_binary_cleanup=true
                             echo "⚠️  Current process or parent is using the binary - skipping cleanup to avoid termination"
                             break
                         fi
                     done
-                fi
-                
-                if [ "$skip_binary_cleanup" = "false" ]; then
-                    for pid in $binary_pids; do
-                        # Skip if this is the current script or its parent
-                        if [ "$pid" = "$current_pid" ] || [ "$pid" = "$parent_pid" ]; then
-                            continue
-                        fi
-                        
-                        # Check if this PID is in our process tree (avoid killing ancestors)
-                        # Check parent, grandparent, and a few levels up
-                        local is_ancestor=false
-                        local check_pid="$parent_pid"
-                        local depth=0
-                        while [ -n "$check_pid" ] && [ "$check_pid" != "1" ] && [ "$depth" -lt 10 ]; do
-                            if [ "$check_pid" = "$pid" ]; then
-                                is_ancestor=true
-                                break
+                    
+                    if [ "$skip_binary_cleanup" = "false" ]; then
+                        for pid in $binary_pids; do
+                            # Skip if this PID is in our process tree
+                            if is_pid_in_process_tree "$pid"; then
+                                continue
                             fi
-                            # Get parent of check_pid from /proc/pid/stat (4th field)
-                            if [ -f "/proc/$check_pid/stat" ]; then
-                                # Read stat file and extract parent PID (4th field)
-                                local stat_content
-                                stat_content=$(cat "/proc/$check_pid/stat" 2>/dev/null || echo "")
-                                if [ -n "$stat_content" ]; then
-                                    check_pid=$(echo "$stat_content" | awk '{print $4}' 2>/dev/null || echo "")
-                                else
-                                    break
-                                fi
-                            else
-                                break
+                            
+                            # Verify PID is still valid before attempting to kill
+                            if kill -0 "$pid" 2>/dev/null; then
+                                # Try graceful termination first (suppress any errors)
+                                (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
                             fi
-                            depth=$((depth + 1))
                         done
-                        
-                        if [ "$is_ancestor" = "true" ]; then
-                            continue
-                        fi
-                        
-                        # Verify PID is still valid before attempting to kill
-                        if kill -0 "$pid" 2>/dev/null; then
-                            # Try graceful termination first (suppress any errors)
-                            (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
-                        fi
-                    done
+                    fi
                 fi
                 # Wait for processes to terminate
                 sleep 2
@@ -406,16 +420,36 @@ cleanup_file_conflicts() {
                 if [ -n "$socket_pids" ]; then
                     cleanup_needed=true
                     echo "🛑 Stopping processes using socket $socket_file..."
-                    for pid in $socket_pids; do
-                        # Verify PID is still valid before attempting to kill
-                        if kill -0 "$pid" 2>/dev/null; then
-                            # Try graceful termination first
-                            if ! kill -TERM "$pid" 2>/dev/null; then
-                                # If TERM fails, try KILL
-                                kill -KILL "$pid" 2>/dev/null || true
+                    
+                    # Check if we're running under kubesolo
+                    if should_skip_cleanup; then
+                        echo "⚠️  Script is running under kubesolo - skipping socket cleanup to avoid termination"
+                    else
+                        # Check if any of the PIDs using the socket are in our process tree
+                        local skip_socket_cleanup=false
+                        for pid in $socket_pids; do
+                            if is_pid_in_process_tree "$pid"; then
+                                skip_socket_cleanup=true
+                                echo "⚠️  Current process or parent is using the socket - skipping cleanup to avoid termination"
+                                break
                             fi
+                        done
+                        
+                        if [ "$skip_socket_cleanup" = "false" ]; then
+                            for pid in $socket_pids; do
+                                # Skip if this PID is in our process tree
+                                if is_pid_in_process_tree "$pid"; then
+                                    continue
+                                fi
+                                
+                                # Verify PID is still valid before attempting to kill
+                                if kill -0 "$pid" 2>/dev/null; then
+                                    # Try graceful termination first (suppress any errors)
+                                    (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
+                                fi
+                            done
                         fi
-                    done
+                    fi
                     sleep 1
                 fi
             else
@@ -432,18 +466,24 @@ cleanup_file_conflicts() {
         local pid
         pid=$(cat "$pidfile" 2>/dev/null || echo "")
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            cleanup_needed=true
-            echo "🛑 Stopping process from PID file $pidfile (PID: $pid)..."
-            # Try graceful termination first
-            if ! kill -TERM "$pid" 2>/dev/null; then
-                # If TERM fails, try KILL
-                kill -KILL "$pid" 2>/dev/null || true
+            # Check if this PID is in our process tree
+            if is_pid_in_process_tree "$pid"; then
+                echo "⚠️  PID file contains process in our process tree - skipping cleanup to avoid termination"
+            elif should_skip_cleanup; then
+                echo "⚠️  Script is running under kubesolo - skipping PID file cleanup to avoid termination"
+            else
+                cleanup_needed=true
+                echo "🛑 Stopping process from PID file $pidfile (PID: $pid)..."
+                # Try graceful termination first (suppress any errors)
+                (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
+                sleep 1
             fi
-            sleep 1
         fi
-        # Remove stale PID file
-        rm -f "$pidfile" 2>/dev/null || true
-        echo "ℹ️  Cleaned up PID file"
+        # Remove stale PID file (only if process is not running or we're safe to do so)
+        if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null || ! is_pid_in_process_tree "$pid"; then
+            rm -f "$pidfile" 2>/dev/null || true
+            echo "ℹ️  Cleaned up PID file"
+        fi
     fi
     
     if [ "$cleanup_needed" = "true" ]; then
