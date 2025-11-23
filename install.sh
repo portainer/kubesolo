@@ -287,9 +287,22 @@ cleanup_file_conflicts() {
                 cleanup_needed=true
                 echo "🛑 Stopping processes using binary $install_path..."
                 for pid in $binary_pids; do
-                    kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+                    # Verify PID is still valid before attempting to kill
+                    if kill -0 "$pid" 2>/dev/null; then
+                        # Try graceful termination first
+                        if ! kill -TERM "$pid" 2>/dev/null; then
+                            # If TERM fails, try KILL
+                            kill -KILL "$pid" 2>/dev/null || true
+                        fi
+                    fi
                 done
-                sleep 1
+                # Wait for processes to terminate
+                sleep 2
+                # Verify file is no longer in use
+                binary_pids=$(lsof -t "$install_path" 2>/dev/null || true)
+                if [ -n "$binary_pids" ]; then
+                    echo "⚠️  Some processes may still be using the binary, but continuing..."
+                fi
             else
                 echo "ℹ️  Binary $install_path exists (will be replaced during installation)"
             fi
@@ -315,7 +328,14 @@ cleanup_file_conflicts() {
                     cleanup_needed=true
                     echo "🛑 Stopping processes using socket $socket_file..."
                     for pid in $socket_pids; do
-                        kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+                        # Verify PID is still valid before attempting to kill
+                        if kill -0 "$pid" 2>/dev/null; then
+                            # Try graceful termination first
+                            if ! kill -TERM "$pid" 2>/dev/null; then
+                                # If TERM fails, try KILL
+                                kill -KILL "$pid" 2>/dev/null || true
+                            fi
+                        fi
                     done
                     sleep 1
                 fi
@@ -335,7 +355,11 @@ cleanup_file_conflicts() {
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             cleanup_needed=true
             echo "🛑 Stopping process from PID file $pidfile (PID: $pid)..."
-            kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+            # Try graceful termination first
+            if ! kill -TERM "$pid" 2>/dev/null; then
+                # If TERM fails, try KILL
+                kill -KILL "$pid" 2>/dev/null || true
+            fi
             sleep 1
         fi
         # Remove stale PID file
