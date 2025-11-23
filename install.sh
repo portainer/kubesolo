@@ -194,7 +194,8 @@ stop_port_processes() {
     
     # KubeSolo ports: 2379 (Kine), 6443 (API Server), 10443 (Webhook), 6060 (pprof)
     local ports="2379 6443 10443 6060"
-    local found_processes=false
+    local found_kubesolo_processes=false
+    local found_non_kubesolo_processes=false
     
     for port in $ports; do
         local pids=""
@@ -219,8 +220,6 @@ stop_port_processes() {
         fi
         
         if [ -n "$pids" ]; then
-            found_processes=true
-            echo "🛑 Stopping processes holding port $port ($port_name)..."
             for pid in $pids; do
                 # Check if it's actually a kubesolo-related process
                 local cmdline=""
@@ -240,22 +239,32 @@ stop_port_processes() {
                     is_kubesolo=true
                 fi
                 
-                # For KubeSolo-specific ports, be more aggressive if we can't determine the process
-                # Port 2379 is Kine (KubeSolo-specific), so if something is holding it, it's likely leftover
-                if [ "$is_kubesolo" = "true" ] || ([ "$port" = "2379" ] && [ -z "$cmdline" ]); then
-                    echo "   Stopping PID $pid"
+                # Only stop kubesolo-related processes
+                if [ "$is_kubesolo" = "true" ]; then
+                    if [ "$found_kubesolo_processes" = "false" ]; then
+                        echo "🛑 Stopping KubeSolo processes holding ports..."
+                        found_kubesolo_processes=true
+                    fi
+                    echo "   Stopping PID $pid on port $port ($port_name)"
                     kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
                 else
-                    echo "⚠️  Process $pid is holding port $port but doesn't appear to be KubeSolo-related (skipping)"
+                    found_non_kubesolo_processes=true
+                    if [ -n "$cmdline" ]; then
+                        echo "ℹ️  Port $port ($port_name) is in use by non-KubeSolo process (PID $pid: $cmdline) - will continue installation"
+                    else
+                        echo "ℹ️  Port $port ($port_name) is in use by non-KubeSolo process (PID $pid) - will continue installation"
+                    fi
                 fi
             done
         fi
     done
     
-    if [ "$found_processes" = "true" ]; then
+    if [ "$found_kubesolo_processes" = "true" ]; then
         echo "⏳ Waiting for ports to be released..."
         sleep 2
-        echo "✅ Port processes stopped"
+        echo "✅ KubeSolo port processes stopped"
+    elif [ "$found_non_kubesolo_processes" = "true" ]; then
+        echo "✅ Continuing installation (non-KubeSolo processes on ports will be ignored)"
     else
         echo "✅ No processes found holding KubeSolo ports"
     fi
