@@ -1,5 +1,5 @@
 #!/bin/sh
-
+    
 set -e
 
 # Function to handle errors
@@ -248,12 +248,8 @@ stop_port_processes() {
                     echo "   Stopping PID $pid on port $port ($port_name)"
                     kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
                 else
+                    # Track non-kubesolo processes but don't list them individually
                     found_non_kubesolo_processes=true
-                    if [ -n "$cmdline" ]; then
-                        echo "ℹ️  Port $port ($port_name) is in use by non-KubeSolo process (PID $pid: $cmdline) - will continue installation"
-                    else
-                        echo "ℹ️  Port $port ($port_name) is in use by non-KubeSolo process (PID $pid) - will continue installation"
-                    fi
                 fi
             done
         fi
@@ -263,10 +259,12 @@ stop_port_processes() {
         echo "⏳ Waiting for ports to be released..."
         sleep 2
         echo "✅ KubeSolo port processes stopped"
-    elif [ "$found_non_kubesolo_processes" = "true" ]; then
-        echo "✅ Continuing installation (non-KubeSolo processes on ports will be ignored)"
     else
-        echo "✅ No processes found holding KubeSolo ports"
+        echo "✅ No KubeSolo processes found holding ports"
+    fi
+    
+    if [ "$found_non_kubesolo_processes" = "true" ]; then
+        echo "ℹ️  Some KubeSolo ports are in use by non-KubeSolo processes - continuing with the installation"
     fi
 }
 
