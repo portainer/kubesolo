@@ -109,6 +109,7 @@ KubeSolo supports the following command-line flags:
 | `--portainer-edge-key` | `KUBESOLO_PORTAINER_EDGE_KEY` | Portainer Edge Key | `""` |
 | `--portainer-edge-async` | `KUBESOLO_PORTAINER_EDGE_ASYNC` | Enable Portainer Edge Async Mode | `false` |
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | Enable local storage | `true` |
+| `--local-storage-shared-path` | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | Path to the shared file system for the local storage | `""` |
 | `--debug` | `KUBESOLO_DEBUG` | Enable debug logging | `false` |
 | `--pprof-server` | `KUBESOLO_PPROF_SERVER` | Enable pprof server for profiling | `false` |
 | `--proxy` | `KUBESOLO_PROXY` | Corporate proxy for HTTP/HTTPS requests (installer only) | `""` |
