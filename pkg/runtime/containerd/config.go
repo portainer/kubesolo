@@ -114,7 +114,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 					},
 				},
 				"cni": map[string]any{
-					"bin_dir":               types.DefaultStandardCNIBinDir,
+					"bin_dir":               s.containerdCNIPluginsDir,
 					"conf_dir":              types.DefaultStandardCNIConfDir,
 					"max_conf_num":          1,
 					"setup_serially":        false,

@@ -41,7 +41,6 @@ func loadCNIPlugins(containerdCNIDir, containerdCNIPluginsDir string) error {
 	dirs := []string{
 		containerdCNIDir,
 		containerdCNIPluginsDir,
-		types.DefaultStandardCNIBinDir,
 	}
 
 	for _, dir := range dirs {
@@ -65,10 +64,6 @@ func loadCNIPlugins(containerdCNIDir, containerdCNIPluginsDir string) error {
 		if err := filesystem.ExtractBinary(plugin.source, plugin.destination); err != nil {
 			return fmt.Errorf("failed to extract %s binary: %v", plugin.name, err)
 		}
-	}
-
-	if err := filesystem.EnsureSymbolicLink(containerdCNIPluginsDir, types.DefaultStandardCNIBinDir); err != nil {
-		return fmt.Errorf("failed to create symlink for cni plugins: %v", err)
 	}
 	return nil
 }
