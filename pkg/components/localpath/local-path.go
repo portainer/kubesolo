@@ -45,7 +45,7 @@ func Deploy(adminKubeconfig, path, sharedPath string) error {
 		return err
 	}
 
-	if err := createConfigMap(ctx, clientset, sharedPath); err != nil {
+	if err := createConfigMap(ctx, clientset, path, sharedPath); err != nil {
 		return err
 	}
 
