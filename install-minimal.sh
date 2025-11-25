@@ -22,7 +22,7 @@ case $ARCH in
 esac
 
 # Configuration
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v0.2.1}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.0.0}"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 INSTALL_PATH="/usr/local/bin/kubesolo"
 USE_MUSL="${USE_MUSL:-false}"
