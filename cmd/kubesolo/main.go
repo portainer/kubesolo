@@ -205,7 +205,7 @@ func (s *kubesolo) run() {
 
 	if s.localStorage {
 		log.Info().Str("component", "kubesolo").Msg("deploying local path...")
-		if err := localpath.Deploy(s.embedded.AdminKubeconfigFile, s.localStorageSharedPath); err != nil {
+		if err := localpath.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.LocalPathStorageDir, s.localStorageSharedPath); err != nil {
 			log.Fatal().Err(err).Msg("failed to deploy local path")
 		}
 	}
@@ -377,6 +377,9 @@ func (s *kubesolo) bootstrap() {
 		CorednsImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "coredns.tar.gz"),
 		SandboxImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "pause.tar.gz"),
 		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
+
+		// Local Path Storage
+		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),
 
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",

@@ -10,7 +10,7 @@ import (
 )
 
 // Deploy creates all the necessary components for local-path-provisioner
-func Deploy(adminKubeconfig, sharedPath string) error {
+func Deploy(adminKubeconfig, path, sharedPath string) error {
 	time.Sleep(types.DefaultComponentSleep)
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.DefaultContextTimeout)

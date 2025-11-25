@@ -20,7 +20,7 @@ type nodePathMapEntry struct {
 	Paths []string `json:"paths"`
 }
 
-func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, sharedPath string) error {
+func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, path, sharedPath string) error {
 	var config localPathConfig
 
 	if sharedPath != "" {
@@ -29,7 +29,7 @@ func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, share
 		config.NodePathMap = []nodePathMapEntry{
 			{
 				Node:  "DEFAULT_PATH_FOR_NON_LISTED_NODES",
-				Paths: []string{"/opt/local-path-provisioner"},
+				Paths: []string{path},
 			},
 		}
 	}
