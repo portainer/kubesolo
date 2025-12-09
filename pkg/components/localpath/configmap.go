@@ -2,6 +2,7 @@ package localpath
 
 import (
 	"context"
+	"encoding/json"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -9,21 +10,42 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset) error {
+type localPathConfig struct {
+	NodePathMap          []nodePathMapEntry `json:"nodePathMap,omitempty"`
+	SharedFileSystemPath string             `json:"sharedFileSystemPath,omitempty"`
+}
+
+type nodePathMapEntry struct {
+	Node  string   `json:"node"`
+	Paths []string `json:"paths"`
+}
+
+func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, path, sharedPath string) error {
+	var config localPathConfig
+
+	if sharedPath != "" {
+		config.SharedFileSystemPath = sharedPath
+	} else {
+		config.NodePathMap = []nodePathMapEntry{
+			{
+				Node:  "DEFAULT_PATH_FOR_NON_LISTED_NODES",
+				Paths: []string{path},
+			},
+		}
+	}
+
+	configJSON, err := json.MarshalIndent(config, "", "    ")
+	if err != nil {
+		return err
+	}
+
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "local-path-config",
 			Namespace: LocalPathNamespace,
 		},
 		Data: map[string]string{
-			"config.json": `{
-    "nodePathMap":[
-    {
-        "node":"DEFAULT_PATH_FOR_NON_LISTED_NODES",
-        "paths":["/opt/local-path-provisioner"]
-    }
-    ]
-}`,
+			"config.json": string(configJSON),
 			"setup": `#!/bin/sh
 set -eu
 mkdir -m 0777 -p "$VOL_DIR"`,
@@ -47,7 +69,7 @@ spec:
 		},
 	}
 
-	_, err := clientset.CoreV1().ConfigMaps(LocalPathNamespace).Create(ctx, configMap, metav1.CreateOptions{})
+	_, err = clientset.CoreV1().ConfigMaps(LocalPathNamespace).Create(ctx, configMap, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}

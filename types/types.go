@@ -120,6 +120,9 @@ type Embedded struct {
 	SandboxImageFile              string
 	LocalPathProvisionerImageFile string
 
+	// Local Path Storage
+	LocalPathStorageDir string
+
 	// Portainer Edge
 	IsPortainerEdge bool
 }

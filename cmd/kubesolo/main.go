@@ -36,16 +36,17 @@ var (
 
 // the main struct for the kubesolo application
 type kubesolo struct {
-	wg                 sync.WaitGroup
-	hostName           string
-	extraSANs          string
-	debug              bool
-	pprofServer        bool
-	portainerEdgeID    string
-	portainerEdgeKey   string
-	portainerEdgeAsync bool
-	localStorage       bool
-	embedded           types.Embedded
+	wg                     sync.WaitGroup
+	hostName               string
+	extraSANs              string
+	debug                  bool
+	pprofServer            bool
+	portainerEdgeID        string
+	portainerEdgeKey       string
+	portainerEdgeAsync     bool
+	localStorage           bool
+	localStorageSharedPath string
+	embedded               types.Embedded
 }
 
 // the channels for the kubesolo application
@@ -61,14 +62,15 @@ var (
 // service creates a new kubesolo application
 func service() (*kubesolo, error) {
 	return &kubesolo{
-		hostName:           system.GetHostname(),
-		extraSANs:          *flags.APIServerExtraSANs,
-		debug:              *flags.Debug,
-		pprofServer:        *flags.PprofServer,
-		portainerEdgeID:    *flags.PortainerEdgeID,
-		portainerEdgeKey:   *flags.PortainerEdgeKey,
-		portainerEdgeAsync: *flags.PortainerEdgeAsync,
-		localStorage:       *flags.LocalStorage,
+		hostName:               system.GetHostname(),
+		extraSANs:              *flags.APIServerExtraSANs,
+		debug:                  *flags.Debug,
+		pprofServer:            *flags.PprofServer,
+		portainerEdgeID:        *flags.PortainerEdgeID,
+		portainerEdgeKey:       *flags.PortainerEdgeKey,
+		portainerEdgeAsync:     *flags.PortainerEdgeAsync,
+		localStorage:           *flags.LocalStorage,
+		localStorageSharedPath: *flags.LocalStorageSharedPath,
 	}, nil
 }
 
@@ -203,7 +205,7 @@ func (s *kubesolo) run() {
 
 	if s.localStorage {
 		log.Info().Str("component", "kubesolo").Msg("deploying local path...")
-		if err := localpath.Deploy(s.embedded.AdminKubeconfigFile); err != nil {
+		if err := localpath.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.LocalPathStorageDir, s.localStorageSharedPath); err != nil {
 			log.Fatal().Err(err).Msg("failed to deploy local path")
 		}
 	}
@@ -375,6 +377,9 @@ func (s *kubesolo) bootstrap() {
 		CorednsImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "coredns.tar.gz"),
 		SandboxImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "pause.tar.gz"),
 		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
+
+		// Local Path Storage
+		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),
 
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",

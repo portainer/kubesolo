@@ -22,35 +22,57 @@ case $ARCH in
 esac
 
 # Configuration
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v0.2.1}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.0.0}"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 INSTALL_PATH="/usr/local/bin/kubesolo"
-BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH.tar.gz"
+USE_MUSL="${USE_MUSL:-false}"
+TEMP_DIR="${TEMP_DIR:-/tmp/kubesolo-install-$$}"
 
 # Parse basic arguments
 for arg in "$@"; do
     case $arg in
         --version=*) KUBESOLO_VERSION="${arg#*=}" ;;
         --path=*) CONFIG_PATH="${arg#*=}" ;;
+        --temp-dir=*) TEMP_DIR="${arg#*=}" ;;
+        --musl) USE_MUSL="true" ;;
+        --glibc) USE_MUSL="false" ;;
         --help)
             echo "Minimal KubeSolo installer for embedded systems"
-            echo "Usage: $0 [--version=VERSION] [--path=PATH]"
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --version=VERSION   Version to install (default: $KUBESOLO_VERSION)"
+            echo "  --path=PATH         Config path (default: $CONFIG_PATH)"
+            echo "  --temp-dir=PATH     Temporary directory for download/extraction (default: /tmp/kubesolo-install-\$\$)"
+            echo "  --musl              Use musl-based binary (for Alpine Linux)"
+            echo "  --glibc             Use glibc-based binary (default, for standard Linux)"
+            echo ""
             echo "Environment variables:"
-            echo "  KUBESOLO_VERSION - Version to install (default: $KUBESOLO_VERSION)"
-            echo "  KUBESOLO_PATH    - Config path (default: $CONFIG_PATH)"
+            echo "  KUBESOLO_VERSION - Version to install"
+            echo "  KUBESOLO_PATH    - Config path"
+            echo "  USE_MUSL         - Use musl binary (true/false)"
+            echo "  TEMP_DIR         - Temporary directory"
             exit 0
             ;;
     esac
 done
 
+# Build download URL based on musl/glibc choice
+if [ "$USE_MUSL" = "true" ]; then
+    BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH-musl.tar.gz"
+    echo "Using musl-based binary (Alpine Linux compatible)"
+else
+    BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH.tar.gz"
+    echo "Using glibc-based binary (standard Linux, default)"
+fi
+
 echo "Installing KubeSolo $KUBESOLO_VERSION for $ARCH..."
 
 # Create temporary directory
-TEMP_DIR="/tmp/kubesolo-install-$$"
-mkdir -p "$TEMP_DIR" || die "Failed to create temp directory"
+mkdir -p "$TEMP_DIR" || die "Failed to create temp directory: $TEMP_DIR"
 
 # Download binary
-echo "Downloading..."
+echo "Downloading from $BIN_URL..."
 if command -v wget >/dev/null 2>&1; then
     wget -q -O "$TEMP_DIR/kubesolo.tar.gz" "$BIN_URL" || die "Download failed"
 elif command -v curl >/dev/null 2>&1; then
@@ -60,7 +82,7 @@ else
 fi
 
 # Extract
-echo "Extracting..."
+echo "Extracting to $TEMP_DIR..."
 cd "$TEMP_DIR"
 tar -xzf kubesolo.tar.gz || die "Extraction failed"
 
@@ -228,4 +250,4 @@ if [ -t 0 ]; then
             /usr/local/bin/kubesolo-ctl start
             ;;
     esac
-fi 
+fi
