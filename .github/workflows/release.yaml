@@ -73,7 +73,7 @@ jobs:
     - name: "[preparation] release-workflow-deps"
       run: sudo make release-workflow-deps
     - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
-      run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=kubesolo
+      run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION=${{ github.event.inputs.kubesolo_version }} OUTPUT=kubesolo
     - name: "[post] upload artifacts to github release"
       run: |
         dist=kubesolo-${{ github.event.inputs.kubesolo_version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}        
