@@ -30,6 +30,7 @@ const (
 	DefaultPortainerAgentImage       = "portainer/agent:2.33.4"
 	DefaultCoreDNSImage              = "coredns/coredns:1.13.1"
 	DefaultLocalPathProvisionerImage = "rancher/local-path-provisioner:v0.0.32"
+	DefaultLocalPathStorageDir       = "local-path-storage"
 	DefaultContextTimeout            = 15 * time.Second
 	DefaultComponentSleep            = 5 * time.Second
 	DefaultRetryCount                = 5
