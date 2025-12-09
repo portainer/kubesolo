@@ -32,14 +32,6 @@ func loadContainerdComponents(embedded types.Embedded) error {
 			return fmt.Errorf("failed to extract %s binary: %v", binary.name, err)
 		}
 	}
-
-	if err := filesystem.EnsureSymbolicLink(embedded.RuncBinaryFile, types.DefaultStandardRuncFile); err != nil {
-		return fmt.Errorf("failed to create symlink for runc: %v", err)
-	}
-
-	if err := filesystem.EnsureSymbolicLink(embedded.ContainerdShimBinaryFile, types.DefaultStandardContainerdShimRuncFile); err != nil {
-		return fmt.Errorf("failed to create symlink for containerd-shim-runc-v2: %v", err)
-	}
 	return nil
 }
 
@@ -49,7 +41,6 @@ func loadCNIPlugins(containerdCNIDir, containerdCNIPluginsDir string) error {
 	dirs := []string{
 		containerdCNIDir,
 		containerdCNIPluginsDir,
-		types.DefaultStandardCNIBinDir,
 	}
 
 	for _, dir := range dirs {
@@ -73,10 +64,6 @@ func loadCNIPlugins(containerdCNIDir, containerdCNIPluginsDir string) error {
 		if err := filesystem.ExtractBinary(plugin.source, plugin.destination); err != nil {
 			return fmt.Errorf("failed to extract %s binary: %v", plugin.name, err)
 		}
-	}
-
-	if err := filesystem.EnsureSymbolicLink(containerdCNIPluginsDir, types.DefaultStandardCNIBinDir); err != nil {
-		return fmt.Errorf("failed to create symlink for cni plugins: %v", err)
 	}
 	return nil
 }

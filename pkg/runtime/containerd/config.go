@@ -96,7 +96,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"runtimes": map[string]any{
 						"runc": map[string]any{
 							"runtime_type":                    "io.containerd.runc.v2",
-							"runtime_path":                    "",
+							"runtime_path":                    s.containerdShimBinaryFile,
 							"pod_annotations":                 []string{},
 							"container_annotations":           []string{},
 							"privileged_without_host_devices": false,
@@ -114,7 +114,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 					},
 				},
 				"cni": map[string]any{
-					"bin_dir":               types.DefaultStandardCNIBinDir,
+					"bin_dir":               s.containerdCNIPluginsDir,
 					"conf_dir":              types.DefaultStandardCNIConfDir,
 					"max_conf_num":          1,
 					"setup_serially":        false,
