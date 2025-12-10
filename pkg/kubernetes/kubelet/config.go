@@ -123,8 +123,6 @@ func (s *service) generateKubeletConfig() map[string]any {
 
 		"featureGates": map[string]bool{
 			"RotateKubeletServerCertificate": true,
-			"APIServerTracing":               false,
-			"KubeletTracing":                 false,
 		},
 	}
 }

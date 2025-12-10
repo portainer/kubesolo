@@ -74,7 +74,4 @@ func (s *service) configureControllerManagerFlags(command *cobra.Command) {
 	// api server interactions
 	_ = flags.Set("kube-api-qps", "50")
 	_ = flags.Set("kube-api-burst", "100")
-
-	// feature gates
-	_ = flags.Set("feature-gates", "APIServerTracing=false,KubeletTracing=false")
 }
