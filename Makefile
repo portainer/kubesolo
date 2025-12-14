@@ -93,7 +93,7 @@ build-using-image:
 		-v ${PWD}:/app \
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
-		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
+		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) -e VERSION=$(VERSION) \
 		registry.k8s.io/build-image/kube-cross:v1.35.0-go1.25.4-bullseye.0 \
 		make build
 
