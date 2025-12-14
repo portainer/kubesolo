@@ -82,6 +82,11 @@ func service() (*kubesolo, error) {
 func main() {
 	kingpin.MustParse(flags.Application.Parse(os.Args[1:]))
 
+	if *flags.Version {
+		log.Info().Str("version", Version).Msg("kubesolo version")
+		os.Exit(0)
+	}
+
 	service, err := service()
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create service. check the logs for more information. exiting...")

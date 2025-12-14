@@ -14,6 +14,7 @@ import "github.com/alecthomas/kingpin/v2"
 // PprofServer is the flag to enable the pprof server
 var (
 	Application            = kingpin.New("kubesolo", "Ultra-lightweight, OCI-compliant, single-node Kubernetes built for constrained environments such as IoT or IIoT devices running in embedded environments.")
+	Version                = Application.Flag("version", "Show the version and exit.").Short('v').Bool()
 	Path                   = Application.Flag("path", "Path to the directory containing the kubesolo configuration files. Defaults to /var/lib/kubesolo.").Envar("KUBESOLO_PATH").Default("/var/lib/kubesolo").String()
 	APIServerExtraSANs     = Application.Flag("apiserver-extra-sans", "A comma-separated list of additional Subject Alternative Names (SANs) to include in the API server's TLS certificate. These SANs can be IP addresses or DNS names (e.g., 10.0.0.4,kubesolo.local).").Envar("KUBESOLO_APISERVER_EXTRA_SANS").Default("").String()
 	PortainerEdgeID        = Application.Flag("portainer-edge-id", "Portainer Edge ID. Defaults to empty string.").Envar("KUBESOLO_PORTAINER_EDGE_ID").Default("").String()
