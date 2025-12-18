@@ -12,13 +12,18 @@ import (
 // CoreDNSConfig contains minimal CoreDNS Corefile configuration
 const CoreDNSConfig = `.:53 {
 	errors
-	cache 30
+	cache 30 {
+		disable success cluster.local
+		disable denial cluster.local
+	}
 	kubernetes cluster.local in-addr.arpa ip6.arpa {
 		pods insecure
-		endpoint_pod_names
+		fallthrough in-addr.arpa ip6.arpa
 		ttl 30
 	}
+	reload
 	forward . 1.1.1.1 8.8.8.8
+	minimal
 	health :8080
 	ready :8181
 }`
