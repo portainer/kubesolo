@@ -60,6 +60,9 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	_ = flags.Set("enable-garbage-collector", "true")
 	_ = flags.Set("profiling", "false")
 
+	// feature gates - disable SizeBasedListCostEstimate to suppress "Error getting keys" messages
+	_ = flags.Set("feature-gates", "SizeBasedListCostEstimate=false")
+
 	// audit logging
 	_ = flags.Set("audit-log-path", "-")
 	_ = flags.Set("audit-log-maxage", "0")

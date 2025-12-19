@@ -196,6 +196,8 @@ func (w *Service) processJobMutation(admissionReview *admissionv1.AdmissionRevie
 // processServiceMutation processes the service mutation for LoadBalancer allocation
 func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionReview) []map[string]any {
 	if w.nodeIP == "" {
+		log.Warn().Str("component", "webhook").
+			Msg("skipping LoadBalancer service mutation: nodeIP is not configured")
 		return nil
 	}
 
