@@ -47,8 +47,8 @@ type RequestHeaderCertificatePaths struct {
 }
 
 type Embedded struct {
-	// System paths (not managed by kubesolo)
-	SystemCNIDir string
+	// System Node IP
+	NodeIP string
 
 	// PKI directories
 	PKIDir              string

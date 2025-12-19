@@ -14,6 +14,7 @@ import (
 	"github.com/portainer/kubesolo/internal/core/embedded"
 	"github.com/portainer/kubesolo/internal/core/pki"
 	"github.com/portainer/kubesolo/internal/logging"
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
@@ -269,11 +270,17 @@ func (s *kubesolo) bootstrap() {
 	logging.SetLoggingLevel("INFO")
 	logging.ConfigureK8sDefaultLogging()
 
+	// System Node IP
+	nodeIP, err := network.GetNodeIP()
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to get node IP address, using default loopback IP address")
+	}
+
 	// Setup paths
 	basePath := *flags.Path
 	s.embedded = types.Embedded{
-		// System paths
-		SystemCNIDir: types.DefaultSystemCNIDir,
+		// System Node IP
+		NodeIP: nodeIP,
 
 		// Admin kubeconfig file
 		AdminKubeconfigFile: filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.kubeconfig"),

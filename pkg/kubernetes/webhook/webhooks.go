@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 
 	"github.com/rs/zerolog/log"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -95,6 +96,8 @@ func (w *Service) processResource(admissionReview *admissionv1.AdmissionReview) 
 		patches = w.processPVCMutation(admissionReview)
 	case "Job":
 		patches = w.processJobMutation(admissionReview)
+	case "Service":
+		patches = w.processServiceMutation(admissionReview)
 	default:
 		// For other resource types, just return empty patches
 		// This allows processing of any resource type while preserving node mutations
@@ -187,6 +190,46 @@ func (w *Service) processJobMutation(admissionReview *admissionv1.AdmissionRevie
 		Msg("setting node selector for job")
 
 	return w.createNodeSelectorPatch(job)
+}
+
+// processServiceMutation processes the service mutation for LoadBalancer allocation
+func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionReview) []map[string]any {
+	if w.nodeIP == "" {
+		return nil
+	}
+
+	var svc corev1.Service
+	if err := json.Unmarshal(admissionReview.Request.Object.Raw, &svc); err != nil {
+		log.Error().Str("component", "webhook").Err(err).Msg("failed to unmarshal service")
+		return nil
+	}
+
+	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		log.Info().Str("component", "webhook").
+			Str("service", svc.Name).
+			Str("namespace", svc.Namespace).
+			Str("ip", w.nodeIP).
+			Msg("setting external IP for LoadBalancer service")
+
+		// Check if externalIPs already contains our IP
+		hasIP := false
+		if slices.Contains(svc.Spec.ExternalIPs, w.nodeIP) {
+			hasIP = true
+		}
+
+		if !hasIP {
+			patches := []map[string]any{
+				{
+					"op":    "add",
+					"path":  "/spec/externalIPs",
+					"value": append(svc.Spec.ExternalIPs, w.nodeIP),
+				},
+			}
+			go w.updateLoadBalancerStatus(svc.Namespace, svc.Name)
+			return patches
+		}
+	}
+	return nil
 }
 
 // sendResponse sends the response to the admission review

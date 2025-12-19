@@ -22,6 +22,7 @@ type Service struct {
 	wg                 sync.WaitGroup
 	server             *http.Server
 	nodeName           string
+	nodeIP             string
 	pkiPath            string
 	clientset          *kubernetes.Clientset
 	hostsEntries       map[string]string
@@ -30,10 +31,11 @@ type Service struct {
 	pvcAnnotationPatch []map[string]any
 	requestMutex       sync.Mutex
 	lastRequest        time.Time
+	adminKubeconfig    string
 }
 
 // NewService creates a new webhook server
-func NewService(nodeName, pkiPath string) *Service {
+func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string) *Service {
 	nodeNamePatch, _ := json.Marshal([]map[string]any{
 		{
 			"op":    "add",
@@ -64,7 +66,9 @@ func NewService(nodeName, pkiPath string) *Service {
 
 	return &Service{
 		nodeName:           nodeName,
+		nodeIP:             nodeIP,
 		pkiPath:            pkiPath,
+		adminKubeconfig:    adminKubeconfig,
 		hostsEntries:       make(map[string]string),
 		nodeNamePatch:      nodeNamePatch,
 		nodeSelectorPatch:  nodeSelectorPatch,

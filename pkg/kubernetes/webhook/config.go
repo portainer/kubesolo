@@ -44,7 +44,17 @@ func (w *Service) createConfiguration() (*admissionregistrationv1.MutatingWebhoo
 						Rule: admissionregistrationv1.Rule{
 							APIGroups:   []string{"", "apps", "batch"},
 							APIVersions: []string{"v1"},
-							Resources:   []string{"pods", "persistentvolumeclaims", "jobs"},
+							Resources:   []string{"pods", "persistentvolumeclaims", "jobs", "services"},
+						},
+					},
+					{
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Update,
+						},
+						Rule: admissionregistrationv1.Rule{
+							APIGroups:   []string{""},
+							APIVersions: []string{"v1"},
+							Resources:   []string{"services"},
 						},
 					},
 				},
