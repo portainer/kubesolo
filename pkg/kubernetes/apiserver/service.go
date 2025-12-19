@@ -51,6 +51,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, apiServerReady c
 		requestHeaderCAFile:     embedded.RequestHeaderCerts.CACert,
 		requestHeaderClientCert: embedded.RequestHeaderCerts.ClientCert,
 		requestHeaderClientKey:  embedded.RequestHeaderCerts.ClientKey,
-		kubeSoloWebhook:         webhook.NewService(nodeName, embedded.NodeIP, embedded.PKIDir, embedded.AdminKubeconfigFile),
+		kubeSoloWebhook:         webhook.NewService(nodeName, embedded.NodeIP, embedded.PKIDir, embedded.AdminKubeconfigFile, embedded.LoadBalancer),
 	}
 }

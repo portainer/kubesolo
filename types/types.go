@@ -120,6 +120,9 @@ type Embedded struct {
 	SandboxImageFile              string
 	LocalPathProvisionerImageFile string
 
+	// Load Balancer
+	LoadBalancer bool
+
 	// Local Path Storage
 	LocalPathStorageDir string
 

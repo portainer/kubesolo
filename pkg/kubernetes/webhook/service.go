@@ -32,10 +32,11 @@ type Service struct {
 	requestMutex       sync.Mutex
 	lastRequest        time.Time
 	adminKubeconfig    string
+	loadBalancer       bool
 }
 
 // NewService creates a new webhook server
-func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string) *Service {
+func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer bool) *Service {
 	nodeNamePatch, _ := json.Marshal([]map[string]any{
 		{
 			"op":    "add",
@@ -73,5 +74,6 @@ func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string) *Service {
 		nodeNamePatch:      nodeNamePatch,
 		nodeSelectorPatch:  nodeSelectorPatch,
 		pvcAnnotationPatch: pvcAnnotationPatch,
+		loadBalancer:       loadBalancer,
 	}
 }

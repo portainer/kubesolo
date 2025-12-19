@@ -20,6 +20,7 @@ var (
 	PortainerEdgeID        = Application.Flag("portainer-edge-id", "Portainer Edge ID. Defaults to empty string.").Envar("KUBESOLO_PORTAINER_EDGE_ID").Default("").String()
 	PortainerEdgeKey       = Application.Flag("portainer-edge-key", "Portainer Edge Key. Defaults to empty string.").Envar("KUBESOLO_PORTAINER_EDGE_KEY").Default("").String()
 	PortainerEdgeAsync     = Application.Flag("portainer-edge-async", "Enable Portainer Edge Async Mode. Defaults to false.").Envar("KUBESOLO_PORTAINER_EDGE_ASYNC").Default("false").Bool()
+	LoadBalancer           = Application.Flag("load-balancer", "Enable load balancer. With this enabled, kubesolo will update a newly deployed service with the load balancer type so that the EXTERNAL-IP is set to the node IP. Defaults to true.").Envar("KUBESOLO_LOAD_BALANCER").Default("true").Bool()
 	LocalStorage           = Application.Flag("local-storage", "Enable local storage. Defaults to false.").Envar("KUBESOLO_LOCAL_STORAGE").Default("true").Bool()
 	LocalStorageSharedPath = Application.Flag("local-storage-shared-path", "Path to the shared file system for the local storage. Defaults to empty string.").Envar("KUBESOLO_LOCAL_STORAGE_SHARED_PATH").Default("").String()
 	Debug                  = Application.Flag("debug", "Enable debug logging. Defaults to false.").Envar("KUBESOLO_DEBUG").Default("false").Bool()

@@ -45,6 +45,7 @@ type kubesolo struct {
 	portainerEdgeID        string
 	portainerEdgeKey       string
 	portainerEdgeAsync     bool
+	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
 	embedded               types.Embedded
@@ -70,6 +71,7 @@ func service() (*kubesolo, error) {
 		portainerEdgeID:        *flags.PortainerEdgeID,
 		portainerEdgeKey:       *flags.PortainerEdgeKey,
 		portainerEdgeAsync:     *flags.PortainerEdgeAsync,
+		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
 	}, nil
@@ -389,6 +391,9 @@ func (s *kubesolo) bootstrap() {
 		CorednsImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "coredns.tar.gz"),
 		SandboxImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "pause.tar.gz"),
 		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
+
+		// Load Balancer
+		LoadBalancer: s.loadBalancer,
 
 		// Local Path Storage
 		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"slices"
 
 	"github.com/rs/zerolog/log"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -97,7 +96,9 @@ func (w *Service) processResource(admissionReview *admissionv1.AdmissionReview) 
 	case "Job":
 		patches = w.processJobMutation(admissionReview)
 	case "Service":
-		patches = w.processServiceMutation(admissionReview)
+		if w.loadBalancer {
+			patches = w.processServiceMutation(admissionReview)
+		}
 	default:
 		// For other resource types, just return empty patches
 		// This allows processing of any resource type while preserving node mutations
@@ -211,24 +212,9 @@ func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionR
 			Str("ip", w.nodeIP).
 			Msg("setting external IP for LoadBalancer service")
 
-		// Check if externalIPs already contains our IP
-		hasIP := false
-		if slices.Contains(svc.Spec.ExternalIPs, w.nodeIP) {
-			hasIP = true
-		}
-
-		if !hasIP {
-			patches := []map[string]any{
-				{
-					"op":    "add",
-					"path":  "/spec/externalIPs",
-					"value": append(svc.Spec.ExternalIPs, w.nodeIP),
-				},
-			}
-			go w.updateLoadBalancerStatus(svc.Namespace, svc.Name)
-			return patches
-		}
+		go w.updateLoadBalancerStatus(svc.Namespace, svc.Name)
 	}
+
 	return nil
 }
 
