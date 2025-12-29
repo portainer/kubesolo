@@ -46,12 +46,12 @@ func Deploy(adminKubeconfig string) error {
 		return fmt.Errorf("failed to create CoreDNS ClusterRoleBinding: %v", err)
 	}
 
-	if err := createDeployment(ctx, clientset); err != nil {
-		return fmt.Errorf("failed to create CoreDNS Deployment: %v", err)
-	}
-
 	if err := createService(ctx, clientset); err != nil {
 		return fmt.Errorf("failed to create CoreDNS Service: %v", err)
+	}
+
+	if err := createDeployment(ctx, clientset); err != nil {
+		return fmt.Errorf("failed to create CoreDNS Deployment: %v", err)
 	}
 	return nil
 }
