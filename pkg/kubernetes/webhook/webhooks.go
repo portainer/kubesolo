@@ -214,7 +214,9 @@ func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionR
 			Str("ip", w.nodeIP).
 			Msg("setting external IP for LoadBalancer service")
 
-		go w.updateLoadBalancerStatus(svc.Namespace, svc.Name)
+		w.wg.Go(func() {
+			w.updateLoadBalancerStatus(svc.Namespace, svc.Name)
+		})
 	}
 
 	return nil

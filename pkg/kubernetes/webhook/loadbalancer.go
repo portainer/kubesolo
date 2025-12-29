@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	kubesolokubernetes "github.com/portainer/kubesolo/internal/kubernetes"
 	"github.com/rs/zerolog/log"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,18 +16,23 @@ func (s *Service) updateLoadBalancerStatus(namespace, name string) {
 	defer cancel()
 
 	if s.clientset == nil {
-		var err error
-		s.clientset, err = kubesolokubernetes.GetKubernetesClient(s.adminKubeconfig)
-		if err != nil {
-			log.Error().Str("component", "webhook").
-				Err(err).
-				Msg("failed to create kubernetes client for LoadBalancer status update")
-			return
-		}
+		log.Error().Str("component", "webhook").
+			Msg("clientset is nil, cannot update LoadBalancer status")
+		return
 	}
 
-	// Retry logic for updating the service status
-	err := wait.ExponentialBackoff(wait.Backoff{
+	err := s.updateLoadBalancerStatusWithRetry(ctx, namespace, name)
+	if err != nil {
+		log.Error().Str("component", "webhook").
+			Str("service", name).
+			Str("namespace", namespace).
+			Err(err).
+			Msg("failed to update LoadBalancer status after retries")
+	}
+}
+
+func (s *Service) updateLoadBalancerStatusWithRetry(ctx context.Context, namespace, name string) error {
+	return wait.ExponentialBackoff(wait.Backoff{
 		Duration: 1 * time.Second,
 		Factor:   2,
 		Steps:    5,
@@ -43,17 +47,14 @@ func (s *Service) updateLoadBalancerStatus(namespace, name string) {
 			return false, nil
 		}
 
-		// Only process LoadBalancer services
 		if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
 			return true, nil
 		}
 
-		// Check if already set
 		if len(svc.Status.LoadBalancer.Ingress) > 0 && svc.Status.LoadBalancer.Ingress[0].IP == s.nodeIP {
 			return true, nil
 		}
 
-		// Update the service status
 		svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
 			{
 				IP: s.nodeIP,
@@ -77,12 +78,4 @@ func (s *Service) updateLoadBalancerStatus(namespace, name string) {
 			Msg("updated LoadBalancer status")
 		return true, nil
 	})
-
-	if err != nil {
-		log.Error().Str("component", "webhook").
-			Str("service", name).
-			Str("namespace", namespace).
-			Err(err).
-			Msg("failed to update LoadBalancer status after retries")
-	}
 }
