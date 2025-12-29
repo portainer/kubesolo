@@ -87,7 +87,7 @@ func (s *service) postSetup() {
 		log.Error().Str("component", "apiserver").Msgf("failed to apply the RBAC configuration: %v...", err)
 	}
 
-	if err := s.kubeSoloWebhook.RegisterWebhook(s.adminKubeconfig); err != nil {
+	if err := s.kubeSoloWebhook.RegisterWebhook(); err != nil {
 		log.Error().Str("component", "apiserver").Msgf("failed to register the kubesolo webhook: %v...", err)
 	}
 }

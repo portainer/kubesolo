@@ -14,6 +14,7 @@ import (
 	"github.com/portainer/kubesolo/internal/core/embedded"
 	"github.com/portainer/kubesolo/internal/core/pki"
 	"github.com/portainer/kubesolo/internal/logging"
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
@@ -44,6 +45,7 @@ type kubesolo struct {
 	portainerEdgeID        string
 	portainerEdgeKey       string
 	portainerEdgeAsync     bool
+	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
 	embedded               types.Embedded
@@ -69,6 +71,7 @@ func service() (*kubesolo, error) {
 		portainerEdgeID:        *flags.PortainerEdgeID,
 		portainerEdgeKey:       *flags.PortainerEdgeKey,
 		portainerEdgeAsync:     *flags.PortainerEdgeAsync,
+		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
 	}, nil
@@ -269,11 +272,17 @@ func (s *kubesolo) bootstrap() {
 	logging.SetLoggingLevel("INFO")
 	logging.ConfigureK8sDefaultLogging()
 
+	// System Node IP
+	nodeIP, err := network.GetNodeIP()
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to get node IP address, using default loopback IP address")
+	}
+
 	// Setup paths
 	basePath := *flags.Path
 	s.embedded = types.Embedded{
-		// System paths
-		SystemCNIDir: types.DefaultSystemCNIDir,
+		// System Node IP
+		NodeIP: nodeIP,
 
 		// Admin kubeconfig file
 		AdminKubeconfigFile: filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.kubeconfig"),
@@ -382,6 +391,9 @@ func (s *kubesolo) bootstrap() {
 		CorednsImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "coredns.tar.gz"),
 		SandboxImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "pause.tar.gz"),
 		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
+
+		// Load Balancer
+		LoadBalancer: s.loadBalancer,
 
 		// Local Path Storage
 		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),

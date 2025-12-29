@@ -16,6 +16,7 @@ type service struct {
 	cancel                  context.CancelFunc
 	serverPath              string
 	nodeName                string
+	nodeIP                  string
 	pkiAPIServerDir         string
 	caFile                  string
 	apiServerCertFile       string
@@ -38,6 +39,7 @@ func NewService(ctx context.Context, cancel context.CancelFunc, apiServerReady c
 		cancel:                  cancel,
 		serverPath:              embedded.APIServerDir,
 		nodeName:                nodeName,
+		nodeIP:                  embedded.NodeIP,
 		pkiAPIServerDir:         embedded.PKIAPIServerDir,
 		caFile:                  embedded.CACerts.Cert,
 		apiServerCertFile:       embedded.APIServerCerts.Cert,
@@ -49,6 +51,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, apiServerReady c
 		requestHeaderCAFile:     embedded.RequestHeaderCerts.CACert,
 		requestHeaderClientCert: embedded.RequestHeaderCerts.ClientCert,
 		requestHeaderClientKey:  embedded.RequestHeaderCerts.ClientKey,
-		kubeSoloWebhook:         webhook.NewService(nodeName, embedded.PKIDir),
+		kubeSoloWebhook:         webhook.NewService(nodeName, embedded.NodeIP, embedded.PKIDir, embedded.AdminKubeconfigFile, embedded.LoadBalancer),
 	}
 }

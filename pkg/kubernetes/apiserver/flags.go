@@ -1,26 +1,18 @@
 package apiserver
 
 import (
-	"fmt"
-
-	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
 )
 
 func (s *service) configureAPIServerFlags(command *cobra.Command) error {
-	nodeIP, err := network.GetNodeIP()
-	if err != nil {
-		return fmt.Errorf("failed to get node IP address: %v", err)
-	}
-
 	flags := command.Flags()
 
 	// networking settings
 	_ = flags.Set("insecure-port", "0")
 	_ = flags.Set("secure-port", "6443")
 	_ = flags.Set("bind-address", "0.0.0.0")
-	_ = flags.Set("advertise-address", nodeIP)
+	_ = flags.Set("advertise-address", s.nodeIP)
 	_ = flags.Set("service-cluster-ip-range", types.DefaultServiceClusterIPRange)
 
 	// etcd configuration
@@ -67,6 +59,9 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	// features and garbage collection
 	_ = flags.Set("enable-garbage-collector", "true")
 	_ = flags.Set("profiling", "false")
+
+	// feature gates - disable SizeBasedListCostEstimate to suppress "Error getting keys" messages
+	_ = flags.Set("feature-gates", "SizeBasedListCostEstimate=false")
 
 	// audit logging
 	_ = flags.Set("audit-log-path", "-")

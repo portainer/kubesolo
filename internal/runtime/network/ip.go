@@ -32,7 +32,7 @@ func GetLocalIPs() ([]net.IP, error) {
 func GetNodeIP() (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		return "", err
+		return "127.0.0.1", fmt.Errorf("failed to get node IP address: %v", err)
 	}
 
 	for _, addr := range addrs {

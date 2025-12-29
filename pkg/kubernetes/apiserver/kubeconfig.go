@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/rs/zerolog/log"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -28,12 +27,7 @@ func (s *service) generateKubeConfig() error {
 		return err
 	}
 
-	nodeIP, err := network.GetNodeIP()
-	if err != nil {
-		return fmt.Errorf("failed to get node IP address: %v", err)
-	}
-
-	kubeConfig := s.createKubeConfig(certData, nodeIP)
+	kubeConfig := s.createKubeConfig(certData, s.nodeIP)
 	if err := s.writeKubeConfig(kubeConfig); err != nil {
 		return err
 	}

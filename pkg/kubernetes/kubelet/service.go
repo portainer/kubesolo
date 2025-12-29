@@ -25,6 +25,7 @@ type service struct {
 	certFile              string
 	keyFile               string
 	nodeName              string
+	nodeIP                string
 	kubeletCertPath       string
 	adminKubeconfig       string
 }
@@ -38,6 +39,7 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		kubeletReady:          kubeletReady,
 		kubeletDir:            embedded.KubeletDir,
 		kubeletConfigDir:      embedded.KubeletConfigDir,
+		nodeIP:                embedded.NodeIP,
 		kubeletCertPath:       embedded.PKIAdminDir,
 		kubeletConfigFile:     embedded.KubeletConfigFile,
 		kubeletKubeConfigFile: embedded.KubeletKubeConfigFile,

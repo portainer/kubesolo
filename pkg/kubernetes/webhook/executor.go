@@ -12,8 +12,8 @@ import (
 )
 
 // RegisterWebhook registers the webhook with the Kubernetes API server
-func (w *Service) RegisterWebhook(kubeconfig string) error {
-	clientset, err := kubesolokubernetes.GetKubernetesClient(kubeconfig)
+func (w *Service) RegisterWebhook() error {
+	clientset, err := kubesolokubernetes.GetKubernetesClient(w.adminKubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
@@ -37,19 +37,19 @@ func (s *Service) Start(ctx context.Context) error {
 		Handler: mux,
 	}
 
-	certPath := filepath.Join(s.pkiPath, "webhook", "webhook.crt")
-	keyPath := filepath.Join(s.pkiPath, "webhook", "webhook.key")
-
 	log.Info().Str("component", "webhook").Msgf("starting webhook server on :%d", types.DefaultWebhookPort)
 
-	s.startServer(certPath, keyPath)
+	s.startServer()
 	s.handleShutdown(ctx)
 
 	return nil
 }
 
 // startServer starts the webhook server
-func (s *Service) startServer(certPath, keyPath string) {
+func (s *Service) startServer() {
+	certPath := filepath.Join(s.pkiPath, "webhook", "webhook.crt")
+	keyPath := filepath.Join(s.pkiPath, "webhook", "webhook.key")
+
 	s.wg.Go(func() {
 		if err := s.server.ListenAndServeTLS(certPath, keyPath); err != nil && err != http.ErrServerClosed {
 			log.Error().Str("component", "webhook").Err(err).Msg("webhook server failed")
