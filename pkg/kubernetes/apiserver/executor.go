@@ -72,7 +72,7 @@ func (s *service) Run(kineReadyCh chan struct{}) error {
 }
 
 func (s *service) postSetup() {
-	err := s.checkAPIServerHealth()
+	err := s.checkAPIServerReadiness()
 	if err != nil {
 		log.Error().Str("component", "apiserver").Msgf("API server failed to start: %v...", err)
 		s.terminate()
