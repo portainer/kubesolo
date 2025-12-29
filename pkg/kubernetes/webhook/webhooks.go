@@ -216,9 +216,9 @@ func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionR
 			Msg("setting external IP for LoadBalancer service")
 
 		serviceKey := svc.Namespace + "/" + svc.Name
-		updateChan, inProgress := w.loadBalancerUpdateLocks.LoadOrStore(serviceKey, make(chan struct{}))
+		updateChan, loaded := w.loadBalancerUpdateLocks.LoadOrStore(serviceKey, make(chan struct{}))
 
-		if inProgress {
+		if loaded {
 			log.Debug().Str("component", "webhook").
 				Str("service", svc.Name).
 				Str("namespace", svc.Namespace).
