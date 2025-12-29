@@ -7,6 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -55,19 +56,20 @@ func (s *Service) updateLoadBalancerStatusWithRetry(ctx context.Context, namespa
 			return true, nil
 		}
 
-		svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
-			{
-				IP: s.nodeIP,
-			},
-		}
-
-		_, err = s.clientset.CoreV1().Services(namespace).UpdateStatus(ctx, svc, metav1.UpdateOptions{})
+		_, err = s.clientset.CoreV1().Services(namespace).Patch(
+			ctx,
+			name,
+			types.MergePatchType,
+			s.loadBalancerStatusPatch,
+			metav1.PatchOptions{},
+			"status",
+		)
 		if err != nil {
 			log.Warn().Str("component", "webhook").
 				Str("service", name).
 				Str("namespace", namespace).
 				Err(err).
-				Msg("failed to update service status, retrying...")
+				Msg("failed to patch service status, retrying...")
 			return false, nil
 		}
 

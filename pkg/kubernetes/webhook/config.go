@@ -25,6 +25,11 @@ func (w *Service) createConfiguration() (*admissionregistrationv1.MutatingWebhoo
 	sideEffects := admissionregistrationv1.SideEffectClassNone
 	timeoutSeconds := int32(30)
 
+	resources := []string{"pods", "persistentvolumeclaims", "jobs"}
+	if w.loadBalancer {
+		resources = append(resources, "services")
+	}
+
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: types.DefaultWebhookName,
@@ -44,7 +49,7 @@ func (w *Service) createConfiguration() (*admissionregistrationv1.MutatingWebhoo
 						Rule: admissionregistrationv1.Rule{
 							APIGroups:   []string{"", "apps", "batch"},
 							APIVersions: []string{"v1"},
-							Resources:   []string{"pods", "persistentvolumeclaims", "jobs", "services"},
+							Resources:   resources,
 						},
 					},
 				},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -214,7 +215,24 @@ func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionR
 			Str("ip", w.nodeIP).
 			Msg("setting external IP for LoadBalancer service")
 
+		serviceKey := svc.Namespace + "/" + svc.Name
+		updateChan, inProgress := w.loadBalancerUpdateLocks.LoadOrStore(serviceKey, make(chan struct{}))
+
+		if inProgress {
+			log.Debug().Str("component", "webhook").
+				Str("service", svc.Name).
+				Str("namespace", svc.Namespace).
+				Msg("LoadBalancer status update already in progress, skipping duplicate request")
+			return nil
+		}
+
 		w.wg.Go(func() {
+			defer func() {
+				close(updateChan.(chan struct{}))
+				time.Sleep(1 * time.Second)
+				w.loadBalancerUpdateLocks.Delete(serviceKey)
+			}()
+
 			w.updateLoadBalancerStatus(svc.Namespace, svc.Name)
 		})
 	}

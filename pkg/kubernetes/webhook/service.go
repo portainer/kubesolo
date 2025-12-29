@@ -19,20 +19,22 @@ var (
 
 // Service is a webhook that handles pod mutations for KubeSolo
 type Service struct {
-	wg                 sync.WaitGroup
-	server             *http.Server
-	nodeName           string
-	nodeIP             string
-	pkiPath            string
-	clientset          *kubernetes.Clientset
-	hostsEntries       map[string]string
-	nodeNamePatch      []byte
-	nodeSelectorPatch  []byte
-	pvcAnnotationPatch []map[string]any
-	requestMutex       sync.Mutex
-	lastRequest        time.Time
-	adminKubeconfig    string
-	loadBalancer       bool
+	wg                      sync.WaitGroup
+	server                  *http.Server
+	nodeName                string
+	nodeIP                  string
+	pkiPath                 string
+	clientset               *kubernetes.Clientset
+	hostsEntries            map[string]string
+	nodeNamePatch           []byte
+	nodeSelectorPatch       []byte
+	pvcAnnotationPatch      []map[string]any
+	loadBalancerStatusPatch []byte
+	requestMutex            sync.Mutex
+	lastRequest             time.Time
+	adminKubeconfig         string
+	loadBalancer            bool
+	loadBalancerUpdateLocks sync.Map
 }
 
 // NewService creates a new webhook server
@@ -65,15 +67,28 @@ func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer 
 		},
 	}
 
+	loadBalancerStatusPatch, _ := json.Marshal(map[string]interface{}{
+		"status": map[string]interface{}{
+			"loadBalancer": map[string]interface{}{
+				"ingress": []map[string]interface{}{
+					{
+						"ip": nodeIP,
+					},
+				},
+			},
+		},
+	})
+
 	return &Service{
-		nodeName:           nodeName,
-		nodeIP:             nodeIP,
-		pkiPath:            pkiPath,
-		adminKubeconfig:    adminKubeconfig,
-		hostsEntries:       make(map[string]string),
-		nodeNamePatch:      nodeNamePatch,
-		nodeSelectorPatch:  nodeSelectorPatch,
-		pvcAnnotationPatch: pvcAnnotationPatch,
-		loadBalancer:       loadBalancer,
+		nodeName:                nodeName,
+		nodeIP:                  nodeIP,
+		pkiPath:                 pkiPath,
+		adminKubeconfig:         adminKubeconfig,
+		hostsEntries:            make(map[string]string),
+		nodeNamePatch:           nodeNamePatch,
+		nodeSelectorPatch:       nodeSelectorPatch,
+		pvcAnnotationPatch:      pvcAnnotationPatch,
+		loadBalancerStatusPatch: loadBalancerStatusPatch,
+		loadBalancer:            loadBalancer,
 	}
 }
