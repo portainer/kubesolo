@@ -1,6 +1,13 @@
 #!/bin/sh
-
+    
 set -e
+
+# Check if running as root or via sudo
+if [ "$(id -u)" -ne 0 ]; then
+    echo "❌ Error: This script must be run as root or via sudo"
+    echo "   Please run: sudo $0 $*"
+    exit 1
+fi
 
 # Function to handle errors
 handle_error() {
@@ -129,6 +136,70 @@ check_iptables_comment_module() {
     echo "✅ iptables with xt_comment module support verified"
 }
 
+# Function to check for required cgroups controllers
+check_cgroups() {
+    echo "🔍 Checking for required cgroups controllers..."
+    
+    # Required controllers: cpuset, cpu, io, memory, pids
+    local required_controllers="cpuset cpu io memory pids"
+    local missing_controllers=""
+    
+    # Check if cgroups v2 is mounted (unified hierarchy)
+    if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+        # cgroups v2 - check unified controllers
+        local available_controllers
+        available_controllers=$(cat /sys/fs/cgroup/cgroup.controllers 2>/dev/null || echo "")
+        
+        if [ -z "$available_controllers" ]; then
+            handle_error "cgroups v2 is mounted but no controllers are available. Please ensure cgroups are properly configured."
+        fi
+        
+        # Check each required controller
+        for controller in $required_controllers; do
+            if ! echo "$available_controllers" | grep -qw "$controller"; then
+                missing_controllers="$missing_controllers $controller"
+            fi
+        done
+        
+        if [ -n "$missing_controllers" ]; then
+            handle_error "Required cgroups v2 controllers are missing:$missing_controllers. Available controllers: $available_controllers. Please enable the required controllers in your kernel or boot parameters."
+        fi
+        
+        echo "✅ All required cgroups v2 controllers are available: $available_controllers"
+    elif [ -d /sys/fs/cgroup ]; then
+        # cgroups v1 - check individual controller directories
+        # Also handle hybrid mode (both v1 and v2)
+        local found_controllers=""
+        
+        for controller in $required_controllers; do
+            # Check if controller directory exists
+            if [ -d "/sys/fs/cgroup/$controller" ]; then
+                # Verify it's functional by checking for common files
+                if [ -f "/sys/fs/cgroup/$controller/cgroup.procs" ] || [ -f "/sys/fs/cgroup/$controller/tasks" ] || [ -d "/sys/fs/cgroup/$controller/system.slice" ] 2>/dev/null; then
+                    found_controllers="$found_controllers $controller"
+                else
+                    # Directory exists but might not be properly mounted
+                    if mountpoint -q "/sys/fs/cgroup/$controller" 2>/dev/null || [ -f "/sys/fs/cgroup/$controller/cgroup.procs" ] 2>/dev/null; then
+                        found_controllers="$found_controllers $controller"
+                    else
+                        missing_controllers="$missing_controllers $controller"
+                    fi
+                fi
+            else
+                missing_controllers="$missing_controllers $controller"
+            fi
+        done
+        
+        if [ -n "$missing_controllers" ]; then
+            handle_error "Required cgroups v1 controllers are missing:$missing_controllers. Please ensure cgroups are mounted. You may need to add 'cgroup_enable=cpuset cgroup_enable=cpu cgroup_enable=io cgroup_memory=1 cgroup_enable=pids' to your kernel boot parameters."
+        fi
+        
+        echo "✅ All required cgroups v1 controllers are available:$found_controllers"
+    else
+        handle_error "cgroups filesystem not found at /sys/fs/cgroup. Please ensure cgroups are enabled in your kernel and mounted. You may need to add 'cgroup_enable=cpuset cgroup_enable=cpu cgroup_enable=io cgroup_memory=1 cgroup_enable=pids' to your kernel boot parameters."
+    fi
+}
+
 # Function to stop running KubeSolo processes
 stop_running_processes() {
     echo "🔍 Checking for running KubeSolo processes..."
@@ -182,7 +253,27 @@ stop_running_processes() {
             sleep 1
         fi
         
-        echo "✅ KubeSolo processes stopped"
+        # Verify processes are actually stopped with retries
+        local retries=5
+        local wait_time=1
+        while [ $retries -gt 0 ]; do
+            pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
+            if [ -z "$pids" ]; then
+                break
+            fi
+            echo "⏳ Waiting for processes to fully terminate (${retries} retries remaining)..."
+            sleep $wait_time
+            retries=$((retries - 1))
+            wait_time=$((wait_time + 1))
+        done
+        
+        # Final check
+        pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
+        if [ -n "$pids" ]; then
+            echo "⚠️  Some KubeSolo processes may still be running, but continuing..."
+        else
+            echo "✅ KubeSolo processes stopped"
+        fi
     else
         echo "✅ No running KubeSolo processes found"
     fi
@@ -194,7 +285,8 @@ stop_port_processes() {
     
     # KubeSolo ports: 2379 (Kine), 6443 (API Server), 10443 (Webhook), 6060 (pprof)
     local ports="2379 6443 10443 6060"
-    local found_processes=false
+    local found_kubesolo_processes=false
+    local found_non_kubesolo_processes=false
     
     for port in $ports; do
         local pids=""
@@ -219,8 +311,6 @@ stop_port_processes() {
         fi
         
         if [ -n "$pids" ]; then
-            found_processes=true
-            echo "🛑 Stopping processes holding port $port ($port_name)..."
             for pid in $pids; do
                 # Check if it's actually a kubesolo-related process
                 local cmdline=""
@@ -240,25 +330,138 @@ stop_port_processes() {
                     is_kubesolo=true
                 fi
                 
-                # For KubeSolo-specific ports, be more aggressive if we can't determine the process
-                # Port 2379 is Kine (KubeSolo-specific), so if something is holding it, it's likely leftover
-                if [ "$is_kubesolo" = "true" ] || ([ "$port" = "2379" ] && [ -z "$cmdline" ]); then
-                    echo "   Stopping PID $pid"
+                # Only stop kubesolo-related processes
+                if [ "$is_kubesolo" = "true" ]; then
+                    if [ "$found_kubesolo_processes" = "false" ]; then
+                        echo "🛑 Stopping KubeSolo processes holding ports..."
+                        found_kubesolo_processes=true
+                    fi
+                    echo "   Stopping PID $pid on port $port ($port_name)"
                     kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
                 else
-                    echo "⚠️  Process $pid is holding port $port but doesn't appear to be KubeSolo-related (skipping)"
+                    # Track non-kubesolo processes but don't list them individually
+                    found_non_kubesolo_processes=true
                 fi
             done
         fi
     done
     
-    if [ "$found_processes" = "true" ]; then
+    if [ "$found_kubesolo_processes" = "true" ]; then
         echo "⏳ Waiting for ports to be released..."
         sleep 2
-        echo "✅ Port processes stopped"
+        echo "✅ KubeSolo port processes stopped"
     else
-        echo "✅ No processes found holding KubeSolo ports"
+        echo "✅ No KubeSolo processes found holding ports"
     fi
+    
+    if [ "$found_non_kubesolo_processes" = "true" ]; then
+        echo "ℹ️  Some KubeSolo ports are in use by non-KubeSolo processes - continuing with the installation"
+    fi
+}
+
+# Helper function to check if a PID is in our process tree (ancestor)
+# Returns 0 (true) if PID is an ancestor, 1 (false) otherwise
+# This walks up the actual process tree to verify ancestry
+is_pid_in_process_tree() {
+    local target_pid="$1"
+    local current_pid=$$
+    local parent_pid="${PPID:-}"
+    
+    # Validate target_pid is numeric
+    if ! echo "$target_pid" | grep -qE '^[0-9]+$'; then
+        return 1
+    fi
+    
+    # Check if it's current or parent (direct relationship)
+    if [ "$target_pid" = "$current_pid" ] || [ "$target_pid" = "$parent_pid" ]; then
+        return 0
+    fi
+    
+    # Walk up the process tree starting from parent to check if target_pid is an ancestor
+    # We verify each step by checking the actual parent relationship
+    local check_pid="$parent_pid"
+    local depth=0
+    local max_depth=15  # Reasonable limit to prevent infinite loops
+    
+    while [ -n "$check_pid" ] && [ "$check_pid" != "1" ] && [ "$check_pid" != "0" ] && [ "$depth" -lt "$max_depth" ]; do
+        # Found it in our ancestry
+        if [ "$check_pid" = "$target_pid" ]; then
+            return 0
+        fi
+        
+        # Get parent of check_pid from /proc/pid/stat
+        # Format: pid (comm) state ppid ...
+        # We need to extract ppid which is after the process name in parentheses
+        if [ -f "/proc/$check_pid/stat" ]; then
+            local stat_content
+            stat_content=$(cat "/proc/$check_pid/stat" 2>/dev/null || echo "")
+            if [ -n "$stat_content" ]; then
+                # Extract parent PID: find the closing paren and get the 4th field after it
+                # More reliable: use /proc/pid/status which has PPid: field
+                local parent_from_status
+                if [ -f "/proc/$check_pid/status" ]; then
+                    parent_from_status=$(grep "^PPid:" "/proc/$check_pid/status" 2>/dev/null | awk '{print $2}' || echo "")
+                    if [ -n "$parent_from_status" ] && echo "$parent_from_status" | grep -qE '^[0-9]+$'; then
+                        check_pid="$parent_from_status"
+                    else
+                        break
+                    fi
+                else
+                    # Fallback to stat parsing
+                    local next_pid
+                    next_pid=$(echo "$stat_content" | sed 's/.*) //' | awk '{print $2}' 2>/dev/null || echo "")
+                    if [ -n "$next_pid" ] && echo "$next_pid" | grep -qE '^[0-9]+$'; then
+                        check_pid="$next_pid"
+                    else
+                        break
+                    fi
+                fi
+            else
+                break
+            fi
+        else
+            break
+        fi
+        depth=$((depth + 1))
+    done
+    
+    return 1
+}
+
+# Helper function to check if we're running under kubesolo
+# Only returns true if we're actually a direct child of a kubesolo process
+should_skip_cleanup() {
+    local current_pid=$$
+    local parent_pid="${PPID:-}"
+    
+    # Check if parent process is actually kubesolo binary
+    # This is more specific - we only skip if parent is the actual kubesolo executable
+    if [ -n "$parent_pid" ] && [ -f "/proc/$parent_pid/exe" ]; then
+        local parent_exe
+        parent_exe=$(readlink -f "/proc/$parent_pid/exe" 2>/dev/null || echo "")
+        # Check if parent executable is the kubesolo binary
+        if echo "$parent_exe" | grep -q "kubesolo" && [ -f "$parent_exe" ]; then
+            # Also verify it's actually kubesolo by checking cmdline
+            if [ -f "/proc/$parent_pid/cmdline" ]; then
+                local parent_cmdline
+                parent_cmdline=$(cat "/proc/$parent_pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+                if echo "$parent_cmdline" | grep -q "kubesolo"; then
+                    return 0
+                fi
+            fi
+        fi
+    fi
+    
+    # Check if current process is kubesolo (shouldn't happen, but be safe)
+    if [ -f "/proc/$current_pid/exe" ]; then
+        local current_exe
+        current_exe=$(readlink -f "/proc/$current_pid/exe" 2>/dev/null || echo "")
+        if echo "$current_exe" | grep -q "kubesolo" && [ -f "$current_exe" ]; then
+            return 0
+        fi
+    fi
+    
+    return 1
 }
 
 # Function to clean up file conflicts
@@ -270,6 +473,10 @@ cleanup_file_conflicts() {
     local config_path="$CONFIG_PATH"
     local cleanup_needed=false
     
+    # Get current script PID and parent PID for safety checks
+    local current_pid=$$
+    local parent_pid="${PPID:-}"
+    
     # Check if binary exists and is in use
     if [ -f "$install_path" ]; then
         # Check if file is locked or in use (only if lsof is available)
@@ -277,12 +484,65 @@ cleanup_file_conflicts() {
             local binary_pids
             binary_pids=$(lsof -t "$install_path" 2>/dev/null || true)
             if [ -n "$binary_pids" ]; then
-                cleanup_needed=true
+                cleanup_needed= true
                 echo "🛑 Stopping processes using binary $install_path..."
+                
+                # Check if we're running under kubesolo (for warning only)
+                local running_under_kubesolo=false
+                if should_skip_cleanup; then
+                    running_under_kubesolo=true
+                    echo "⚠️  Script appears to be running under kubesolo - being extra careful with cleanup"
+                fi
+                
+                # Attempt cleanup but skip processes in our process tree
+                local cleaned_any=false
                 for pid in $binary_pids; do
-                    kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+                    # Always skip if this PID is in our process tree (safety first)
+                    if is_pid_in_process_tree "$pid"; then
+                        if [ "$running_under_kubesolo" = "true" ]; then
+                            echo "   Skipping PID $pid (in our process tree)"
+                        fi
+                        continue
+                    fi
+                    
+                    # Verify PID is still valid and is actually a kubesolo process
+                    if kill -0 "$pid" 2>/dev/null; then
+                        # Double-check it's a kubesolo process before killing
+                        local is_kubesolo=false
+                        if [ -f "/proc/$pid/cmdline" ]; then
+                            local cmdline
+                            cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+                            if echo "$cmdline" | grep -q "kubesolo"; then
+                                is_kubesolo=true
+                            fi
+                        fi
+                        
+                        # Only kill if it's a kubesolo process (or if we're not running under kubesolo)
+                        if [ "$is_kubesolo" = "true" ] || [ "$running_under_kubesolo" = "false" ]; then
+                            cleaned_any=true
+                            echo "   Stopping PID $pid"
+                            # Try graceful termination first (suppress any errors)
+                            (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
+                        fi
+                    fi
                 done
-                sleep 1
+                
+                if [ "$cleaned_any" = "false" ] && [ "$running_under_kubesolo" = "true" ]; then
+                    echo "   No safe processes to clean up (all are in our process tree)"
+                fi
+                # Wait for processes to terminate
+                sleep 2
+                # Verify file is no longer in use (excluding current script and parent)
+                binary_pids=$(lsof -t "$install_path" 2>/dev/null || true)
+                local remaining_pids=""
+                for pid in $binary_pids; do
+                    if [ "$pid" != "$current_pid" ] && [ "$pid" != "$parent_pid" ]; then
+                        remaining_pids="$remaining_pids $pid"
+                    fi
+                done
+                if [ -n "$remaining_pids" ]; then
+                    echo "⚠️  Some processes may still be using the binary, but continuing..."
+                fi
             else
                 echo "ℹ️  Binary $install_path exists (will be replaced during installation)"
             fi
@@ -307,9 +567,50 @@ cleanup_file_conflicts() {
                 if [ -n "$socket_pids" ]; then
                     cleanup_needed=true
                     echo "🛑 Stopping processes using socket $socket_file..."
+                    
+                    # Check if we're running under kubesolo (for warning only)
+                    local running_under_kubesolo=false
+                    if should_skip_cleanup; then
+                        running_under_kubesolo=true
+                        echo "⚠️  Script appears to be running under kubesolo - being extra careful with cleanup"
+                    fi
+                    
+                    # Attempt cleanup but skip processes in our process tree
+                    local cleaned_any=false
                     for pid in $socket_pids; do
-                        kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+                        # Always skip if this PID is in our process tree (safety first)
+                        if is_pid_in_process_tree "$pid"; then
+                            if [ "$running_under_kubesolo" = "true" ]; then
+                                echo "   Skipping PID $pid (in our process tree)"
+                            fi
+                            continue
+                        fi
+                        
+                        # Verify PID is still valid and is actually a kubesolo process
+                        if kill -0 "$pid" 2>/dev/null; then
+                            # Double-check it's a kubesolo process before killing
+                            local is_kubesolo=false
+                            if [ -f "/proc/$pid/cmdline" ]; then
+                                local cmdline
+                                cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+                                if echo "$cmdline" | grep -q "kubesolo"; then
+                                    is_kubesolo=true
+                                fi
+                            fi
+                            
+                            # Only kill if it's a kubesolo process (or if we're not running under kubesolo)
+                            if [ "$is_kubesolo" = "true" ] || [ "$running_under_kubesolo" = "false" ]; then
+                                cleaned_any=true
+                                echo "   Stopping PID $pid"
+                                # Try graceful termination first (suppress any errors)
+                                (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
+                            fi
+                        fi
                     done
+                    
+                    if [ "$cleaned_any" = "false" ] && [ "$running_under_kubesolo" = "true" ]; then
+                        echo "   No safe processes to clean up (all are in our process tree)"
+                    fi
                     sleep 1
                 fi
             else
@@ -326,14 +627,44 @@ cleanup_file_conflicts() {
         local pid
         pid=$(cat "$pidfile" 2>/dev/null || echo "")
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            cleanup_needed=true
-            echo "🛑 Stopping process from PID file $pidfile (PID: $pid)..."
-            kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
-            sleep 1
+            # Check if this PID is in our process tree (always skip if it is)
+            if is_pid_in_process_tree "$pid"; then
+                echo "⚠️  PID file contains process in our process tree - skipping cleanup to avoid termination"
+            else
+                # Check if we're running under kubesolo (for warning only)
+                local running_under_kubesolo=false
+                if should_skip_cleanup; then
+                    running_under_kubesolo=true
+                    echo "⚠️  Script appears to be running under kubesolo - being extra careful"
+                fi
+                
+                # Verify it's actually a kubesolo process before killing
+                local is_kubesolo=false
+                if [ -f "/proc/$pid/cmdline" ]; then
+                    local cmdline
+                    cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
+                    if echo "$cmdline" | grep -q "kubesolo"; then
+                        is_kubesolo=true
+                    fi
+                fi
+                
+                # Only kill if it's a kubesolo process (or if we're not running under kubesolo)
+                if [ "$is_kubesolo" = "true" ] || [ "$running_under_kubesolo" = "false" ]; then
+                    cleanup_needed=true
+                    echo "🛑 Stopping process from PID file $pidfile (PID: $pid)..."
+                    # Try graceful termination first (suppress any errors)
+                    (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
+                    sleep 1
+                elif [ "$running_under_kubesolo" = "true" ]; then
+                    echo "⚠️  PID file contains non-kubesolo process - skipping cleanup"
+                fi
+            fi
         fi
-        # Remove stale PID file
-        rm -f "$pidfile" 2>/dev/null || true
-        echo "ℹ️  Cleaned up PID file"
+        # Remove stale PID file (only if process is not running or we're safe to do so)
+        if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null || ! is_pid_in_process_tree "$pid"; then
+            rm -f "$pidfile" 2>/dev/null || true
+            echo "ℹ️  Cleaned up PID file"
+        fi
     fi
     
     if [ "$cleanup_needed" = "true" ]; then
@@ -467,6 +798,9 @@ check_hostname_compliance
 
 # Function to check iptables xt_comment module support
 check_iptables_comment_module
+
+# Function to check for required cgroups controllers
+check_cgroups
 
 # Function to stop running KubeSolo processes
 stop_running_processes
