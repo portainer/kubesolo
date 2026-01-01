@@ -103,6 +103,7 @@ KubeSolo supports the following command-line flags:
 
 | Flag | Environment Variable | Description | Default |
 |------|-------------|---------|---------|
+| `--version` | `N/A` | Show the version and exit | `N/A` |
 | `--path` | `KUBESOLO_PATH` | Path to the directory containing the kubesolo configuration files | `/var/lib/kubesolo` |
 | `--apiserver-extra-sans` | `KUBESOLO_APISERVER_EXTRA_SANS` | A comma-separated list of additional Subject Alternative Names (SANs) to include in the API server's TLS certificate. These SANs can be IP addresses or DNS names (e.g., 10.0.0.4,kubesolo.local) | `""` |
 | `--portainer-edge-id` | `KUBESOLO_PORTAINER_EDGE_ID` | Portainer Edge ID | `""` |
