@@ -916,7 +916,6 @@ EOF
     systemctl daemon-reexec || handle_error "Failed to reexecute systemd daemon"
     systemctl daemon-reload || handle_error "Failed to reload systemd daemon"
     systemctl enable "$APP_NAME" || handle_error "Failed to enable $APP_NAME service"
-    systemctl restart "$APP_NAME" || handle_error "Failed to start $APP_NAME service"
     echo "✅ $APP_NAME service created and started with systemd"
 }
 
