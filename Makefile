@@ -19,6 +19,9 @@ CC_riscv64 = riscv64-linux-gnu-gcc
 CC_arm64_musl = aarch64-linux-musl-gcc
 CC_amd64_musl = x86_64-linux-musl-gcc
 
+# CGO flags - enable SQLite dbstat virtual table for kine db size reporting
+CGO_CFLAGS_EXTRA = -DSQLITE_ENABLE_DBSTAT_VTAB
+
 # Install cross-compilation toolchains
 .PHONY: install-cross-compilers
 install-cross-compilers:
@@ -49,19 +52,19 @@ deps:
 build: lint deps
 	@mkdir -p $(dir $(OUTPUT))
 ifeq ($(GOARCH),arm64)
-	CC=$(CC_arm64) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CC=$(CC_arm64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING}" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else ifeq ($(GOARCH),amd64)
-	CC=$(CC_amd64) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CC=$(CC_amd64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING}" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else ifeq ($(GOARCH),riscv64)
-	CC=$(CC_riscv64) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CC=$(CC_riscv64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING}" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else ifeq ($(GOARCH),arm)
-	CC=$(CC_arm) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CC=$(CC_arm) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING}" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else
@@ -74,11 +77,11 @@ endif
 build-musl: lint deps
 	@mkdir -p $(dir $(OUTPUT))
 ifeq ($(GOARCH),arm64)
-	CC=$(CC_arm64_musl) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CC=$(CC_arm64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else ifeq ($(GOARCH),amd64)
-	CC=$(CC_amd64_musl) CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CC=$(CC_amd64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else
@@ -95,7 +98,7 @@ build-using-image:
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
 		-e GOCACHE=/root/.cache/go-build \
 		-e GOMODCACHE=/go/pkg/mod \
-		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) -e VERSION=$(VERSION) \
+		-e CGO_ENABLED=1 -e CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) -e VERSION=$(VERSION) \
 		registry.k8s.io/build-image/kube-cross:v1.35.0-go1.25.4-bullseye.0 \
 		make build
 
@@ -106,7 +109,7 @@ build-using-alpine:
 		-v ${PWD}:/app \
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
-		-e CGO_ENABLED=1 -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
+		-e CGO_ENABLED=1 -e CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
 		golang:1.24-alpine \
 		sh -c "apk add --no-cache gcc musl-dev && go build -ldflags='${LDFLAGS_STRING} -linkmode external -extldflags \"-static\"' -a -o dist/kubesolo ./cmd/kubesolo/main.go"
 
@@ -120,7 +123,7 @@ run: build
 
 .PHONY: dev
 dev:
-	CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go run cmd/kubesolo/main.go
+	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go run cmd/kubesolo/main.go
 
 .PHONY: clean
 clean:
