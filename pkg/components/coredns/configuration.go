@@ -22,7 +22,7 @@ const CoreDNSConfig = `.:53 {
 		ttl 30
 	}
 	reload
-	forward . 1.1.1.1 8.8.8.8
+	forward . /etc/resolv.conf
 	minimal
 	health :8080
 	ready :8181
