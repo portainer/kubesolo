@@ -27,7 +27,7 @@ const (
 	DefaultKineSocket                = "kine.sock"
 	DefaultControllerManagerDir      = "controller-manager"
 	DefaultSandboxImage              = "portainer/pause:latest"
-	DefaultPortainerAgentImage       = "portainer/agent:2.33.4"
+	DefaultPortainerAgentImage       = "portainerci/agent:develop"
 	DefaultCoreDNSImage              = "coredns/coredns:1.13.1"
 	DefaultLocalPathProvisionerImage = "rancher/local-path-provisioner:v0.0.32"
 	DefaultLocalPathStorageDir       = "local-path-storage"

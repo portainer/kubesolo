@@ -8,7 +8,7 @@ ARCH="amd64"
 CONTAINERD_VERSION="2.1.5"
 RUNC_VERSION="v1.3.3"
 CNI_VERSION="v1.9.0"
-PORTAINER_AGENT_VERSION="2.33.4"
+PORTAINER_AGENT_VERSION="develop"
 COREDNS_VERSION="1.13.1"
 LOCAL_PATH_PROVISIONER_VERSION="v0.0.32"
 PAUSE_IMAGE_VERSION="3.10"
@@ -132,7 +132,7 @@ fi
 # Download Portainer Agent (skip for riscv64 as it's not supported)
 if [ "${ARCH}" != "riscv64" ]; then
     echo "Downloading Portainer Agent ${PORTAINER_AGENT_VERSION}..."
-    PORTAINER_IMAGE="portainer/agent:${PORTAINER_AGENT_VERSION}"
+    PORTAINER_IMAGE="portainerci/agent:${PORTAINER_AGENT_VERSION}"
     # Pull the image as uncompressed tar
     if ! crane pull --platform ${OS}/${ARCH} ${PORTAINER_IMAGE} internal/core/embedded/bin/images/portainer-agent.tar; then
         echo "Error pulling Portainer Agent image."
