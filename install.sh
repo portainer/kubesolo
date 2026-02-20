@@ -730,6 +730,7 @@ DEBUG="${KUBESOLO_DEBUG:-false}"
 PPROF_SERVER="${KUBESOLO_PPROF_SERVER:-false}"
 RUN_MODE="${KUBESOLO_RUN_MODE:-service}"  # service, foreground, or daemon
 PROXY="${KUBESOLO_PROXY:-}"
+KUBESOLO_BIN_PATH="${KUBESOLO_BIN_PATH:-}"
 
 # Parse command line arguments
 for arg in "$@"; do
@@ -767,6 +768,9 @@ for arg in "$@"; do
     --proxy=*)
       PROXY="${arg#*=}"
       ;;
+    --bin-path=*)
+      KUBESOLO_BIN_PATH="${arg#*=}"
+      ;;
     --help)
       echo "Usage: $0 [options]"
       echo "Options:"
@@ -781,6 +785,7 @@ for arg in "$@"; do
       echo "  --pprof-server=true|false    Enable pprof server (default: $PPROF_SERVER)"
       echo "  --run-mode=MODE              Run mode: service, foreground, or daemon (default: $RUN_MODE)"
       echo "  --proxy=URL                  Set proxy for HTTP/HTTPS requests"
+      echo "  --bin-path=PATH              Use a local binary or archive instead of downloading"
       echo "  --help                       Show this help message"
       echo ""
       echo "Supported Init Systems: systemd, sysvinit, s6, runit, openrc, upstart"
@@ -818,18 +823,47 @@ INSTALL_PATH="/usr/local/bin/$APP_NAME"
 
 echo "🔄 Installing $APP_NAME $KUBESOLO_VERSION for $INIT_SYSTEM init system..."
 
-# Download and extract the archive
-TEMP_DIR=$(mktemp -d -p $HOME) || handle_error "Failed to create temporary directory"
-echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION..."
-curl -sfL "$BIN_URL" -o "$TEMP_DIR/kubesolo.tar.gz" || handle_error "Failed to download $APP_NAME from $BIN_URL"
+if [ -n "$KUBESOLO_BIN_PATH" ]; then
+    # Install from a local binary or archive
+    [ -e "$KUBESOLO_BIN_PATH" ] || handle_error "Specified bin-path does not exist: $KUBESOLO_BIN_PATH"
+    TEMP_DIR=$(mktemp -d -p $HOME) || handle_error "Failed to create temporary directory"
 
-echo "📦 Extracting $APP_NAME..."
-tar -xzf "$TEMP_DIR/kubesolo.tar.gz" -C "$TEMP_DIR" || handle_error "Failed to extract $APP_NAME archive"
+    case "$KUBESOLO_BIN_PATH" in
+        *.tar.gz|*.tgz)
+            echo "📦 Extracting $APP_NAME from local archive $KUBESOLO_BIN_PATH..."
+            tar -xzf "$KUBESOLO_BIN_PATH" -C "$TEMP_DIR" || handle_error "Failed to extract $KUBESOLO_BIN_PATH"
+            echo "📝 Installing binary..."
+            mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+            ;;
+        *.zip)
+            command -v unzip >/dev/null 2>&1 || handle_error "unzip is required to extract .zip archives but was not found"
+            echo "📦 Extracting $APP_NAME from local zip archive $KUBESOLO_BIN_PATH..."
+            unzip -o "$KUBESOLO_BIN_PATH" -d "$TEMP_DIR" || handle_error "Failed to extract $KUBESOLO_BIN_PATH"
+            echo "📝 Installing binary..."
+            mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+            ;;
+        *)
+            echo "📝 Installing binary from local path $KUBESOLO_BIN_PATH..."
+            cp "$KUBESOLO_BIN_PATH" "$INSTALL_PATH" || handle_error "Failed to copy binary to $INSTALL_PATH"
+            ;;
+    esac
 
-echo "📝 Installing binary..."
-mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
-rm -rf "$TEMP_DIR"
-chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
+    rm -rf "$TEMP_DIR"
+    chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
+else
+    # Download and extract the archive
+    TEMP_DIR=$(mktemp -d -p $HOME) || handle_error "Failed to create temporary directory"
+    echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION..."
+    curl -sfL "$BIN_URL" -o "$TEMP_DIR/kubesolo.tar.gz" || handle_error "Failed to download $APP_NAME from $BIN_URL"
+
+    echo "📦 Extracting $APP_NAME..."
+    tar -xzf "$TEMP_DIR/kubesolo.tar.gz" -C "$TEMP_DIR" || handle_error "Failed to extract $APP_NAME archive"
+
+    echo "📝 Installing binary..."
+    mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+    rm -rf "$TEMP_DIR"
+    chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
+fi
 
 # Handle SELinux file contexts if SELinux tools are available
 if command -v restorecon >/dev/null 2>&1; then

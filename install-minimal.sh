@@ -27,6 +27,7 @@ CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 INSTALL_PATH="/usr/local/bin/kubesolo"
 USE_MUSL="${USE_MUSL:-false}"
 TEMP_DIR="${TEMP_DIR:-/tmp/kubesolo-install-$$}"
+KUBESOLO_BIN_PATH="${KUBESOLO_BIN_PATH:-}"
 
 # Parse basic arguments
 for arg in "$@"; do
@@ -36,6 +37,7 @@ for arg in "$@"; do
         --temp-dir=*) TEMP_DIR="${arg#*=}" ;;
         --musl) USE_MUSL="true" ;;
         --glibc) USE_MUSL="false" ;;
+        --bin-path=*) KUBESOLO_BIN_PATH="${arg#*=}" ;;
         --help)
             echo "Minimal KubeSolo installer for embedded systems"
             echo "Usage: $0 [OPTIONS]"
@@ -46,54 +48,86 @@ for arg in "$@"; do
             echo "  --temp-dir=PATH     Temporary directory for download/extraction (default: /tmp/kubesolo-install-\$\$)"
             echo "  --musl              Use musl-based binary (for Alpine Linux)"
             echo "  --glibc             Use glibc-based binary (default, for standard Linux)"
+            echo "  --bin-path=PATH     Use a local binary or archive instead of downloading"
             echo ""
             echo "Environment variables:"
-            echo "  KUBESOLO_VERSION - Version to install"
-            echo "  KUBESOLO_PATH    - Config path"
-            echo "  USE_MUSL         - Use musl binary (true/false)"
-            echo "  TEMP_DIR         - Temporary directory"
+            echo "  KUBESOLO_VERSION    - Version to install"
+            echo "  KUBESOLO_PATH       - Config path"
+            echo "  USE_MUSL            - Use musl binary (true/false)"
+            echo "  KUBESOLO_BIN_PATH   - Local binary or archive path"
+            echo "  TEMP_DIR            - Temporary directory"
             exit 0
             ;;
     esac
 done
 
-# Build download URL based on musl/glibc choice
-if [ "$USE_MUSL" = "true" ]; then
-    BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH-musl.tar.gz"
-    echo "Using musl-based binary (Alpine Linux compatible)"
-else
-    BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH.tar.gz"
-    echo "Using glibc-based binary (standard Linux, default)"
-fi
-
 echo "Installing KubeSolo $KUBESOLO_VERSION for $ARCH..."
 
-# Create temporary directory
-mkdir -p "$TEMP_DIR" || die "Failed to create temp directory: $TEMP_DIR"
+if [ -n "$KUBESOLO_BIN_PATH" ]; then
+    # Install from a local binary or archive
+    [ -e "$KUBESOLO_BIN_PATH" ] || die "Specified bin-path does not exist: $KUBESOLO_BIN_PATH"
+    mkdir -p "$TEMP_DIR" || die "Failed to create temp directory: $TEMP_DIR"
 
-# Download binary
-echo "Downloading from $BIN_URL..."
-if command -v wget >/dev/null 2>&1; then
-    wget -q -O "$TEMP_DIR/kubesolo.tar.gz" "$BIN_URL" || die "Download failed"
-elif command -v curl >/dev/null 2>&1; then
-    curl -sL -o "$TEMP_DIR/kubesolo.tar.gz" "$BIN_URL" || die "Download failed"
+    case "$KUBESOLO_BIN_PATH" in
+        *.tar.gz|*.tgz)
+            echo "Extracting from local archive $KUBESOLO_BIN_PATH..."
+            tar -xzf "$KUBESOLO_BIN_PATH" -C "$TEMP_DIR" || die "Extraction failed"
+            echo "Installing to $INSTALL_PATH..."
+            mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || die "Installation failed"
+            ;;
+        *.zip)
+            command -v unzip >/dev/null 2>&1 || die "unzip is required to extract .zip archives but was not found"
+            echo "Extracting from local zip archive $KUBESOLO_BIN_PATH..."
+            unzip -o "$KUBESOLO_BIN_PATH" -d "$TEMP_DIR" || die "Extraction failed"
+            echo "Installing to $INSTALL_PATH..."
+            mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || die "Installation failed"
+            ;;
+        *)
+            echo "Installing binary from local path $KUBESOLO_BIN_PATH..."
+            cp "$KUBESOLO_BIN_PATH" "$INSTALL_PATH" || die "Installation failed"
+            ;;
+    esac
+
+    cd /
+    rm -rf "$TEMP_DIR"
+    chmod +x "$INSTALL_PATH" || die "Failed to set permissions"
 else
-    die "Neither wget nor curl available"
+    # Build download URL based on musl/glibc choice
+    if [ "$USE_MUSL" = "true" ]; then
+        BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH-musl.tar.gz"
+        echo "Using musl-based binary (Alpine Linux compatible)"
+    else
+        BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH.tar.gz"
+        echo "Using glibc-based binary (standard Linux, default)"
+    fi
+
+    # Create temporary directory
+    mkdir -p "$TEMP_DIR" || die "Failed to create temp directory: $TEMP_DIR"
+
+    # Download binary
+    echo "Downloading from $BIN_URL..."
+    if command -v wget >/dev/null 2>&1; then
+        wget -q -O "$TEMP_DIR/kubesolo.tar.gz" "$BIN_URL" || die "Download failed"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -sL -o "$TEMP_DIR/kubesolo.tar.gz" "$BIN_URL" || die "Download failed"
+    else
+        die "Neither wget nor curl available"
+    fi
+
+    # Extract
+    echo "Extracting to $TEMP_DIR..."
+    cd "$TEMP_DIR"
+    tar -xzf kubesolo.tar.gz || die "Extraction failed"
+
+    # Install
+    echo "Installing to $INSTALL_PATH..."
+    mv kubesolo "$INSTALL_PATH" || die "Installation failed"
+    chmod +x "$INSTALL_PATH" || die "Failed to set permissions"
+
+    # Cleanup
+    cd /
+    rm -rf "$TEMP_DIR"
 fi
-
-# Extract
-echo "Extracting to $TEMP_DIR..."
-cd "$TEMP_DIR"
-tar -xzf kubesolo.tar.gz || die "Extraction failed"
-
-# Install
-echo "Installing to $INSTALL_PATH..."
-mv kubesolo "$INSTALL_PATH" || die "Installation failed"
-chmod +x "$INSTALL_PATH" || die "Failed to set permissions"
-
-# Cleanup
-cd /
-rm -rf "$TEMP_DIR"
 
 # Create basic startup script
 STARTUP_SCRIPT="/etc/init.d/kubesolo"
