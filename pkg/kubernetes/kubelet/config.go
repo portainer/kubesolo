@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
@@ -71,7 +72,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"clusterDomain": "cluster.local",
 		"clusterDNS":    []string{types.DefaultCoreDNSIP},
 
-		"resolvConf":        "/etc/resolv.conf",
+		"resolvConf":        network.GetHostResolvConf(s.kubeletDir),
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 
