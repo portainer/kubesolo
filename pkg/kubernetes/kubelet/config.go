@@ -40,6 +40,38 @@ func (s *service) writeKubeletConfigFile() error {
 }
 
 func (s *service) generateKubeletConfig() map[string]any {
+	cgroupDriver := "systemd"
+	if s.containerMode {
+		cgroupDriver = "cgroupfs"
+	}
+
+	evictionHard := map[string]string{
+		"memory.available": "75Mi",
+		"nodefs.available": "50Mi",
+	}
+	imageGCHigh := 95
+	systemReserved := map[string]string{"memory": "25Mi"}
+	kubeReserved := map[string]string{"memory": "25Mi"}
+	enforceNodeAllocatable := []string{"pods"}
+	cgroupsPerQOS := true
+	if s.containerMode {
+		evictionHard = map[string]string{
+			"memory.available":  "50Mi",
+			"nodefs.available":  "0%",
+			"nodefs.inodesFree": "0%",
+			"imagefs.available": "0%",
+		}
+		imageGCHigh = 100
+		// In a container, we cannot create the kubepods/system/kube cgroup hierarchies
+		// because cgroupv2 domain controllers block subtree creation.
+		// Disable QoS cgroup management and node allocatable enforcement entirely.
+		// Per-container cgroups are still managed by containerd/runc.
+		cgroupsPerQOS = false
+		enforceNodeAllocatable = []string{}
+		systemReserved = map[string]string{}
+		kubeReserved = map[string]string{}
+	}
+
 	return map[string]any{
 		"kind":         "KubeletConfiguration",
 		"apiVersion":   "kubelet.config.k8s.io/v1beta1",
@@ -71,11 +103,17 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"clusterDomain": "cluster.local",
 		"clusterDNS":    []string{types.DefaultCoreDNSIP},
 
-		"resolvConf":        "/etc/resolv.conf",
+		// In container mode, use /dev/null to prevent Docker/host DNS config from
+		// leaking into pods. Pods use ClusterFirst DNS policy by default which
+		// points to CoreDNS (clusterDNS above).
+		"resolvConf":        s.resolveConfPath(),
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 
-		"cgroupDriver": "systemd",
+		"cgroupDriver":  cgroupDriver,
+		"cgroupsPerQOS": cgroupsPerQOS,
+
+		"enforceNodeAllocatable": enforceNodeAllocatable,
 
 		"registerNode":                   true,
 		"readOnlyPort":                   0,
@@ -88,7 +126,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"volumeStatsAggPeriod":           "5m0s",
 		"imageMinimumGCAge":              "10m0s",
 		"imageMaximumGCAge":              "0s",
-		"imageGCHighThresholdPercent":    95,
+		"imageGCHighThresholdPercent":    imageGCHigh,
 		"imageGCLowThresholdPercent":     80,
 		"runtimeRequestTimeout":          "60s",
 		"cpuManagerReconcilePeriod":      "60s",
@@ -97,12 +135,9 @@ func (s *service) generateKubeletConfig() map[string]any {
 
 		"registerWithTaints": []map[string]any{},
 
-		"evictionHard": map[string]string{
-			"memory.available": "75Mi",
-			"nodefs.available": "50Mi",
-		},
-		"systemReserved": map[string]string{"memory": "25Mi"},
-		"kubeReserved":   map[string]string{"memory": "25Mi"},
+		"evictionHard":   evictionHard,
+		"systemReserved": systemReserved,
+		"kubeReserved":   kubeReserved,
 		"failSwapOn":     false,
 
 		"kubeAPIQPS":                10,
@@ -125,4 +160,11 @@ func (s *service) generateKubeletConfig() map[string]any {
 			"RotateKubeletServerCertificate": true,
 		},
 	}
+}
+
+func (s *service) resolveConfPath() string {
+	if s.containerMode {
+		return "/dev/null"
+	}
+	return "/etc/resolv.conf"
 }

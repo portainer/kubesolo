@@ -25,4 +25,5 @@ var (
 	LocalStorageSharedPath = Application.Flag("local-storage-shared-path", "Path to the shared file system for the local storage. Defaults to empty string.").Envar("KUBESOLO_LOCAL_STORAGE_SHARED_PATH").Default("").String()
 	Debug                  = Application.Flag("debug", "Enable debug logging. Defaults to false.").Envar("KUBESOLO_DEBUG").Default("false").Bool()
 	PprofServer            = Application.Flag("pprof-server", "Enable pprof server. Defaults to false.").Envar("KUBESOLO_PPROF_SERVER").Default("false").Bool()
+	ContainerMode          = Application.Flag("container-mode", "Run in container mode with cgroupfs driver and relaxed eviction thresholds. Auto-detected when running inside a container.").Envar("KUBESOLO_CONTAINER_MODE").Bool()
 )

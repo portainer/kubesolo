@@ -110,7 +110,7 @@ build-using-alpine:
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
 		-e CGO_ENABLED=1 -e CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
-		golang:1.24-alpine \
+		golang:1.25-alpine \
 		sh -c "apk add --no-cache gcc musl-dev && go build -ldflags='${LDFLAGS_STRING} -linkmode external -extldflags \"-static\"' -a -o dist/kubesolo ./cmd/kubesolo/main.go"
 
 .PHONY: lint
@@ -146,3 +146,26 @@ archive-musl:
 
 # Include custom make targets
 -include $(wildcard .dev/*.make)
+
+# ---------- Container Image targets ----------
+
+IMAGE_NAME ?= portainer/kubesolo
+IMAGE_TAG ?= $(VERSION)
+
+# Build the container image (downloads arch-specific deps, builds static binary via Alpine, then packages it)
+.PHONY: image
+image: deps build-using-alpine
+	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) -t $(IMAGE_NAME):latest .
+
+# Build multi-arch container images using buildx
+.PHONY: image-buildx
+image-buildx:
+	docker buildx build --platform linux/amd64,linux/arm64 \
+		-t $(IMAGE_NAME):$(IMAGE_TAG) -t $(IMAGE_NAME):latest \
+		--push .
+
+# Push the container image
+.PHONY: image-push
+image-push:
+	docker push $(IMAGE_NAME):$(IMAGE_TAG)
+	docker push $(IMAGE_NAME):latest

@@ -19,7 +19,7 @@ const (
 )
 
 // Deploy deploys all the necessary Kubernetes resources for CoreDNS
-func Deploy(adminKubeconfig string) error {
+func Deploy(adminKubeconfig string, containerMode bool) error {
 	time.Sleep(types.DefaultComponentSleep)
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.DefaultContextTimeout)
@@ -50,7 +50,7 @@ func Deploy(adminKubeconfig string) error {
 		return fmt.Errorf("failed to create CoreDNS Service: %v", err)
 	}
 
-	if err := createDeployment(ctx, clientset); err != nil {
+	if err := createDeployment(ctx, clientset, containerMode); err != nil {
 		return fmt.Errorf("failed to create CoreDNS Deployment: %v", err)
 	}
 	return nil

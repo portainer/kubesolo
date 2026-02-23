@@ -189,7 +189,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kubeproxy",
 			start: func() {
-				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile)
+				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode)
 				s.wg.Go(func() {
 					kubeproxyService.Run(kubeletReadyCh)
 				})
@@ -207,7 +207,7 @@ func (s *kubesolo) run() {
 	}
 
 	log.Info().Str("component", "kubesolo").Msg("deploying coredns...")
-	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile); err != nil {
+	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode); err != nil {
 		log.Fatal().Err(err).Msg("failed to deploy coredns")
 	}
 
@@ -280,6 +280,19 @@ func (s *kubesolo) bootstrap() {
 
 	// Setup paths
 	basePath := *flags.Path
+	containerMode := *flags.ContainerMode || system.IsRunningInContainer()
+	if containerMode {
+		log.Info().Str("component", "kubesolo").Msg("container mode detected, using cgroupfs driver and relaxed eviction thresholds")
+
+		if err := system.SetupContainerMounts(); err != nil {
+			log.Fatal().Err(err).Msg("failed to setup container mount propagation")
+		}
+
+		if err := system.SetupContainerCgroups(); err != nil {
+			log.Fatal().Err(err).Msg("failed to setup container cgroups")
+		}
+	}
+
 	s.embedded = types.Embedded{
 		// System Node IP
 		NodeIP: nodeIP,
@@ -400,5 +413,8 @@ func (s *kubesolo) bootstrap() {
 
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+
+		// Container Mode
+		ContainerMode: containerMode,
 	}
 }

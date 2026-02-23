@@ -1,0 +1,9 @@
+.git
+.github
+.dev
+*.md
+build/
+examples/
+assets/
+dist/
+!dist/kubesolo

@@ -128,6 +128,9 @@ type Embedded struct {
 
 	// Portainer Edge
 	IsPortainerEdge bool
+
+	// Container Mode
+	ContainerMode bool
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent
