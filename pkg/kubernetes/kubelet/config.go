@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
@@ -103,10 +104,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"clusterDomain": "cluster.local",
 		"clusterDNS":    []string{types.DefaultCoreDNSIP},
 
-		// In container mode, use /dev/null to prevent Docker/host DNS config from
-		// leaking into pods. Pods use ClusterFirst DNS policy by default which
-		// points to CoreDNS (clusterDNS above).
-		"resolvConf":        s.resolveConfPath(),
+		"resolvConf":        network.GetHostResolvConf(s.kubeletDir),
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 

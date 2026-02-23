@@ -68,6 +68,7 @@ func createDeployment(ctx context.Context, clientset *kubernetes.Clientset, cont
 					},
 				},
 				Spec: corev1.PodSpec{
+					DNSPolicy:          corev1.DNSDefault,
 					PriorityClassName:  priorityClassName,
 					ServiceAccountName: coreDNSServiceAccountName,
 					Containers: []corev1.Container{

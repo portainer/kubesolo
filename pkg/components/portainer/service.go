@@ -16,7 +16,8 @@ func createHeadlessService(ctx context.Context, clientset *kubernetes.Clientset)
 			Namespace: PortainerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP: "None",
+			ClusterIP:                "None",
+			PublishNotReadyAddresses: true,
 			Selector: map[string]string{
 				"app": PortainerEdgeAgentDeploymentName,
 			},
