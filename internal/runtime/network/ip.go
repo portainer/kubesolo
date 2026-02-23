@@ -76,7 +76,13 @@ var instanceMetadataServiceIP = net.ParseIP("169.254.169.254")
 // locations and validates that they contain usable nameservers (global unicast).
 // If no valid resolv.conf is found, it generates a fallback with public DNS servers.
 // This follows the same approach as k3s locateOrGenerateResolvConf.
-func GetHostResolvConf(dataDir string) string {
+func GetHostResolvConf(dataDir string, containerMode bool) string {
+	if containerMode {
+		log.Info().Str("component", "network").
+			Msg("running in container mode - using /dev/null for resolv.conf to prevent host DNS leakage into pods")
+		return "/dev/null"
+	}
+
 	resolvConfs := []string{"/etc/resolv.conf", "/run/systemd/resolve/resolv.conf"}
 	for _, conf := range resolvConfs {
 		if isValidResolvConf(conf) {

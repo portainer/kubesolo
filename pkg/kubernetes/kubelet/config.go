@@ -104,7 +104,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"clusterDomain": "cluster.local",
 		"clusterDNS":    []string{types.DefaultCoreDNSIP},
 
-		"resolvConf":        network.GetHostResolvConf(s.kubeletDir),
+		"resolvConf":        network.GetHostResolvConf(s.kubeletDir, s.containerMode),
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 
