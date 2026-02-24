@@ -155,12 +155,14 @@ IMAGE_TAG ?= $(VERSION)
 # Build the container image (downloads arch-specific deps, builds static binary via Alpine, then packages it)
 .PHONY: image
 image: deps build-using-alpine
-	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) -t $(IMAGE_NAME):latest .
+	docker buildx build \
+		--platform $(GOOS)/$(GOARCH) \
+		-t $(IMAGE_NAME):$(IMAGE_TAG)-$(GOOS)-$(GOARCH) .
 
 # Build multi-arch container images using buildx
 .PHONY: image-buildx
 image-buildx:
-	docker buildx build --platform linux/amd64,linux/arm64 \
+	docker buildx build --platform $(GOOS)/$(GOARCH) \
 		-t $(IMAGE_NAME):$(IMAGE_TAG) -t $(IMAGE_NAME):latest \
 		--push .
 

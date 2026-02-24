@@ -33,7 +33,7 @@ func Deploy(adminKubeconfig string, containerMode bool) error {
 		return fmt.Errorf("failed to create kubernetes client: %v", err)
 	}
 
-	if err := createConfigMap(ctx, clientset); err != nil {
+	if err := createConfigMap(ctx, clientset, containerMode); err != nil {
 		return fmt.Errorf("failed to create CoreDNS ConfigMap: %v", err)
 	}
 

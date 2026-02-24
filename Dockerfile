@@ -35,8 +35,7 @@ RUN apk add --no-cache \
     ca-certificates \
     && mkdir -p /var/lib/kubesolo
 
-COPY dist/kubesolo /usr/local/bin/kubesolo
-RUN chmod +x /usr/local/bin/kubesolo
+COPY --chmod=755 dist/kubesolo /usr/local/bin/kubesolo
 
 VOLUME ["/var/lib/kubesolo"]
 

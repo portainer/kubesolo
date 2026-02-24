@@ -159,10 +159,3 @@ func (s *service) generateKubeletConfig() map[string]any {
 		},
 	}
 }
-
-func (s *service) resolveConfPath() string {
-	if s.containerMode {
-		return "/dev/null"
-	}
-	return "/etc/resolv.conf"
-}
