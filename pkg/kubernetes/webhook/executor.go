@@ -33,8 +33,11 @@ func (s *Service) Start(ctx context.Context) error {
 	mux.HandleFunc("/mutate", s.serveMutate)
 
 	s.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", types.DefaultWebhookPort),
-		Handler: mux,
+		Addr:         fmt.Sprintf(":%d", types.DefaultWebhookPort),
+		ReadTimeout:  types.DefaultWebhookReadWriteTimeout,
+		WriteTimeout: types.DefaultWebhookReadWriteTimeout,
+		IdleTimeout:  types.DefaultWebhookIdleTimeout,
+		Handler:      mux,
 	}
 
 	log.Info().Str("component", "webhook").Msgf("starting webhook server on :%d", types.DefaultWebhookPort)

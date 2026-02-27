@@ -31,6 +31,8 @@ const (
 	DefaultCoreDNSImage              = "coredns/coredns:1.14.1"
 	DefaultLocalPathProvisionerImage = "rancher/local-path-provisioner:v0.0.34"
 	DefaultLocalPathStorageDir       = "local-path-storage"
+	DefaultWebhookReadWriteTimeout   = 10 * time.Second
+	DefaultWebhookIdleTimeout        = 30 * time.Second
 	DefaultContextTimeout            = 15 * time.Second
 	DefaultComponentSleep            = 5 * time.Second
 	DefaultRetryCount                = 5
