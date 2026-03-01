@@ -278,6 +278,9 @@ func (s *kubesolo) bootstrap() {
 		log.Warn().Err(err).Msg("failed to get node IP address, using default loopback IP address")
 	}
 
+	// Disable OpenTelemetry SDK to prevent it from interfering with the application's logging
+	os.Setenv("OTEL_SDK_DISABLED", "true")
+
 	// Setup paths
 	basePath := *flags.Path
 	s.embedded = types.Embedded{
