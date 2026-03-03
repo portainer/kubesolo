@@ -66,11 +66,6 @@ func (s *service) configureControllerManagerFlags(command *cobra.Command) {
 	_ = flags.Set("node-monitor-grace-period", "300s")
 	_ = flags.Set("min-resync-period", "12h")
 
-	// batch processing
-	_ = flags.Set("endpoint-updates-batch-period", "5s")
-	_ = flags.Set("endpointslice-updates-batch-period", "5s")
-	_ = flags.Set("mirroring-endpointslice-updates-batch-period", "5s")
-
 	// api server interactions
 	_ = flags.Set("kube-api-qps", "50")
 	_ = flags.Set("kube-api-burst", "100")
