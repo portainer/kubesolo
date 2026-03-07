@@ -1,16 +1,20 @@
 package system
 
 import (
+	"os"
 	"os/exec"
 
 	"github.com/rs/zerolog/log"
 )
 
-// requiredModules lists kernel modules needed by kubelet and kube-proxy.
-// Modules that are built-in to the kernel will fail modprobe gracefully.
-var requiredModules = []string{
+// commonModules are needed regardless of proxy mode
+var commonModules = []string{
 	"br_netfilter",
 	"overlay",
+}
+
+// iptablesModules are needed when kube-proxy uses iptables mode
+var iptablesModules = []string{
 	"xt_MASQUERADE",
 	"xt_conntrack",
 	"xt_comment",
@@ -23,11 +27,30 @@ var requiredModules = []string{
 	"xt_nfacct",
 }
 
+// nftablesModules are needed when kube-proxy uses nftables mode
+var nftablesModules = []string{
+	"nft_numgen",
+	"nft_redir",
+	"nft_limit",
+	"nft_tproxy",
+}
+
 // LoadRequiredModules attempts to load kernel modules required by Kubernetes
-// networking components. Failures are logged as warnings and do not prevent
-// startup — the module may be built-in or simply unavailable.
+// networking components. Detects whether the host supports iptables or nftables
+// and loads the appropriate module set. Failures are logged as warnings and do
+// not prevent startup — the module may be built-in or simply unavailable.
 func LoadRequiredModules() {
-	for _, mod := range requiredModules {
+	modules := commonModules
+
+	if _, err := os.Stat("/proc/net/ip_tables_names"); err != nil {
+		log.Info().Str("component", "kubesolo").Msg("iptables kernel modules not available, loading nftables modules")
+		modules = append(modules, nftablesModules...)
+	} else {
+		log.Info().Str("component", "kubesolo").Msg("iptables kernel modules available, loading iptables modules")
+		modules = append(modules, iptablesModules...)
+	}
+
+	for _, mod := range modules {
 		out, err := exec.Command("modprobe", mod).CombinedOutput()
 		if err != nil {
 			log.Warn().Str("component", "kubesolo").Msgf("modprobe %s: %v (output: %s) — module may be built-in or unavailable", mod, err, string(out))
