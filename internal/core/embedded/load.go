@@ -99,15 +99,13 @@ func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string) error
 	return nil
 }
 
-// loadKernelModules loads the necessary kernel modules
-// "overlay", "br_netfilter", "ip_tables", "iptable_filter", "iptable_nat", "nf_conntrack"
+// loadKernelModules loads the necessary kernel modules.
+// Legacy ip_tables modules are attempted but failures are non-fatal since
+// nova8OS uses nf_tables natively — iptables-nft works via nft_compat.
 func loadKernelModules() error {
 	essentialModules := []string{
 		"overlay",
 		"br_netfilter",
-		"ip_tables",
-		"iptable_filter",
-		"iptable_nat",
 		"nf_conntrack",
 	}
 
@@ -115,6 +113,19 @@ func loadKernelModules() error {
 		command := exec.Command("modprobe", module)
 		if err := command.Run(); err != nil {
 			return fmt.Errorf("failed to load essential kernel module %s... %v", module, err)
+		}
+	}
+
+	// Legacy iptables modules — soft-fail since nova8OS uses nf_tables backend
+	optionalModules := []string{
+		"ip_tables",
+		"iptable_filter",
+		"iptable_nat",
+	}
+	for _, module := range optionalModules {
+		command := exec.Command("modprobe", module)
+		if err := command.Run(); err != nil {
+			log.Debug().Str("component", "embedded").Msgf("optional module %s not available (nf_tables backend used) — skipping", module)
 		}
 	}
 
