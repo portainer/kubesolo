@@ -34,7 +34,7 @@ jobs:
     strategy:
       matrix:
         include:
-        # glibc builds (all architectures)
+        # glibc builds
         - goos: linux
           goarch: amd64
           libc: glibc
@@ -51,7 +51,7 @@ jobs:
           goarch: riscv64
           libc: glibc
           build_target: build
-        # musl builds (amd64, arm64 and arm)
+        # musl builds
         - goos: linux
           goarch: amd64
           libc: musl
@@ -62,6 +62,10 @@ jobs:
           build_target: build-musl
         - goos: linux
           goarch: arm
+          libc: musl
+          build_target: build-musl
+        - goos: linux
+          goarch: riscv64
           libc: musl
           build_target: build-musl
     steps:
