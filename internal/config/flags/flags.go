@@ -25,4 +25,5 @@ var (
 	LocalStorageSharedPath = Application.Flag("local-storage-shared-path", "Path to the shared file system for the local storage. Defaults to empty string.").Envar("KUBESOLO_LOCAL_STORAGE_SHARED_PATH").Default("").String()
 	Debug                  = Application.Flag("debug", "Enable debug logging. Defaults to false.").Envar("KUBESOLO_DEBUG").Default("false").Bool()
 	PprofServer            = Application.Flag("pprof-server", "Enable pprof server. Defaults to false.").Envar("KUBESOLO_PPROF_SERVER").Default("false").Bool()
+	ExperimentalInMemory   = Application.Flag("experimental-inmemory", "[Experimental] Use an in-memory store instead of SQLite for the kine datastore. Data will not persist across restarts. Defaults to false.").Envar("KUBESOLO_EXPERIMENTAL_INMEMORY").Default("false").Bool()
 )

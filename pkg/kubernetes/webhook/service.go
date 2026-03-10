@@ -67,10 +67,10 @@ func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer 
 		},
 	}
 
-	loadBalancerStatusPatch, _ := json.Marshal(map[string]interface{}{
-		"status": map[string]interface{}{
-			"loadBalancer": map[string]interface{}{
-				"ingress": []map[string]interface{}{
+	loadBalancerStatusPatch, _ := json.Marshal(map[string]any{
+		"status": map[string]any{
+			"loadBalancer": map[string]any{
+				"ingress": []map[string]any{
 					{
 						"ip": nodeIP,
 					},

@@ -48,6 +48,7 @@ type kubesolo struct {
 	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
+	experimentalInMemory   bool
 	embedded               types.Embedded
 }
 
@@ -74,6 +75,7 @@ func service() (*kubesolo, error) {
 		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
+		experimentalInMemory:   *flags.ExperimentalInMemory,
 	}, nil
 }
 
@@ -149,7 +151,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kine",
 			start: func() {
-				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh)
+				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.experimentalInMemory)
 				s.wg.Go(func() {
 					kineService.Run()
 				})
