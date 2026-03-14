@@ -28,6 +28,8 @@ type Service struct {
 	hostsEntries            map[string]string
 	nodeNamePatch           []byte
 	nodeSelectorPatch       []byte
+	nodeNamePatchObj        []map[string]any
+	nodeSelectorPatchObj    []map[string]any
 	pvcAnnotationPatch      []map[string]any
 	loadBalancerStatusPatch []byte
 	requestMutex            sync.Mutex
@@ -39,15 +41,16 @@ type Service struct {
 
 // NewService creates a new webhook server
 func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer bool) *Service {
-	nodeNamePatch, _ := json.Marshal([]map[string]any{
+	// define struct form first, marshal from it — no round trip
+	nodeNamePatchObj := []map[string]any{
 		{
 			"op":    "add",
 			"path":  "/spec/nodeName",
 			"value": nodeName,
 		},
-	})
+	}
 
-	nodeSelectorPatch, _ := json.Marshal([]map[string]any{
+	nodeSelectorPatchObj := []map[string]any{
 		{
 			"op":   "add",
 			"path": "/spec/template/spec/nodeSelector",
@@ -55,7 +58,10 @@ func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer 
 				"kubernetes.io/hostname": nodeName,
 			},
 		},
-	})
+	}
+
+	nodeNamePatch, _ := json.Marshal(nodeNamePatchObj)
+	nodeSelectorPatch, _ := json.Marshal(nodeSelectorPatchObj)
 
 	pvcAnnotationPatch := []map[string]any{
 		{
@@ -87,6 +93,8 @@ func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer 
 		hostsEntries:            make(map[string]string),
 		nodeNamePatch:           nodeNamePatch,
 		nodeSelectorPatch:       nodeSelectorPatch,
+		nodeNamePatchObj:        nodeNamePatchObj,
+		nodeSelectorPatchObj:    nodeSelectorPatchObj,
 		pvcAnnotationPatch:      pvcAnnotationPatch,
 		loadBalancerStatusPatch: loadBalancerStatusPatch,
 		loadBalancer:            loadBalancer,
