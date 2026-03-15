@@ -19,6 +19,7 @@ CC_riscv64 = riscv64-linux-gnu-gcc
 CC_arm64_musl = aarch64-linux-musl-gcc
 CC_amd64_musl = x86_64-linux-musl-gcc
 CC_arm_musl = arm-linux-musleabihf-gcc
+CC_riscv64_musl = riscv64-linux-musl-gcc
 
 # CGO flags - enable SQLite dbstat virtual table for kine db size reporting
 CGO_CFLAGS_EXTRA = -DSQLITE_ENABLE_DBSTAT_VTAB
@@ -37,11 +38,13 @@ install-musl-cross-compilers:
 	# Install musl cross-compilers from musl.cc
 	wget -q https://kubesolo-io-assets.sfo3.cdn.digitaloceanspaces.com/musl/aarch64-linux-musl-cross.tgz -O /tmp/aarch64-musl.tgz
 	wget -q https://kubesolo-io-assets.sfo3.cdn.digitaloceanspaces.com/musl/x86_64-linux-musl-cross.tgz -O /tmp/x86_64-musl.tgz
-	wget -q https://musl.cc/arm-linux-musleabihf-cross.tgz -O /tmp/arm-musl.tgz
-	cd /opt && tar -xzf /tmp/aarch64-musl.tgz && tar -xzf /tmp/x86_64-musl.tgz && tar -xzf /tmp/arm-musl.tgz
+	wget -q https://kubesolo-io-assets.sfo3.cdn.digitaloceanspaces.com/musl/arm-linux-musleabihf-cross.tgz -O /tmp/arm-musl.tgz
+	wget -q https://kubesolo-io-assets.sfo3.cdn.digitaloceanspaces.com/musl/riscv64-linux-musl-cross.tgz -O /tmp/riscv64-musl.tgz
+	cd /opt && tar -xzf /tmp/aarch64-musl.tgz && tar -xzf /tmp/x86_64-musl.tgz && tar -xzf /tmp/arm-musl.tgz && tar -xzf /tmp/riscv64-musl.tgz
 	ln -sf /opt/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc /usr/local/bin/aarch64-linux-musl-gcc
 	ln -sf /opt/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
 	ln -sf /opt/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc /usr/local/bin/arm-linux-musleabihf-gcc
+	ln -sf /opt/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc /usr/local/bin/riscv64-linux-musl-gcc
 
 .PHONY: release-workflow-deps
 release-workflow-deps: install-cross-compilers install-musl-cross-compilers
@@ -75,7 +78,7 @@ else
 	@exit 1
 endif
 
-# Build with musl for Alpine Linux compatibility (amd64 and arm64 only)
+# Build with musl for Alpine Linux compatibility
 .PHONY: build-musl
 build-musl: lint deps
 	@mkdir -p $(dir $(OUTPUT))
@@ -91,8 +94,12 @@ else ifeq ($(GOARCH),arm)
 	CC=$(CC_arm_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=7 go build \
 		-ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),riscv64)
+	CC=$(CC_riscv64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else
-	@echo "musl builds only supported for amd64, arm64, and arm architectures"
+	@echo "Unsupported architecture for musl build: $(GOARCH)"
 	@exit 1
 endif
 
@@ -137,12 +144,13 @@ clean:
 	rm -rf ./dist/kubesolo*
 	rm -rf ./internal/core/embedded/bin
 
-# Build all supported architectures with musl (amd64 and arm64)
+# Build all supported architectures with musl
 .PHONY: build-all-musl
 build-all-musl:
 	GOARCH=amd64 make build-musl
 	GOARCH=arm64 make build-musl
 	GOARCH=arm make build-musl
+	GOARCH=riscv64 make build-musl
 
 .PHONY: archive
 archive:
