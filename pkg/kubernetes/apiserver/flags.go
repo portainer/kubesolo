@@ -17,7 +17,7 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 
 	// etcd configuration
 	_ = flags.Set("etcd-servers", types.DefaultKineEndpoint)
-	_ = flags.Set("etcd-compaction-interval", "0")
+	_ = flags.Set("etcd-compaction-interval", "5m")
 	_ = flags.Set("etcd-count-metric-poll-period", "0")
 	_ = flags.Set("etcd-db-metric-poll-interval", "0")
 

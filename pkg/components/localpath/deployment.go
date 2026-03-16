@@ -49,7 +49,6 @@ func createDeployment(ctx context.Context, clientset *kubernetes.Clientset) erro
 							},
 							Command: []string{
 								"local-path-provisioner",
-								"--debug",
 								"start",
 								"--config",
 								"/etc/config/config.json",
