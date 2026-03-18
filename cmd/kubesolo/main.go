@@ -272,6 +272,9 @@ func (s *kubesolo) bootstrap() {
 	logging.SetLoggingLevel("INFO")
 	logging.ConfigureK8sDefaultLogging()
 
+	// Load required kernel modules before any networking setup
+	system.LoadRequiredModules()
+
 	// System Node IP
 	nodeIP, err := network.GetNodeIP()
 	if err != nil {

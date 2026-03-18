@@ -2,6 +2,7 @@ package kubeproxy
 
 import (
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -12,6 +13,19 @@ import (
 
 	proxy "k8s.io/kubernetes/cmd/kube-proxy/app"
 )
+
+// flushNftablesNat clears any existing nftables nat table rules before
+// kube-proxy starts. This prevents conflicts between native nftables rules
+// (e.g., from Podman's netavark) and kube-proxy's iptables-nft translation
+// layer, which cannot coexist with pre-existing native nftables entries.
+func flushNftablesNat() {
+	out, err := exec.Command("nft", "flush", "table", "ip", "nat").CombinedOutput()
+	if err != nil {
+		log.Debug().Str("component", "kubeproxy").Msgf("nft flush table ip nat: %v (output: %s) — table may not exist, skipping", err, string(out))
+		return
+	}
+	log.Info().Str("component", "kubeproxy").Msg("flushed nftables ip nat table to avoid iptables-nft conflicts")
+}
 
 // Run starts the kube proxy in the following order:
 // 1. it sets the kube proxy flags
@@ -29,6 +43,7 @@ func (s *service) Run(kubeletReadyCh chan struct{}) error {
 	time.Sleep(types.DefaultComponentSleep)
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		<-kubeletReadyCh
+		flushNftablesNat()
 		s.wg.Go(func() {
 			if err := command.ExecuteContext(s.ctx); err != nil {
 				log.Error().Str("component", "kubeproxy").Msgf("kubeproxy exited with error: %v", err)

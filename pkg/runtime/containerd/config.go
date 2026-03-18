@@ -9,6 +9,14 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// isCgroupV2 returns true if the host uses the cgroupv2 unified hierarchy.
+// When true, runc must use the systemd cgroup driver (SystemdCgroup=true)
+// instead of the cgroupfs driver which generates cgroupv1-style paths.
+func isCgroupV2() bool {
+	_, err := os.Stat("/sys/fs/cgroup/cgroup.controllers")
+	return err == nil
+}
+
 // writeConfigFile writes the containerd config to a file
 func (s *service) writeContainerdConfigFile() error {
 	tree, err := toml.TreeFromMap(s.generateContainerdConfig())
@@ -108,7 +116,8 @@ func (s *service) generateContainerdConfig() map[string]any {
 							"sandboxer":         "podsandbox",
 							"io_type":           "",
 							"options": map[string]any{
-								"BinaryName": s.runcBinaryFile,
+								"BinaryName":    s.runcBinaryFile,
+								"SystemdCgroup": isCgroupV2(),
 							},
 						},
 					},
