@@ -27,8 +27,9 @@ var (
 	PprofServer            = Application.Flag("pprof-server", "Enable pprof server. Defaults to false.").Envar("KUBESOLO_PPROF_SERVER").Default("false").Bool()
 	RegistryMirrors        = Application.Flag(
 		"registry-mirror",
-		"Configure a registry mirror. Format: UPSTREAM=MIRROR_URL "+
-			"(e.g. docker.io=https://harbor.corp/v2/docker.io). "+
+		"Configure a registry mirror. Format: UPSTREAM=MIRROR_URL where MIRROR_URL is the full OCI API base URL (the part before the image path). "+
+			"Plain pull-through proxy: docker.io=https://mirror.corp. "+
+			"Harbor proxy cache project: docker.io=https://harbor.corp/v2/docker.io. "+
 			"Repeatable. Use '_default' as upstream for a catch-all mirror.",
 	).Envar("KUBESOLO_REGISTRY_MIRRORS").StringMap()
 )
