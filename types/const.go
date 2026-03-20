@@ -14,6 +14,7 @@ const (
 	DefaultSystemContainerdSock      = "/run/containerd/containerd.sock"
 	DefaultStandardCNIConfDir        = "/etc/cni/net.d"
 	DefaultContainerdConfigDir       = "/etc/containerd/config.d"
+	DefaultContainerdCertsDir        = "/etc/containerd/certs.d"
 	DefaultCNIConfigName             = "10-bridge.conflist"
 	DefaultK8sNamespace              = "k8s.io"
 	DefaultKubeletDir                = "kubelet"

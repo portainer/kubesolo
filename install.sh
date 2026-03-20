@@ -727,6 +727,7 @@ PORTAINER_EDGE_KEY="${KUBESOLO_PORTAINER_EDGE_KEY:-}"
 PORTAINER_EDGE_ASYNC="${KUBESOLO_PORTAINER_EDGE_ASYNC:-false}"
 LOCAL_STORAGE="${KUBESOLO_LOCAL_STORAGE:-false}"
 DEBUG="${KUBESOLO_DEBUG:-false}"
+REGISTRY_MIRRORS_ARGS=""
 PPROF_SERVER="${KUBESOLO_PPROF_SERVER:-false}"
 RUN_MODE="${KUBESOLO_RUN_MODE:-service}"  # service, foreground, or daemon
 PROXY="${KUBESOLO_PROXY:-}"
@@ -771,6 +772,10 @@ for arg in "$@"; do
     --bin-path=*)
       KUBESOLO_BIN_PATH="${arg#*=}"
       ;;
+    --registry-mirror=*)
+      val="${arg#*=}"
+      REGISTRY_MIRRORS_ARGS="$REGISTRY_MIRRORS_ARGS --registry-mirror=$val"
+      ;;
     --help)
       echo "Usage: $0 [options]"
       echo "Options:"
@@ -786,6 +791,8 @@ for arg in "$@"; do
       echo "  --run-mode=MODE              Run mode: service, foreground, or daemon (default: $RUN_MODE)"
       echo "  --proxy=URL                  Set proxy for HTTP/HTTPS requests"
       echo "  --bin-path=PATH              Use a local binary or archive instead of downloading"
+      echo "  --registry-mirror=UPSTREAM=URL   Registry mirror (repeatable)."
+      echo "                                   E.g. --registry-mirror=docker.io=https://harbor.corp/v2/docker.io"
       echo "  --help                       Show this help message"
       echo ""
       echo "Supported Init Systems: systemd, sysvinit, s6, runit, openrc, upstart"
@@ -896,6 +903,10 @@ fi
 
 if [ "$PPROF_SERVER" = "true" ]; then
   CMD_ARGS="$CMD_ARGS --pprof-server=$PPROF_SERVER"
+fi
+
+if [ -n "$REGISTRY_MIRRORS_ARGS" ]; then
+  CMD_ARGS="$CMD_ARGS $REGISTRY_MIRRORS_ARGS"
 fi
 
 # Function to generate proxy environment variables

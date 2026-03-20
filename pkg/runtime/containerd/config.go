@@ -72,7 +72,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"sandbox": types.DefaultSandboxImage,
 				},
 				"registry": map[string]any{
-					"config_path": "",
+					"config_path": types.DefaultContainerdCertsDir,
 				},
 				"image_decryption": map[string]any{
 					"key_model": "node",

@@ -28,6 +28,12 @@ func (s *service) Run() error {
 		return err
 	}
 
+	if err := s.writeRegistryMirrorFiles(s.registryMirrors); err != nil {
+		log.Error().Str("component", "containerd").Msgf("failed to write registry mirror files: %v", err)
+		s.terminate()
+		return err
+	}
+
 	if err := s.writeContainerdConfigFile(); err != nil {
 		log.Error().Str("component", "containerd").Msgf("failed to write config file: %v...", err)
 		s.terminate()

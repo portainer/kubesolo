@@ -25,4 +25,10 @@ var (
 	LocalStorageSharedPath = Application.Flag("local-storage-shared-path", "Path to the shared file system for the local storage. Defaults to empty string.").Envar("KUBESOLO_LOCAL_STORAGE_SHARED_PATH").Default("").String()
 	Debug                  = Application.Flag("debug", "Enable debug logging. Defaults to false.").Envar("KUBESOLO_DEBUG").Default("false").Bool()
 	PprofServer            = Application.Flag("pprof-server", "Enable pprof server. Defaults to false.").Envar("KUBESOLO_PPROF_SERVER").Default("false").Bool()
+	RegistryMirrors        = Application.Flag(
+		"registry-mirror",
+		"Configure a registry mirror. Format: UPSTREAM=MIRROR_URL "+
+			"(e.g. docker.io=https://harbor.corp/v2/docker.io). "+
+			"Repeatable. Use '_default' as upstream for a catch-all mirror.",
+	).Envar("KUBESOLO_REGISTRY_MIRRORS").StringMap()
 )

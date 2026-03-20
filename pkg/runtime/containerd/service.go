@@ -27,6 +27,7 @@ type service struct {
 	sandboxImageFile              string
 	localPathProvisionerImageFile string
 	isPortainerEdge               bool
+	registryMirrors               map[string]string
 }
 
 // NewService creates a new containerd service
@@ -49,5 +50,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, containerdReady 
 		sandboxImageFile:              embedded.SandboxImageFile,
 		localPathProvisionerImageFile: embedded.LocalPathProvisionerImageFile,
 		isPortainerEdge:               embedded.IsPortainerEdge,
+		registryMirrors:               embedded.RegistryMirrors,
 	}
 }

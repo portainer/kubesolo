@@ -48,6 +48,7 @@ type kubesolo struct {
 	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
+	registryMirrors        map[string]string
 	embedded               types.Embedded
 }
 
@@ -74,6 +75,7 @@ func service() (*kubesolo, error) {
 		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
+		registryMirrors:        *flags.RegistryMirrors,
 	}, nil
 }
 
@@ -406,5 +408,8 @@ func (s *kubesolo) bootstrap() {
 
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+
+		// Registry mirrors
+		RegistryMirrors: s.registryMirrors,
 	}
 }

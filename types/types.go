@@ -128,6 +128,10 @@ type Embedded struct {
 
 	// Portainer Edge
 	IsPortainerEdge bool
+
+	// RegistryMirrors maps upstream registry → mirror URL
+	// e.g. "docker.io" → "https://harbor.corp/v2/docker.io"
+	RegistryMirrors map[string]string
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent
