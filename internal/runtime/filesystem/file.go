@@ -12,13 +12,11 @@ func FileExists(path string) bool {
 	return err == nil
 }
 
-// EnsureDirectoryExists creates a directory if it does not exist
-// it returns an error if it fails
+// EnsureDirectoryExists creates the directory (and any necessary parents) if it does not
+// already exist. It returns an error for any failure, including permission errors that the
+// previous Stat-gated implementation silently ignored.
 func EnsureDirectoryExists(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return os.MkdirAll(path, 0755)
-	}
-	return nil
+	return os.MkdirAll(path, 0755)
 }
 
 // EnsureSymbolicLink removes the existing target and creates a new symbolic link

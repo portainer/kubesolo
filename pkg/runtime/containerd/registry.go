@@ -30,6 +30,13 @@ var wellKnownUpstreamServers = map[string]string{
 	"k8s.gcr.io":      "https://k8s.gcr.io",
 }
 
+// isValidUpstream reports whether upstream is safe to use as a directory name under
+// certs.d. It rejects empty values, path separators, and path traversal sequences that
+// could allow writes outside the certs.d directory.
+func isValidUpstream(upstream string) bool {
+	return upstream != "" && !strings.Contains(upstream, "/") && !strings.Contains(upstream, "..")
+}
+
 // hasNonRootPath returns true if the mirror URL contains a non-root path component,
 // which indicates that override_path = true is required.
 func hasNonRootPath(mirrorURL string) bool {
@@ -98,12 +105,25 @@ func (s *service) writeRegistryMirrorFiles(mirrors map[string]string) error {
 	}
 
 	for upstream, mirrorURL := range mirrors {
+		if !isValidUpstream(upstream) {
+			log.Warn().Str("component", "containerd").
+				Str("upstream", upstream).
+				Msg("skipping registry mirror: upstream contains invalid characters")
+			continue
+		}
+
 		u, err := url.Parse(mirrorURL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			log.Warn().Str("component", "containerd").
 				Str("upstream", upstream).
 				Str("mirror", mirrorURL).
-				Msg("skipping registry mirror: invalid URL or unsupported scheme (must be http or https)")
+				Msg("skipping registry mirror: invalid URL, unsupported scheme (must be http or https), or missing host")
+			continue
+		}
+		if u.User != nil {
+			log.Warn().Str("component", "containerd").
+				Str("upstream", upstream).
+				Msg("skipping registry mirror: credentials in mirror URL are not supported — manage the hosts.toml file manually")
 			continue
 		}
 
@@ -135,7 +155,7 @@ func (s *service) writeRegistryMirrorFiles(mirrors map[string]string) error {
 
 		log.Info().Str("component", "containerd").
 			Str("upstream", upstream).
-			Str("mirror", mirrorURL).
+			Str("mirror", u.Redacted()).
 			Msg("wrote registry mirror hosts.toml")
 	}
 

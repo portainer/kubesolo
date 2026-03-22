@@ -82,6 +82,32 @@ func TestHasNonRootPath(t *testing.T) {
 	}
 }
 
+func TestIsValidUpstream(t *testing.T) {
+	cases := []struct {
+		upstream string
+		valid    bool
+	}{
+		{"docker.io", true},
+		{"ghcr.io", true},
+		{"harbor.corp:5000", true},
+		{"_default", true},
+		{"myregistry.corp", true},
+		{"", false},
+		{"/etc/passwd", false},
+		{"../etc", false},
+		{"..", false},
+		{"docker.io/library", false},
+		{"foo/bar", false},
+	}
+
+	for _, c := range cases {
+		got := isValidUpstream(c.upstream)
+		if got != c.valid {
+			t.Errorf("isValidUpstream(%q) = %v, want %v", c.upstream, got, c.valid)
+		}
+	}
+}
+
 func TestIsManagedByKubesolo_ManagedFile(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "hosts.toml")
 	content := generateHostsTOML("docker.io", "https://mirror.corp")

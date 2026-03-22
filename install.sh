@@ -774,6 +774,11 @@ for arg in "$@"; do
       ;;
     --registry-mirror=*)
       val="${arg#*=}"
+      case "$val" in
+        *[\;\&\|\`\$\<\>]*)
+          handle_error "--registry-mirror: mirror URL contains shell metacharacters: $val"
+          ;;
+      esac
       REGISTRY_MIRRORS_ARGS="$REGISTRY_MIRRORS_ARGS --registry-mirror=$val"
       ;;
     --help)
