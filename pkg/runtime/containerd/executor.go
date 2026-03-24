@@ -72,6 +72,7 @@ func (s *service) postSetup() {
 	client, err := client.New(s.containerdSocketFile)
 	if err != nil {
 		s.terminate()
+		return
 	}
 	defer client.Close()
 
@@ -91,11 +92,13 @@ func (s *service) postSetup() {
 	if err := s.ensureK8sNamespace(ctx, client); err != nil {
 		log.Error().Str("component", "containerd").Msgf("failed to ensure k8s.io namespace: %v...", err)
 		s.terminate()
+		return
 	}
 
 	if err := s.importImages(ctx, client, s.isPortainerEdge); err != nil {
 		log.Error().Str("component", "containerd").Msgf("failed to import images: %v...", err)
 		s.terminate()
+		return
 	}
 }
 
