@@ -44,7 +44,9 @@ func (s *service) Run(apiServerReadyCh chan struct{}) error {
 	}
 
 	s.wg.Go(func() {
-		s.postSetup()
+		if err := s.postSetup(); err != nil {
+			return
+		}
 		log.Info().Str("component", "controller").Msg("controller manager ready...")
 		close(s.controllerReady)
 	})
@@ -59,11 +61,20 @@ func (s *service) Run(apiServerReadyCh chan struct{}) error {
 	return nil
 }
 
-func (s *service) postSetup() {
+func (s *service) postSetup() error {
 	if err := s.checkControllerManagerHealth(); err != nil {
 		log.Error().Str("component", "controller").Msgf("controller manager health check failed: %v", err)
-		s.terminate()
+		s.cancelShutdown()
+		return err
 	}
+	return nil
+}
+
+// cancelShutdown cancels the service context. Use from goroutines started with s.wg.Go;
+// terminate() must not be called from those goroutines (it waits on s.wg and deadlocks).
+func (s *service) cancelShutdown() {
+	log.Info().Str("component", "controller").Msg("canceling controller manager...")
+	s.cancel()
 }
 
 func (s *service) terminate() {

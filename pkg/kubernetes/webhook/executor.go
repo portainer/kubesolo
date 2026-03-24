@@ -17,7 +17,9 @@ func (w *Service) RegisterWebhook() error {
 	if err != nil {
 		return fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
+	w.clientsetMu.Lock()
 	w.clientset = clientset
+	w.clientsetMu.Unlock()
 
 	webhookConfig, err := w.createConfiguration()
 	if err != nil {
