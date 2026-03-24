@@ -24,6 +24,7 @@ type Service struct {
 	nodeName                string
 	nodeIP                  string
 	pkiPath                 string
+	clientsetMu             sync.Mutex
 	clientset               *kubernetes.Clientset
 	hostsEntries            map[string]string
 	nodeNamePatch           []byte
@@ -99,4 +100,11 @@ func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer 
 		loadBalancerStatusPatch: loadBalancerStatusPatch,
 		loadBalancer:            loadBalancer,
 	}
+}
+
+// getClientset returns the Kubernetes clientset, or nil if RegisterWebhook has not completed.
+func (w *Service) getClientset() *kubernetes.Clientset {
+	w.clientsetMu.Lock()
+	defer w.clientsetMu.Unlock()
+	return w.clientset
 }

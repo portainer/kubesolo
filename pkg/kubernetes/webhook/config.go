@@ -66,7 +66,8 @@ func (w *Service) createConfiguration() (*admissionregistrationv1.MutatingWebhoo
 
 // createOrUpdateConfig creates or updates the webhook configuration
 func (w *Service) createOrUpdateConfig(webhookConfig *admissionregistrationv1.MutatingWebhookConfiguration) error {
-	existingConfig, err := w.clientset.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(context.Background(), types.DefaultWebhookName, metav1.GetOptions{})
+	cs := w.getClientset()
+	existingConfig, err := cs.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(context.Background(), types.DefaultWebhookName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return w.createConfig(webhookConfig)
@@ -79,7 +80,8 @@ func (w *Service) createOrUpdateConfig(webhookConfig *admissionregistrationv1.Mu
 
 // createConfig creates a new webhook configuration
 func (w *Service) createConfig(webhookConfig *admissionregistrationv1.MutatingWebhookConfiguration) error {
-	_, err := w.clientset.AdmissionregistrationV1().MutatingWebhookConfigurations().Create(context.Background(), webhookConfig, metav1.CreateOptions{})
+	cs := w.getClientset()
+	_, err := cs.AdmissionregistrationV1().MutatingWebhookConfigurations().Create(context.Background(), webhookConfig, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create webhook configuration: %v", err)
 	}
@@ -91,7 +93,8 @@ func (w *Service) createConfig(webhookConfig *admissionregistrationv1.MutatingWe
 // updateConfig updates an existing webhook configuration
 func (w *Service) updateConfig(webhookConfig *admissionregistrationv1.MutatingWebhookConfiguration, existingConfig *admissionregistrationv1.MutatingWebhookConfiguration) error {
 	webhookConfig.ObjectMeta.ResourceVersion = existingConfig.ObjectMeta.ResourceVersion
-	_, err := w.clientset.AdmissionregistrationV1().MutatingWebhookConfigurations().Update(context.Background(), webhookConfig, metav1.UpdateOptions{})
+	cs := w.getClientset()
+	_, err := cs.AdmissionregistrationV1().MutatingWebhookConfigurations().Update(context.Background(), webhookConfig, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update webhook configuration: %v", err)
 	}

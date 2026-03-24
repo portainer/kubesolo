@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"k8s.io/client-go/kubernetes"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,13 +17,14 @@ func (s *Service) updateLoadBalancerStatus(namespace, name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if s.clientset == nil {
+	cs := s.getClientset()
+	if cs == nil {
 		log.Error().Str("component", "webhook").
 			Msg("clientset is nil, cannot update LoadBalancer status")
 		return
 	}
 
-	err := s.updateLoadBalancerStatusWithRetry(ctx, namespace, name)
+	err := s.updateLoadBalancerStatusWithRetry(ctx, namespace, name, cs)
 	if err != nil {
 		log.Error().Str("component", "webhook").
 			Str("service", name).
@@ -32,13 +34,13 @@ func (s *Service) updateLoadBalancerStatus(namespace, name string) {
 	}
 }
 
-func (s *Service) updateLoadBalancerStatusWithRetry(ctx context.Context, namespace, name string) error {
+func (s *Service) updateLoadBalancerStatusWithRetry(ctx context.Context, namespace, name string, cs kubernetes.Interface) error {
 	return wait.ExponentialBackoff(wait.Backoff{
 		Duration: 1 * time.Second,
 		Factor:   2,
 		Steps:    5,
 	}, func() (bool, error) {
-		svc, err := s.clientset.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+		svc, err := cs.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			log.Warn().Str("component", "webhook").
 				Str("service", name).
@@ -56,7 +58,7 @@ func (s *Service) updateLoadBalancerStatusWithRetry(ctx context.Context, namespa
 			return true, nil
 		}
 
-		_, err = s.clientset.CoreV1().Services(namespace).Patch(
+		_, err = cs.CoreV1().Services(namespace).Patch(
 			ctx,
 			name,
 			types.MergePatchType,
