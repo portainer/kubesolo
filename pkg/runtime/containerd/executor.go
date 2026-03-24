@@ -40,7 +40,7 @@ func (s *service) Run() error {
 		s.wg.Go(func() {
 			if err := app.Run(nil); err != nil {
 				log.Error().Str("component", "containerd").Msgf("failed to start containerd: %v...", err)
-				s.terminate()
+				s.cancelShutdown()
 			}
 		})
 		return nil
@@ -49,7 +49,9 @@ func (s *service) Run() error {
 	}
 
 	s.wg.Go(func() {
-		s.postSetup()
+		if err := s.postSetup(); err != nil {
+			return
+		}
 		close(s.containerdReady)
 	})
 	log.Info().Str("component", "containerd").Msg("containerd started successfully...")
@@ -64,39 +66,50 @@ func (s *service) Run() error {
 	return nil
 }
 
-func (s *service) postSetup() {
+func (s *service) postSetup() error {
 	log.Debug().Str("component", "containerd").Msg("waiting for containerd to be ready...")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	client, err := client.New(s.containerdSocketFile)
 	if err != nil {
-		s.terminate()
+		s.cancelShutdown()
+		return err
 	}
 	defer client.Close()
 
 	if err := s.checkContainerdHealth(ctx, client); err != nil {
 		log.Error().Str("component", "containerd").Msgf("containerd health check failed: %v...", err)
-		s.terminate()
-		return
+		s.cancelShutdown()
+		return err
 	}
 
 	log.Debug().Str("component", "containerd").Msg("containerd health check passed... now creating containerd socket link")
 	if err := filesystem.EnsureSymbolicLink(s.containerdSocketFile, types.DefaultSystemContainerdSock); err != nil {
 		log.Error().Str("component", "containerd").Msgf("failed to create containerd socket link: %v...", err)
-		s.terminate()
-		return
+		s.cancelShutdown()
+		return err
 	}
 
 	if err := s.ensureK8sNamespace(ctx, client); err != nil {
 		log.Error().Str("component", "containerd").Msgf("failed to ensure k8s.io namespace: %v...", err)
-		s.terminate()
+		s.cancelShutdown()
+		return err
 	}
 
 	if err := s.importImages(ctx, client, s.isPortainerEdge); err != nil {
 		log.Error().Str("component", "containerd").Msgf("failed to import images: %v...", err)
-		s.terminate()
+		s.cancelShutdown()
+		return err
 	}
+	return nil
+}
+
+// cancelShutdown cancels the service context. Use from goroutines started with s.wg.Go;
+// terminate() must not be called from those goroutines (it waits on s.wg and deadlocks).
+func (s *service) cancelShutdown() {
+	log.Info().Str("component", "containerd").Msg("canceling containerd...")
+	s.cancel()
 }
 
 func (s *service) terminate() {
