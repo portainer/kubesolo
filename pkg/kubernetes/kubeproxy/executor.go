@@ -55,7 +55,9 @@ func (s *service) Run(kubeletReadyCh chan struct{}) error {
 	}
 
 	s.wg.Go(func() {
-		s.postSetup()
+		if err := s.postSetup(); err != nil {
+			return
+		}
 		log.Info().Str("component", "kubeproxy").Msg("kubeproxy started successfully...")
 		close(s.kubeproxyReady)
 	})
@@ -70,11 +72,20 @@ func (s *service) Run(kubeletReadyCh chan struct{}) error {
 	return nil
 }
 
-func (s *service) postSetup() {
+func (s *service) postSetup() error {
 	if err := s.checkKubeProxyHealth(); err != nil {
 		log.Error().Str("component", "kubeproxy").Msgf("kubeproxy health check failed: %v...", err)
-		s.terminate()
+		s.cancelShutdown()
+		return err
 	}
+	return nil
+}
+
+// cancelShutdown cancels the service context. Use from goroutines started with s.wg.Go;
+// terminate() must not be called from those goroutines (it waits on s.wg and deadlocks).
+func (s *service) cancelShutdown() {
+	log.Info().Str("component", "kubeproxy").Msg("canceling kubeproxy...")
+	s.cancel()
 }
 
 func (s *service) terminate() {

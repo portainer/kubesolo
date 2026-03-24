@@ -56,7 +56,9 @@ func (s *service) Run(kineReadyCh chan struct{}) error {
 	}
 
 	s.wg.Go(func() {
-		s.postSetup()
+		if err := s.postSetup(); err != nil {
+			return
+		}
 		log.Info().Str("component", "apiserver").Msg("API server ready...")
 		close(s.apiServerReady)
 	})
@@ -71,12 +73,12 @@ func (s *service) Run(kineReadyCh chan struct{}) error {
 	return nil
 }
 
-func (s *service) postSetup() {
+func (s *service) postSetup() error {
 	err := s.checkAPIServerReadiness()
 	if err != nil {
 		log.Error().Str("component", "apiserver").Msgf("API server failed to start: %v...", err)
-		s.terminate()
-		return
+		s.cancelShutdown()
+		return err
 	}
 
 	if err := s.generateKubeConfig(); err != nil {
@@ -90,6 +92,14 @@ func (s *service) postSetup() {
 	if err := s.kubeSoloWebhook.RegisterWebhook(); err != nil {
 		log.Error().Str("component", "apiserver").Msgf("failed to register the kubesolo webhook: %v...", err)
 	}
+	return nil
+}
+
+// cancelShutdown cancels the service context. Use from goroutines started with s.wg.Go;
+// terminate() must not be called from those goroutines (it waits on s.wg and deadlocks).
+func (s *service) cancelShutdown() {
+	log.Info().Str("component", "apiserver").Msg("canceling the API server...")
+	s.cancel()
 }
 
 func (s *service) terminate() {
