@@ -70,14 +70,14 @@ jobs:
           build_target: build-musl
     steps:
     - name: "[preparation] checkout the current branch"
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         tags: true
     - name: "[preparation] set build time"
       run: echo BUILD_TIME=$(date) >> ${GITHUB_ENV}
     - name: "[preparation] set up golang"
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version-file: go.mod
         cache-dependency-path: go.sum
