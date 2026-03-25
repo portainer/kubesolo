@@ -357,8 +357,9 @@ func (s *kubesolo) bootstrap() {
 		ContainerdImagesDir:      filepath.Join(basePath, types.DefaultContainerdDir, "images"),
 		ContainerdShimBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
 		ContainerdConfigFile:     filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
-		ContainerdRootDir:        filepath.Join(basePath, types.DefaultContainerdDir, "root"),
-		ContainerdStateDir:       filepath.Join(basePath, types.DefaultContainerdDir, "state"),
+		ContainerdRootDir:           filepath.Join(basePath, types.DefaultContainerdDir, "root"),
+		ContainerdStateDir:          filepath.Join(basePath, types.DefaultContainerdDir, "state"),
+		ContainerdRegistryConfigDir: filepath.Join(basePath, types.DefaultContainerdDir, "registry"),
 
 		// CNI paths
 		ContainerdCNIDir:        filepath.Join(basePath, types.DefaultContainerdDir, "cni"),

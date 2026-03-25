@@ -73,14 +73,15 @@ type Embedded struct {
 	RequestHeaderCerts     RequestHeaderCertificatePaths
 
 	// Containerd directories and files
-	ContainerdDir            string
-	ContainerdSocketFile     string
-	ContainerdBinaryFile     string
-	ContainerdImagesDir      string
-	ContainerdConfigFile     string
-	ContainerdShimBinaryFile string
-	ContainerdRootDir        string
-	ContainerdStateDir       string
+	ContainerdDir               string
+	ContainerdSocketFile        string
+	ContainerdBinaryFile        string
+	ContainerdImagesDir         string
+	ContainerdConfigFile        string
+	ContainerdShimBinaryFile    string
+	ContainerdRootDir           string
+	ContainerdStateDir          string
+	ContainerdRegistryConfigDir string
 
 	// Conitainerd CNI directories and files
 	ContainerdCNIDir        string
