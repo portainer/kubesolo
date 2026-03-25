@@ -52,7 +52,6 @@ func (s *service) generateContainerdConfig() map[string]any {
 		"disabled_plugins": []string{},
 		"required_plugins": []string{},
 		"oom_score":        0,
-		"imports":          []string{types.DefaultContainerdConfigDir + "/*.toml"},
 		"grpc": map[string]any{
 			"address": s.containerdSocketFile,
 			"uid":     0,
@@ -72,7 +71,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"sandbox": types.DefaultSandboxImage,
 				},
 				"registry": map[string]any{
-					"config_path": "",
+					"config_path": s.containerdRegistryConfigDir,
 				},
 				"image_decryption": map[string]any{
 					"key_model": "node",
