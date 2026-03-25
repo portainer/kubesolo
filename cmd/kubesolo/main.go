@@ -359,7 +359,7 @@ func (s *kubesolo) bootstrap() {
 		ContainerdConfigFile:     filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
 		ContainerdRootDir:           filepath.Join(basePath, types.DefaultContainerdDir, "root"),
 		ContainerdStateDir:          filepath.Join(basePath, types.DefaultContainerdDir, "state"),
-		ContainerdRegistryConfigDir: filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdRegistryDir),
+		ContainerdRegistryConfigDir: filepath.Join(basePath, types.DefaultContainerdDir, "registry"),
 
 		// CNI paths
 		ContainerdCNIDir:        filepath.Join(basePath, types.DefaultContainerdDir, "cni"),
