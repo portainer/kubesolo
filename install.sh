@@ -203,7 +203,12 @@ check_cgroups() {
 # Function to stop running KubeSolo processes
 stop_running_processes() {
     echo "🔍 Checking for running KubeSolo processes..."
-    
+
+    # Exclude the install script process and its parent so that a path containing
+    # "kubesolo" (e.g. --offline-install=./kubesolo-v1.1.2-linux-amd64.tar.gz)
+    # doesn't cause the script to kill itself.
+    local exclude_pids_pattern="^($$|$PPID)$"
+
     # Try to stop service first (graceful shutdown)
     if command -v systemctl >/dev/null 2>&1; then
         if systemctl is-active --quiet kubesolo 2>/dev/null; then
@@ -220,11 +225,11 @@ stop_running_processes() {
             fi
         fi
     fi
-    
+
     # Find all remaining processes with kubesolo in the command line
     local pids
-    pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
-    
+    pids=$(pgrep -f "kubesolo" 2>/dev/null | grep -vE "$exclude_pids_pattern" || true)
+
     if [ -n "$pids" ]; then
         echo "🛑 Stopping remaining KubeSolo processes..."
         for pid in $pids; do
@@ -239,12 +244,12 @@ stop_running_processes() {
                 kill -TERM "$pid" 2>/dev/null || true
             fi
         done
-        
+
         # Wait a bit for graceful shutdown
         sleep 2
-        
+
         # Force kill any that are still running
-        pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
+        pids=$(pgrep -f "kubesolo" 2>/dev/null | grep -vE "$exclude_pids_pattern" || true)
         if [ -n "$pids" ]; then
             echo "🛑 Force stopping remaining processes..."
             for pid in $pids; do
@@ -252,12 +257,12 @@ stop_running_processes() {
             done
             sleep 1
         fi
-        
+
         # Verify processes are actually stopped with retries
         local retries=5
         local wait_time=1
         while [ $retries -gt 0 ]; do
-            pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
+            pids=$(pgrep -f "kubesolo" 2>/dev/null | grep -vE "$exclude_pids_pattern" || true)
             if [ -z "$pids" ]; then
                 break
             fi
@@ -266,9 +271,9 @@ stop_running_processes() {
             retries=$((retries - 1))
             wait_time=$((wait_time + 1))
         done
-        
+
         # Final check
-        pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
+        pids=$(pgrep -f "kubesolo" 2>/dev/null | grep -vE "$exclude_pids_pattern" || true)
         if [ -n "$pids" ]; then
             echo "⚠️  Some KubeSolo processes may still be running, but continuing..."
         else
@@ -730,7 +735,8 @@ DEBUG="${KUBESOLO_DEBUG:-false}"
 PPROF_SERVER="${KUBESOLO_PPROF_SERVER:-false}"
 RUN_MODE="${KUBESOLO_RUN_MODE:-service}"  # service, foreground, or daemon
 PROXY="${KUBESOLO_PROXY:-}"
-KUBESOLO_BIN_PATH="${KUBESOLO_BIN_PATH:-}"
+KUBESOLO_OFFLINE_INSTALL="${KUBESOLO_OFFLINE_INSTALL:-}"
+DOWNLOAD_ONLY_DIR="${KUBESOLO_DOWNLOAD_DIR:-}"
 
 # Parse command line arguments
 for arg in "$@"; do
@@ -768,8 +774,14 @@ for arg in "$@"; do
     --proxy=*)
       PROXY="${arg#*=}"
       ;;
-    --bin-path=*)
-      KUBESOLO_BIN_PATH="${arg#*=}"
+    --offline-install=*)
+      KUBESOLO_OFFLINE_INSTALL="${arg#*=}"
+      ;;
+    --download-only)
+      DOWNLOAD_ONLY_DIR="."
+      ;;
+    --download-only=*)
+      DOWNLOAD_ONLY_DIR="${arg#*=}"
       ;;
     --help)
       echo "Usage: $0 [options]"
@@ -785,7 +797,8 @@ for arg in "$@"; do
       echo "  --pprof-server=true|false    Enable pprof server (default: $PPROF_SERVER)"
       echo "  --run-mode=MODE              Run mode: service, foreground, or daemon (default: $RUN_MODE)"
       echo "  --proxy=URL                  Set proxy for HTTP/HTTPS requests"
-      echo "  --bin-path=PATH              Use a local binary or archive instead of downloading"
+      echo "  --offline-install=PATH       Use a local binary or archive instead of downloading"
+      echo "  --download-only[=DIR]        Download binary archive and install script for offline use (default dir: .)"
       echo "  --help                       Show this help message"
       echo ""
       echo "Supported Init Systems: systemd, sysvinit, s6, runit, openrc, upstart"
@@ -794,6 +807,33 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Binary configuration — shared by both download-only and install paths
+APP_NAME="kubesolo"
+ARCHIVE_NAME="kubesolo-$KUBESOLO_VERSION-$OS-$ARCH$LIBC_SUFFIX.tar.gz"
+BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/$ARCHIVE_NAME"
+
+# Handle download-only mode before any pre-flight checks or installation
+if [ -n "$DOWNLOAD_ONLY_DIR" ]; then
+    INSTALL_SCRIPT_URL="https://get.kubesolo.io"
+
+    mkdir -p "$DOWNLOAD_ONLY_DIR" || handle_error "Failed to create output directory: $DOWNLOAD_ONLY_DIR"
+
+    echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION ($OS/$ARCH$LIBC_SUFFIX)..."
+    curl -sfL "$BIN_URL" -o "$DOWNLOAD_ONLY_DIR/$ARCHIVE_NAME" || handle_error "Failed to download $APP_NAME from $BIN_URL"
+    echo "✅ Binary archive saved to: $DOWNLOAD_ONLY_DIR/$ARCHIVE_NAME"
+
+    echo "📥 Downloading install script..."
+    curl -sfL "$INSTALL_SCRIPT_URL" -o "$DOWNLOAD_ONLY_DIR/install.sh" || handle_error "Failed to download install script from $INSTALL_SCRIPT_URL"
+    chmod +x "$DOWNLOAD_ONLY_DIR/install.sh"
+    echo "✅ Install script saved to: $DOWNLOAD_ONLY_DIR/install.sh"
+
+    echo ""
+    echo "✅ Download complete! Files saved to: $DOWNLOAD_ONLY_DIR"
+    echo "💡 To install offline, transfer these files to the target machine and run:"
+    echo "   sudo sh install.sh --offline-install=$ARCHIVE_NAME"
+    exit 0
+fi
 
 # Function to check for Docker prerequisite
 check_docker_prerequisite
@@ -817,34 +857,32 @@ stop_port_processes
 cleanup_file_conflicts
 
 # Service configuration
-APP_NAME="kubesolo"
-BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-$OS-$ARCH$LIBC_SUFFIX.tar.gz"
 INSTALL_PATH="/usr/local/bin/$APP_NAME"
 
 echo "🔄 Installing $APP_NAME $KUBESOLO_VERSION for $INIT_SYSTEM init system..."
 
-if [ -n "$KUBESOLO_BIN_PATH" ]; then
+if [ -n "$KUBESOLO_OFFLINE_INSTALL" ]; then
     # Install from a local binary or archive
-    [ -e "$KUBESOLO_BIN_PATH" ] || handle_error "Specified bin-path does not exist: $KUBESOLO_BIN_PATH"
+    [ -e "$KUBESOLO_OFFLINE_INSTALL" ] || handle_error "Specified offline-install path does not exist: $KUBESOLO_OFFLINE_INSTALL"
     TEMP_DIR=$(mktemp -d -p $HOME) || handle_error "Failed to create temporary directory"
 
-    case "$KUBESOLO_BIN_PATH" in
+    case "$KUBESOLO_OFFLINE_INSTALL" in
         *.tar.gz|*.tgz)
-            echo "📦 Extracting $APP_NAME from local archive $KUBESOLO_BIN_PATH..."
-            tar -xzf "$KUBESOLO_BIN_PATH" -C "$TEMP_DIR" || handle_error "Failed to extract $KUBESOLO_BIN_PATH"
+            echo "📦 Extracting $APP_NAME from local archive $KUBESOLO_OFFLINE_INSTALL..."
+            tar -xzf "$KUBESOLO_OFFLINE_INSTALL" -C "$TEMP_DIR" || handle_error "Failed to extract $KUBESOLO_OFFLINE_INSTALL"
             echo "📝 Installing binary..."
             mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
             ;;
         *.zip)
             command -v unzip >/dev/null 2>&1 || handle_error "unzip is required to extract .zip archives but was not found"
-            echo "📦 Extracting $APP_NAME from local zip archive $KUBESOLO_BIN_PATH..."
-            unzip -o "$KUBESOLO_BIN_PATH" -d "$TEMP_DIR" || handle_error "Failed to extract $KUBESOLO_BIN_PATH"
+            echo "📦 Extracting $APP_NAME from local zip archive $KUBESOLO_OFFLINE_INSTALL..."
+            unzip -o "$KUBESOLO_OFFLINE_INSTALL" -d "$TEMP_DIR" || handle_error "Failed to extract $KUBESOLO_OFFLINE_INSTALL"
             echo "📝 Installing binary..."
             mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
             ;;
         *)
-            echo "📝 Installing binary from local path $KUBESOLO_BIN_PATH..."
-            cp "$KUBESOLO_BIN_PATH" "$INSTALL_PATH" || handle_error "Failed to copy binary to $INSTALL_PATH"
+            echo "📝 Installing binary from local path $KUBESOLO_OFFLINE_INSTALL..."
+            cp "$KUBESOLO_OFFLINE_INSTALL" "$INSTALL_PATH" || handle_error "Failed to copy binary to $INSTALL_PATH"
             ;;
     esac
 
