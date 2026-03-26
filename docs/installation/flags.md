@@ -17,14 +17,20 @@ Two URLs serve the install script depending on which channel you need.
 
 > **Warning:** `get-dev.kubesolo.io` should not be used in production. It may install pre-release behaviour or defaults that differ from the stable release.
 
-Flags are passed identically to both URLs:
+Flags are passed identically to both URLs. When piping the script, use `sh -s --` so the shell reads from stdin (`-s`) and treats everything after `--` as arguments to the script rather than options to `sh` itself:
 
 ```bash
 # Stable
-curl -sfL https://get.kubesolo.io | sudo sh - --version=v1.1.2 --local-storage=true
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.1.2 --local-storage=true
 
 # Development
-curl -sfL https://get-dev.kubesolo.io | sudo sh - --local-storage=true
+curl -sfL https://get-dev.kubesolo.io | sudo sh -s -- --local-storage=true
+```
+
+When running a downloaded copy of the script directly, flags are passed normally:
+
+```bash
+sudo sh install.sh --version=v1.1.2 --local-storage=true
 ```
 
 ---
@@ -40,7 +46,7 @@ Set the KubeSolo version to install. Defaults to the latest stable release bundl
 | `--version=VERSION` | `KUBESOLO_VERSION` | `v1.1.2` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --version=v1.1.2
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.1.2
 ```
 
 ---
@@ -54,7 +60,7 @@ Override the directory KubeSolo uses for its data, PKI, and configuration. Usefu
 | `--path=PATH` | `KUBESOLO_PATH` | `/var/lib/kubesolo` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --path=/data/kubesolo
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --path=/data/kubesolo
 ```
 
 ---
@@ -68,7 +74,7 @@ Add extra Subject Alternative Names to the API server TLS certificate. Accepts a
 | `--apiserver-extra-sans=SANS` | `KUBESOLO_APISERVER_EXTRA_SANS` | _(none)_ |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --apiserver-extra-sans=10.0.0.5,k8s.corp.internal
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --apiserver-extra-sans=10.0.0.5,k8s.corp.internal
 ```
 
 ---
@@ -105,7 +111,7 @@ Enable asynchronous mode for the Portainer Edge Agent. In async mode the agent d
 curl -sfL https://get.kubesolo.io | \
   KUBESOLO_PORTAINER_EDGE_ID=<your-edge-id> \
   KUBESOLO_PORTAINER_EDGE_KEY=<your-edge-key> \
-  sudo -E sh - --portainer-edge-async=true
+  sudo -E sh -s -- --portainer-edge-async=true
 ```
 
 ---
@@ -119,7 +125,7 @@ Enable the [Local Path Provisioner](https://github.com/rancher/local-path-provis
 | `--local-storage=true\|false` | `KUBESOLO_LOCAL_STORAGE` | `false` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --local-storage=true
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --local-storage=true
 ```
 
 ---
@@ -133,7 +139,7 @@ Enable verbose debug logging in the KubeSolo process.
 | `--debug=true\|false` | `KUBESOLO_DEBUG` | `false` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --debug=true
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --debug=true
 ```
 
 ---
@@ -147,7 +153,7 @@ Start the Go pprof HTTP server on port `6060`. Intended for profiling and perfor
 | `--pprof-server=true\|false` | `KUBESOLO_PPROF_SERVER` | `false` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --pprof-server=true
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --pprof-server=true
 ```
 
 ---
@@ -167,7 +173,7 @@ Control how KubeSolo is started after installation.
 | `--run-mode=MODE` | `KUBESOLO_RUN_MODE` | `service` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --run-mode=daemon
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --run-mode=daemon
 ```
 
 ---
@@ -181,7 +187,7 @@ Route KubeSolo's outbound HTTP and HTTPS traffic through a proxy. The value is a
 | `--proxy=URL` | `KUBESOLO_PROXY` | _(none)_ |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --proxy=http://proxy.corp.internal:3128
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --proxy=http://proxy.corp.internal:3128
 ```
 
 ---
@@ -223,13 +229,13 @@ The downloaded files are named after the detected OS, architecture, and version:
 **Download to the current directory:**
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --download-only
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --download-only
 ```
 
 **Download to a specific directory:**
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh - --download-only=./kubesolo-offline
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --download-only=./kubesolo-offline
 ```
 
 **Install on the air-gapped machine:**
