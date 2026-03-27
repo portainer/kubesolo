@@ -210,7 +210,7 @@ See [--download-only](#--download-only) for how to prepare the required files on
 
 ### --download-only
 
-Download the KubeSolo binary archive and a copy of the install script to a local directory, then exit. No installation is performed and no pre-flight checks are run. Intended for preparing an offline bundle on an internet-connected machine before transferring it to an air-gapped target.
+Download the KubeSolo binary archive and a copy of the install script to a local directory, then exit. No installation is performed and no pre-flight checks are run. **Root is not required** — this flag is safe to run on a developer laptop (including one with Docker installed) and is intended for preparing an offline bundle before transferring it to an air-gapped target.
 
 Accepts an optional directory path. Defaults to the current directory when no path is given.
 
@@ -229,13 +229,13 @@ The downloaded files are named after the detected OS, architecture, and version:
 **Download to the current directory:**
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh -s -- --download-only
+curl -sfL https://get.kubesolo.io | sh -s -- --download-only
 ```
 
 **Download to a specific directory:**
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh -s -- --download-only=./kubesolo-offline
+curl -sfL https://get.kubesolo.io | sh -s -- --download-only=./kubesolo-offline
 ```
 
 **Install on the air-gapped machine:**
