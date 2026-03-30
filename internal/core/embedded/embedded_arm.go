@@ -1,4 +1,4 @@
-//go:build (linux && amd64) || (linux && arm64)
+//go:build linux && arm
 
 package embedded
 
@@ -13,7 +13,7 @@ import (
 //go:embed bin/containerd/bin/containerd-shim-runc-v2
 var containerdShimBinary []byte
 
-//go:embed bin/containerd-shim-wasmtime-v1
+// containerd-shim-wasmtime-v1 is not available for arm32
 var wasmShimBinary []byte
 
 //go:embed bin/runc

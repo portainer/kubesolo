@@ -106,42 +106,8 @@ fi
 chmod +x internal/core/embedded/bin/runc
 
 # Download WASM shim (containerd-shim-wasmtime-v1)
-if [ "${ARCH}" = "arm" ]; then
-    # Build WASM shim for ARM using Docker cross-compilation
-    echo "Building WASM shim ${RUNWASI_VERSION} for ${OS}-${ARCH} using Docker..."
-
-    # Check if Docker is available
-    if ! command -v docker &> /dev/null; then
-        echo "Docker is required to build the WASM shim for ARM but is not installed."
-        echo "Please install Docker or use pre-built binaries."
-        exit 1
-    fi
-
-    # Build the WASM shim image with the specified version
-    if ! docker build -f build/wasm-shim.Dockerfile --build-arg RUNWASI_VERSION=${RUNWASI_VERSION} -t wasm-shim-arm32-cross .; then
-        echo "Error building WASM shim Docker image."
-        exit 1
-    fi
-
-    # Extract the compiled binary
-    echo "Extracting WASM shim binary..."
-    if ! docker create --name temp-wasm-shim wasm-shim-arm32-cross; then
-        echo "Error creating temporary container."
-        exit 1
-    fi
-
-    if ! docker cp temp-wasm-shim:/containerd-shim-wasmtime-v1 internal/core/embedded/bin/containerd-shim-wasmtime-v1; then
-        echo "Error extracting WASM shim binary from container."
-        docker rm temp-wasm-shim 2>/dev/null
-        exit 1
-    fi
-
-    docker rm temp-wasm-shim
-
-    chmod +x internal/core/embedded/bin/containerd-shim-wasmtime-v1
-    echo "Successfully built WASM shim for ARM."
-elif [ "${ARCH}" = "riscv64" ]; then
-    echo "Skipping WASM shim for riscv64 (not supported)"
+if [ "${ARCH}" = "arm" ] || [ "${ARCH}" = "riscv64" ]; then
+    echo "Skipping WASM shim for ${ARCH} (not supported)"
 else
     # Map architecture to runwasi release asset naming
     RUNWASI_ARCH="${ARCH}"
