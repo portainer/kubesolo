@@ -23,6 +23,7 @@ var (
 	LoadBalancer           = Application.Flag("load-balancer", "Enable load balancer. With this enabled, kubesolo will update a newly deployed service with the load balancer type so that the EXTERNAL-IP is set to the node IP. Defaults to true.").Envar("KUBESOLO_LOAD_BALANCER").Default("true").Bool()
 	LocalStorage           = Application.Flag("local-storage", "Enable local storage. Defaults to false.").Envar("KUBESOLO_LOCAL_STORAGE").Default("true").Bool()
 	LocalStorageSharedPath = Application.Flag("local-storage-shared-path", "Path to the shared file system for the local storage. Defaults to empty string.").Envar("KUBESOLO_LOCAL_STORAGE_SHARED_PATH").Default("").String()
+	Wasm                   = Application.Flag("wasm", "Enable WebAssembly runtime support via wasmtime").Envar("KUBESOLO_WASM").Default("false").Bool()
 	Debug                  = Application.Flag("debug", "Enable debug logging. Defaults to false.").Envar("KUBESOLO_DEBUG").Default("false").Bool()
 	PprofServer            = Application.Flag("pprof-server", "Enable pprof server. Defaults to false.").Envar("KUBESOLO_PPROF_SERVER").Default("false").Bool()
 )

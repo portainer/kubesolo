@@ -10,6 +10,7 @@ const (
 	DefaultWebhookPort               = 10443
 	DefaultPKIDir                    = "pki"
 	DefaultContainerdDir             = "containerd"
+	DefaultWasmShimBinaryName        = "containerd-shim-wasmtime-v1"
 	DefaultContainerdSocket          = "containerd.sock"
 	DefaultSystemContainerdSock      = "/run/containerd/containerd.sock"
 	DefaultStandardCNIConfDir        = "/etc/cni/net.d"

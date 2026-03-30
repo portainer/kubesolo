@@ -92,6 +92,10 @@ type Embedded struct {
 	// Runc binary
 	RuncBinaryFile string
 
+	// Wasm shim binary
+	WasmShimBinaryFile string
+	EnableWasm         bool
+
 	// Kubelet directories
 	KubeletDir            string
 	KubeletConfigDir      string

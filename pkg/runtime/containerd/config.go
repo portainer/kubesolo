@@ -41,6 +41,41 @@ func (s *service) writeContainerdConfigFile() error {
 	return nil
 }
 
+// generateContainerdRuntimes builds the runtimes map for the CRI runtime plugin.
+// The runc runtime is always present; wasmtime is added only when WASM support
+// is enabled via s.enableWasm.
+func (s *service) generateContainerdRuntimes() map[string]any {
+	runtimes := map[string]any{
+		"runc": map[string]any{
+			"runtime_type":                    "io.containerd.runc.v2",
+			"runtime_path":                    s.containerdShimBinaryFile,
+			"pod_annotations":                 []string{},
+			"container_annotations":           []string{},
+			"privileged_without_host_devices": false,
+			"privileged_without_host_devices_all_devices_allowed": false,
+			"base_runtime_spec": "",
+			"cni_conf_dir":      "",
+			"cni_max_conf_num":  0,
+			"snapshotter":       "",
+			"sandboxer":         "podsandbox",
+			"io_type":           "",
+			"options": map[string]any{
+				"BinaryName":    s.runcBinaryFile,
+				"SystemdCgroup": isCgroupV2(),
+			},
+		},
+	}
+
+	if s.enableWasm {
+		runtimes["wasmtime"] = map[string]any{
+			"runtime_type": "io.containerd.wasmtime.v1",
+			"runtime_path": s.wasmShimBinaryFile,
+		}
+	}
+
+	return runtimes
+}
+
 // generateConfig generates the containerd config
 func (s *service) generateContainerdConfig() map[string]any {
 	return map[string]any{
@@ -101,26 +136,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"default_runtime_name":              "runc",
 					"ignore_blockio_not_enabled_errors": false,
 					"ignore_rdt_not_enabled_errors":     false,
-					"runtimes": map[string]any{
-						"runc": map[string]any{
-							"runtime_type":                    "io.containerd.runc.v2",
-							"runtime_path":                    s.containerdShimBinaryFile,
-							"pod_annotations":                 []string{},
-							"container_annotations":           []string{},
-							"privileged_without_host_devices": false,
-							"privileged_without_host_devices_all_devices_allowed": false,
-							"base_runtime_spec": "",
-							"cni_conf_dir":      "",
-							"cni_max_conf_num":  0,
-							"snapshotter":       "",
-							"sandboxer":         "podsandbox",
-							"io_type":           "",
-							"options": map[string]any{
-								"BinaryName":    s.runcBinaryFile,
-								"SystemdCgroup": isCgroupV2(),
-							},
-						},
-					},
+					"runtimes":                          s.generateContainerdRuntimes(),
 				},
 				"cni": map[string]any{
 					"bin_dir":               s.containerdCNIPluginsDir,

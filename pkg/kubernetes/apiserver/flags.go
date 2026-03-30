@@ -44,7 +44,7 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	_ = flags.Set("allow-privileged", "true")
 	_ = flags.Set("authorization-mode", "Node,RBAC")
 	_ = flags.Set("enable-admission-plugins", "NodeRestriction,ServiceAccount,ValidatingAdmissionWebhook,MutatingAdmissionWebhook,DefaultStorageClass,CertificateApproval,CertificateSigning,CertificateSubjectRestriction,ValidatingAdmissionPolicy,MutatingAdmissionPolicy")
-	_ = flags.Set("disable-admission-plugins", "RuntimeClass,PodSecurity,ClusterTrustBundleAttest,DefaultIngressClass,TaintNodesByCondition,DefaultTolerationSeconds,StorageObjectInUseProtection,PersistentVolumeClaimResize,ResourceQuota,LimitRanger,Priority")
+	_ = flags.Set("disable-admission-plugins", "PodSecurity,ClusterTrustBundleAttest,DefaultIngressClass,TaintNodesByCondition,DefaultTolerationSeconds,StorageObjectInUseProtection,PersistentVolumeClaimResize,ResourceQuota,LimitRanger,Priority")
 	_ = flags.Set("enable-bootstrap-token-auth", "false")
 
 	// performance and resource limits

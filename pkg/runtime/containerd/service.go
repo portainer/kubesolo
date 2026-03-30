@@ -22,6 +22,8 @@ type service struct {
 	containerdCNIPluginsDir       string
 	containerdRegistryConfigDir   string
 	runcBinaryFile                string
+	wasmShimBinaryFile            string
+	enableWasm                    bool
 	containerdShimBinaryFile      string
 	portainerAgentImageFile       string
 	corednsImageFile              string
@@ -45,6 +47,8 @@ func NewService(ctx context.Context, cancel context.CancelFunc, containerdReady 
 		containerdCNIPluginsDir:       embedded.ContainerdCNIPluginsDir,
 		containerdRegistryConfigDir:   embedded.ContainerdRegistryConfigDir,
 		runcBinaryFile:                embedded.RuncBinaryFile,
+		wasmShimBinaryFile:            embedded.WasmShimBinaryFile,
+		enableWasm:                    embedded.EnableWasm,
 		containerdShimBinaryFile:      embedded.ContainerdShimBinaryFile,
 		portainerAgentImageFile:       embedded.PortainerAgentImageFile,
 		corednsImageFile:              embedded.CorednsImageFile,

@@ -19,6 +19,7 @@ import (
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
 	"github.com/portainer/kubesolo/pkg/components/portainer"
+	"github.com/portainer/kubesolo/pkg/components/runtimeclass"
 	"github.com/portainer/kubesolo/pkg/kine"
 	"github.com/portainer/kubesolo/pkg/kubernetes/apiserver"
 	"github.com/portainer/kubesolo/pkg/kubernetes/controller"
@@ -206,6 +207,14 @@ func (s *kubesolo) run() {
 		}
 	}
 
+	if s.embedded.EnableWasm {
+		go func() {
+			if err := runtimeclass.Deploy(ctx, s.embedded.AdminKubeconfigFile); err != nil {
+				log.Error().Err(err).Str("component", "runtimeclass").Msg("failed to deploy RuntimeClass")
+			}
+		}()
+	}
+
 	log.Info().Str("component", "kubesolo").Msg("deploying coredns...")
 	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile); err != nil {
 		log.Fatal().Err(err).Msg("failed to deploy coredns")
@@ -351,12 +360,12 @@ func (s *kubesolo) bootstrap() {
 		},
 
 		// Containerd paths
-		ContainerdDir:            filepath.Join(basePath, types.DefaultContainerdDir),
-		ContainerdSocketFile:     filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket),
-		ContainerdBinaryFile:     filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
-		ContainerdImagesDir:      filepath.Join(basePath, types.DefaultContainerdDir, "images"),
-		ContainerdShimBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
-		ContainerdConfigFile:     filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
+		ContainerdDir:               filepath.Join(basePath, types.DefaultContainerdDir),
+		ContainerdSocketFile:        filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket),
+		ContainerdBinaryFile:        filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
+		ContainerdImagesDir:         filepath.Join(basePath, types.DefaultContainerdDir, "images"),
+		ContainerdShimBinaryFile:    filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
+		ContainerdConfigFile:        filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
 		ContainerdRootDir:           filepath.Join(basePath, types.DefaultContainerdDir, "root"),
 		ContainerdStateDir:          filepath.Join(basePath, types.DefaultContainerdDir, "state"),
 		ContainerdRegistryConfigDir: filepath.Join(basePath, types.DefaultContainerdDir, "registry"),
@@ -369,6 +378,10 @@ func (s *kubesolo) bootstrap() {
 
 		// Runc binary
 		RuncBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "runc"),
+
+		// Wasm shim
+		WasmShimBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultWasmShimBinaryName),
+		EnableWasm:         *flags.Wasm,
 
 		// Kubelet paths
 		KubeletDir:            filepath.Join(basePath, types.DefaultKubeletDir),

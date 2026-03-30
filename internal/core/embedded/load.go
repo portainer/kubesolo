@@ -32,6 +32,14 @@ func loadContainerdComponents(embedded types.Embedded) error {
 			return fmt.Errorf("failed to extract %s binary: %v", binary.name, err)
 		}
 	}
+
+	if embedded.EnableWasm && len(wasmShimBinary) > 0 {
+		if err := filesystem.ExtractBinary(wasmShimBinary, embedded.WasmShimBinaryFile); err != nil {
+			return fmt.Errorf("failed to extract containerd-shim-wasmtime-v1 binary: %v", err)
+		}
+		log.Debug().Str("component", "embedded").Msg("containerd-shim-wasmtime-v1 extracted")
+	}
+
 	return nil
 }
 

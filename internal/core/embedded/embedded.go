@@ -13,6 +13,9 @@ import (
 //go:embed bin/containerd/bin/containerd-shim-runc-v2
 var containerdShimBinary []byte
 
+//go:embed bin/containerd-shim-wasmtime-v1
+var wasmShimBinary []byte
+
 //go:embed bin/runc
 var runcBinary []byte
 

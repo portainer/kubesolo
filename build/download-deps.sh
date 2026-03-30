@@ -12,6 +12,7 @@ PORTAINER_AGENT_VERSION="2.39.0"
 COREDNS_VERSION="1.14.1"
 LOCAL_PATH_PROVISIONER_VERSION="v0.0.34"
 PAUSE_IMAGE_VERSION="3.10"
+RUNWASI_VERSION="v0.6.0"
 
 # Process command line arguments
 while [[ "$#" -gt 0 ]]; do
@@ -103,6 +104,72 @@ if ! curl -L -f --silent -o internal/core/embedded/bin/runc https://github.com/o
     exit 1
 fi
 chmod +x internal/core/embedded/bin/runc
+
+# Download WASM shim (containerd-shim-wasmtime-v1)
+if [ "${ARCH}" = "arm" ]; then
+    # Build WASM shim for ARM using Docker cross-compilation
+    echo "Building WASM shim ${RUNWASI_VERSION} for ${OS}-${ARCH} using Docker..."
+
+    # Check if Docker is available
+    if ! command -v docker &> /dev/null; then
+        echo "Docker is required to build the WASM shim for ARM but is not installed."
+        echo "Please install Docker or use pre-built binaries."
+        exit 1
+    fi
+
+    # Build the WASM shim image with the specified version
+    if ! docker build -f build/wasm-shim.Dockerfile --build-arg RUNWASI_VERSION=${RUNWASI_VERSION} -t wasm-shim-arm32-cross .; then
+        echo "Error building WASM shim Docker image."
+        exit 1
+    fi
+
+    # Extract the compiled binary
+    echo "Extracting WASM shim binary..."
+    if ! docker create --name temp-wasm-shim wasm-shim-arm32-cross; then
+        echo "Error creating temporary container."
+        exit 1
+    fi
+
+    if ! docker cp temp-wasm-shim:/containerd-shim-wasmtime-v1 internal/core/embedded/bin/containerd-shim-wasmtime-v1; then
+        echo "Error extracting WASM shim binary from container."
+        docker rm temp-wasm-shim 2>/dev/null
+        exit 1
+    fi
+
+    docker rm temp-wasm-shim
+
+    chmod +x internal/core/embedded/bin/containerd-shim-wasmtime-v1
+    echo "Successfully built WASM shim for ARM."
+elif [ "${ARCH}" = "riscv64" ]; then
+    echo "Skipping WASM shim for riscv64 (not supported)"
+else
+    # Map architecture to runwasi release asset naming
+    RUNWASI_ARCH="${ARCH}"
+    if [ "${ARCH}" = "amd64" ]; then
+        RUNWASI_ARCH="x86_64"
+    elif [ "${ARCH}" = "arm64" ]; then
+        RUNWASI_ARCH="aarch64"
+    fi
+
+    echo "Downloading WASM shim ${RUNWASI_VERSION} for ${OS}-${ARCH}..."
+    if ! curl -L -f --silent -o internal/core/embedded/bin/wasm-shim.tar.gz \
+        https://github.com/containerd/runwasi/releases/download/containerd-shim-wasmtime/${RUNWASI_VERSION}/containerd-shim-wasmtime-${RUNWASI_ARCH}-linux-musl.tar.gz; then
+        echo "Error downloading WASM shim. Please check the version and URL."
+        exit 1
+    fi
+
+    # Verify the download is a valid tar file
+    if ! tar -tf internal/core/embedded/bin/wasm-shim.tar.gz >/dev/null 2>&1; then
+        echo "Downloaded WASM shim archive is not valid. Check URL or try again."
+        rm -f internal/core/embedded/bin/wasm-shim.tar.gz
+        exit 1
+    fi
+
+    tar -xzf internal/core/embedded/bin/wasm-shim.tar.gz -C internal/core/embedded/bin/ ./containerd-shim-wasmtime-v1
+    rm internal/core/embedded/bin/wasm-shim.tar.gz
+    chmod +x internal/core/embedded/bin/containerd-shim-wasmtime-v1
+    echo "Successfully downloaded WASM shim."
+fi
 
 # Download CNI plugins - add error checking
 echo "Downloading CNI plugins ${CNI_VERSION} for ${OS}-${ARCH}..."
