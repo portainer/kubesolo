@@ -165,6 +165,39 @@ check_iptables_comment_module() {
     echo "✅ iptables with xt_comment module support verified"
 }
 
+# On Alpine (OpenRC), the cgroups service must be enabled and running so that
+# the cgroupv2 controllers are available before kubesolo starts.
+# Without it /sys/fs/cgroup/cgroup.controllers is empty after a fresh install.
+ensure_alpine_cgroups_service() {
+    if ! is_alpine; then
+        return
+    fi
+
+    # Only relevant on OpenRC systems
+    if ! command -v rc-update >/dev/null 2>&1; then
+        return
+    fi
+
+    # Check if controllers are already available (service may already be running)
+    local available
+    available=$(cat /sys/fs/cgroup/cgroup.controllers 2>/dev/null || echo "")
+    if [ -n "$available" ]; then
+        return
+    fi
+
+    echo "🔍 cgroups controllers not available — cgroups service needs to be enabled (Alpine/OpenRC)..."
+
+    if [ "$INSTALL_PREREQS" = "true" ]; then
+        echo "📦 Enabling cgroups service at boot..."
+        rc-update add cgroups boot 2>/dev/null || true
+        echo "📦 Starting cgroups service..."
+        rc-service cgroups start || handle_error "Failed to start cgroups service. Please run: rc-update add cgroups boot && rc-service cgroups start"
+        echo "✅ cgroups service enabled and started"
+    else
+        handle_error "cgroups controllers are not available. On Alpine, run: rc-update add cgroups boot && rc-service cgroups start — or re-run this script with --install-prereqs"
+    fi
+}
+
 # Function to check for required cgroups controllers
 check_cgroups() {
     echo "🔍 Checking for required cgroups controllers..."
@@ -889,6 +922,9 @@ check_iptables_comment_module
 
 # Check and optionally install nftables on Alpine
 check_nftables
+
+# Ensure Alpine cgroups service is enabled (required for cgroupv2 controllers)
+ensure_alpine_cgroups_service
 
 # Function to check for required cgroups controllers
 check_cgroups
