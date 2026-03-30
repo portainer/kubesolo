@@ -101,6 +101,35 @@ check_hostname_compliance() {
     echo "✅ Hostname '$CURRENT_HOSTNAME' is RFC 1123 compliant"
 }
 
+# Function to detect Alpine Linux
+is_alpine() {
+    [ -f /etc/alpine-release ]
+}
+
+# Function to check and optionally install nftables on Alpine.
+# kube-proxy uses nftables mode on Alpine because iptables-legacy kernel modules
+# are not available; the nft binary must be present for it to start.
+check_nftables() {
+    if ! is_alpine; then
+        return
+    fi
+
+    echo "🔍 Checking nftables (required on Alpine for kube-proxy)..."
+
+    if command -v nft >/dev/null 2>&1; then
+        echo "✅ nftables (nft) is available"
+        return
+    fi
+
+    if [ "$INSTALL_PREREQS" = "true" ]; then
+        echo "📦 Installing nftables..."
+        apk add --no-cache nftables || handle_error "Failed to install nftables. Please install it manually: apk add nftables"
+        echo "✅ nftables installed"
+    else
+        handle_error "nftables (nft) is required on Alpine but was not found. Run with --install-prereqs to install automatically, or run: apk add nftables"
+    fi
+}
+
 # Function to check iptables xt_comment module support
 check_iptables_comment_module() {
     echo "🔍 Checking iptables xt_comment module support..."
@@ -200,14 +229,30 @@ check_cgroups() {
     fi
 }
 
+# Find PIDs of processes whose executable is the kubesolo binary.
+# This matches on /proc/$pid/exe (the actual binary path) rather than the
+# command-line string, so the install script itself is never matched even
+# when its arguments contain the word "kubesolo" (e.g. --offline-install=/tmp/kubesolo).
+find_kubesolo_binary_pids() {
+    local kubesolo_binary="/usr/local/bin/kubesolo"
+    local our_pid=$$
+    local pids=""
+    for piddir in /proc/[0-9]*/; do
+        local pid
+        pid=$(basename "$piddir")
+        [ "$pid" = "$our_pid" ] && continue
+        local exe
+        exe=$(readlink "${piddir}exe" 2>/dev/null) || continue
+        if [ "$exe" = "$kubesolo_binary" ]; then
+            pids="$pids $pid"
+        fi
+    done
+    echo "$pids"
+}
+
 # Function to stop running KubeSolo processes
 stop_running_processes() {
     echo "🔍 Checking for running KubeSolo processes..."
-
-    # Exclude the install script process and its parent so that a path containing
-    # "kubesolo" (e.g. --offline-install=./kubesolo-v1.1.2-linux-amd64.tar.gz)
-    # doesn't cause the script to kill itself.
-    local exclude_pids_pattern="^($$|$PPID)$"
 
     # Try to stop service first (graceful shutdown)
     if command -v systemctl >/dev/null 2>&1; then
@@ -226,9 +271,11 @@ stop_running_processes() {
         fi
     fi
 
-    # Find all remaining processes with kubesolo in the command line
+    # Find remaining kubesolo processes by executable path, not cmdline string.
+    # This avoids the script killing itself when invoked with a path that
+    # contains "kubesolo" (e.g. --offline-install=/tmp/kubesolo).
     local pids
-    pids=$(pgrep -f "kubesolo" 2>/dev/null | grep -vE "$exclude_pids_pattern" || true)
+    pids=$(find_kubesolo_binary_pids)
 
     if [ -n "$pids" ]; then
         echo "🛑 Stopping remaining KubeSolo processes..."
@@ -236,7 +283,7 @@ stop_running_processes() {
             if kill -0 "$pid" 2>/dev/null; then
                 if [ -f "/proc/$pid/cmdline" ]; then
                     local cmdline
-                    cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "unknown")
+                    cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || echo "unknown")
                     echo "   Stopping PID $pid: $cmdline"
                 else
                     echo "   Stopping PID $pid"
@@ -249,7 +296,7 @@ stop_running_processes() {
         sleep 2
 
         # Force kill any that are still running
-        pids=$(pgrep -f "kubesolo" 2>/dev/null | grep -vE "$exclude_pids_pattern" || true)
+        pids=$(find_kubesolo_binary_pids)
         if [ -n "$pids" ]; then
             echo "🛑 Force stopping remaining processes..."
             for pid in $pids; do
@@ -262,7 +309,7 @@ stop_running_processes() {
         local retries=5
         local wait_time=1
         while [ $retries -gt 0 ]; do
-            pids=$(pgrep -f "kubesolo" 2>/dev/null | grep -vE "$exclude_pids_pattern" || true)
+            pids=$(find_kubesolo_binary_pids)
             if [ -z "$pids" ]; then
                 break
             fi
@@ -273,7 +320,7 @@ stop_running_processes() {
         done
 
         # Final check
-        pids=$(pgrep -f "kubesolo" 2>/dev/null | grep -vE "$exclude_pids_pattern" || true)
+        pids=$(find_kubesolo_binary_pids)
         if [ -n "$pids" ]; then
             echo "⚠️  Some KubeSolo processes may still be running, but continuing..."
         else
@@ -737,6 +784,7 @@ RUN_MODE="${KUBESOLO_RUN_MODE:-service}"  # service, foreground, or daemon
 PROXY="${KUBESOLO_PROXY:-}"
 KUBESOLO_OFFLINE_INSTALL="${KUBESOLO_OFFLINE_INSTALL:-}"
 DOWNLOAD_ONLY_DIR="${KUBESOLO_DOWNLOAD_DIR:-}"
+INSTALL_PREREQS="${KUBESOLO_INSTALL_PREREQS:-false}"
 
 # Parse command line arguments
 for arg in "$@"; do
@@ -777,6 +825,9 @@ for arg in "$@"; do
     --offline-install=*)
       KUBESOLO_OFFLINE_INSTALL="${arg#*=}"
       ;;
+    --install-prereqs)
+      INSTALL_PREREQS="true"
+      ;;
     --download-only)
       DOWNLOAD_ONLY_DIR="."
       ;;
@@ -799,6 +850,7 @@ for arg in "$@"; do
       echo "  --proxy=URL                  Set proxy for HTTP/HTTPS requests"
       echo "  --offline-install=PATH       Use a local binary or archive instead of downloading"
       echo "  --download-only[=DIR]        Download binary archive and install script for offline use (default dir: .)"
+      echo "  --install-prereqs            Automatically install missing prerequisites (e.g. nftables on Alpine)"
       echo "  --help                       Show this help message"
       echo ""
       echo "Supported Init Systems: systemd, sysvinit, s6, runit, openrc, upstart"
@@ -843,6 +895,9 @@ check_hostname_compliance
 
 # Function to check iptables xt_comment module support
 check_iptables_comment_module
+
+# Check and optionally install nftables on Alpine
+check_nftables
 
 # Function to check for required cgroups controllers
 check_cgroups
