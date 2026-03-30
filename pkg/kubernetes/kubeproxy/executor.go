@@ -43,7 +43,12 @@ func (s *service) Run(kubeletReadyCh chan struct{}) error {
 	time.Sleep(types.DefaultComponentSleep)
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		<-kubeletReadyCh
-		flushNftablesNat()
+		// Only flush the nat table when using iptables mode. In nftables mode
+		// kube-proxy manages its own table (kube-proxy) and never writes to
+		// table ip nat, so flushing it would wipe CNI masquerade rules.
+		if detectProxyMode() == "iptables" {
+			flushNftablesNat()
+		}
 		s.wg.Go(func() {
 			if err := command.ExecuteContext(s.ctx); err != nil {
 				log.Error().Str("component", "kubeproxy").Msgf("kubeproxy exited with error: %v", err)
