@@ -541,6 +541,11 @@ cleanup_file_conflicts() {
                 # Attempt cleanup but skip processes in our process tree
                 local cleaned_any=false
                 for pid in $binary_pids; do
+                    # Never kill PID 0 (kernel) or PID 1 (init) — would take down the system
+                    if [ "$pid" -le 1 ] 2>/dev/null; then
+                        continue
+                    fi
+
                     # Always skip if this PID is in our process tree (safety first)
                     if is_pid_in_process_tree "$pid"; then
                         if [ "$running_under_kubesolo" = "true" ]; then
@@ -548,26 +553,20 @@ cleanup_file_conflicts() {
                         fi
                         continue
                     fi
-                    
-                    # Verify PID is still valid and is actually a kubesolo process
+
+                    # Only kill if the executable is actually the kubesolo binary.
+                    # Checking /proc/$pid/exe avoids false-positives from cmdline
+                    # matching (e.g. lsof returning parent/init processes).
+                    local exe
+                    exe=$(readlink "/proc/$pid/exe" 2>/dev/null || echo "")
+                    if [ "$exe" != "/usr/local/bin/kubesolo" ]; then
+                        continue
+                    fi
+
                     if kill -0 "$pid" 2>/dev/null; then
-                        # Double-check it's a kubesolo process before killing
-                        local is_kubesolo=false
-                        if [ -f "/proc/$pid/cmdline" ]; then
-                            local cmdline
-                            cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
-                            if echo "$cmdline" | grep -q "kubesolo"; then
-                                is_kubesolo=true
-                            fi
-                        fi
-                        
-                        # Only kill if it's a kubesolo process (or if we're not running under kubesolo)
-                        if [ "$is_kubesolo" = "true" ] || [ "$running_under_kubesolo" = "false" ]; then
-                            cleaned_any=true
-                            echo "   Stopping PID $pid"
-                            # Try graceful termination first (suppress any errors)
-                            (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
-                        fi
+                        cleaned_any=true
+                        echo "   Stopping PID $pid"
+                        (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
                     fi
                 done
                 
