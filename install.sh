@@ -364,21 +364,13 @@ stop_port_processes() {
         
         if [ -n "$pids" ]; then
             for pid in $pids; do
-                # Check if it's actually a kubesolo-related process
-                local cmdline=""
-                local procname=""
+                # Check if it's actually a kubesolo process by executable path, not
+                # cmdline string, to avoid false-positives when the install script
+                # path contains "kubesolo" (e.g. --offline-install=/tmp/kubesolo).
                 local is_kubesolo=false
-                
-                if [ -f "/proc/$pid/cmdline" ]; then
-                    cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
-                fi
-                
-                if [ -f "/proc/$pid/comm" ]; then
-                    procname=$(cat "/proc/$pid/comm" 2>/dev/null || echo "")
-                fi
-                
-                # Check if it's a kubesolo process
-                if echo "$cmdline" | grep -q "kubesolo" || echo "$procname" | grep -qi "kubesolo"; then
+                local exe
+                exe=$(readlink "/proc/$pid/exe" 2>/dev/null || echo "")
+                if [ "$exe" = "/usr/local/bin/kubesolo" ]; then
                     is_kubesolo=true
                 fi
                 
