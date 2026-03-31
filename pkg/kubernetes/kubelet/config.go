@@ -11,6 +11,16 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// cgroupDriver returns "systemd" only when systemd is the active init system,
+// otherwise "cgroupfs". Alpine Linux uses OpenRC and has no systemd even when
+// cgroupv2 is present, so the systemd cgroup manager must not be used there.
+func cgroupDriver() string {
+	if _, err := os.Stat("/run/systemd/private"); err == nil {
+		return "systemd"
+	}
+	return "cgroupfs"
+}
+
 func (s *service) writeKubeletConfigFile() error {
 	if err := filesystem.EnsureDirectoryExists(s.kubeletConfigDir); err != nil {
 		return fmt.Errorf("failed to create kubelet directory: %v", err)
@@ -76,7 +86,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 
-		"cgroupDriver": "systemd",
+		"cgroupDriver": cgroupDriver(),
 
 		"registerNode":                   true,
 		"readOnlyPort":                   0,
