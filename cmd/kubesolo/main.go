@@ -358,10 +358,7 @@ func (s *kubesolo) bootstrap() {
 		ContainerdShimBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
 		ContainerdConfigFile:     filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
 		ContainerdRootDir:           filepath.Join(basePath, types.DefaultContainerdDir, "root"),
-		// State dir is under /run (tmpfs) so containerd starts clean after reboot,
-		// ensuring CNI ADD is re-run for all pods and nftables masquerade rules
-		// are re-established. Persistent data stays under basePath/containerd/root.
-		ContainerdStateDir: filepath.Join(types.DefaultContainerdRuntimeDir, "state"),
+		ContainerdStateDir:          filepath.Join(basePath, types.DefaultContainerdDir, "state"),
 		ContainerdRegistryConfigDir: filepath.Join(basePath, types.DefaultContainerdDir, "registry"),
 
 		// CNI paths

@@ -11,7 +11,6 @@ const (
 	DefaultPKIDir                    = "pki"
 	DefaultContainerdDir             = "containerd"
 	DefaultContainerdSocket          = "containerd.sock"
-	DefaultContainerdRuntimeDir      = "/run/kubesolo/containerd"
 	DefaultSystemContainerdSock      = "/run/containerd/containerd.sock"
 	DefaultStandardCNIConfDir        = "/etc/cni/net.d"
 	DefaultContainerdConfigDir       = "/etc/containerd/config.d"
