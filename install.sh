@@ -1,13 +1,6 @@
 #!/bin/sh
-    
-set -e
 
-# Check if running as root or via sudo
-if [ "$(id -u)" -ne 0 ]; then
-    echo "❌ Error: This script must be run as root or via sudo"
-    echo "   Please run: sudo $0 $*"
-    exit 1
-fi
+set -e
 
 # Function to handle errors
 handle_error() {
@@ -50,54 +43,54 @@ detect_environment() {
 # Function to check for Docker prerequisite
 check_docker_prerequisite() {
     echo "🔍 Checking for Docker prerequisite conflicts..."
-    
+
     # Check if Docker command exists
     if command -v docker >/dev/null 2>&1; then
         handle_error "Docker is installed on this system. Please remove Docker before installing KubeSolo as it can interfere with KubeSolo networking. See: https://docs.kubesolo.io/prerequisites"
     fi
-    
+
     # Check if Docker daemon is running
     if [ -S /var/run/docker.sock ]; then
         handle_error "Docker daemon appears to be running (socket found at /var/run/docker.sock). Please stop and remove Docker before installing KubeSolo."
     fi
-    
+
     # Check for Docker systemd service
     if command -v systemctl >/dev/null 2>&1; then
         if systemctl is-active --quiet docker 2>/dev/null; then
             handle_error "Docker service is active. Please stop and remove Docker before installing KubeSolo."
         fi
     fi
-    
+
     echo "✅ No Docker installation detected"
 }
 
 # Function to check hostname RFC 1123 compliance
 check_hostname_compliance() {
     echo "🔍 Checking hostname RFC 1123 compliance..."
-    
+
     # Get the hostname
     CURRENT_HOSTNAME=$(hostname 2>/dev/null || echo "")
-    
+
     if [ -z "$CURRENT_HOSTNAME" ]; then
         handle_error "Could not determine hostname. Please ensure hostname is properly configured."
     fi
-    
+
     # Check if hostname contains uppercase letters
     if echo "$CURRENT_HOSTNAME" | grep -q '[A-Z]'; then
         handle_error "Hostname '$CURRENT_HOSTNAME' contains uppercase letters. RFC 1123 requires lowercase only. Please change hostname to lowercase."
     fi
-    
+
     # Check RFC 1123 subdomain compliance using grep
     # Pattern: must start and end with alphanumeric, contain only lowercase alphanumeric, '-', or '.'
     if ! echo "$CURRENT_HOSTNAME" | grep -qE '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'; then
         handle_error "Hostname '$CURRENT_HOSTNAME' is not RFC 1123 compliant. Must contain only lowercase letters, numbers, hyphens, and dots, and must start and end with an alphanumeric character."
     fi
-    
+
     # Additional check for length (RFC 1123 limit is 63 characters per label)
     if [ ${#CURRENT_HOSTNAME} -gt 253 ]; then
         handle_error "Hostname '$CURRENT_HOSTNAME' is too long (${#CURRENT_HOSTNAME} characters). Maximum allowed is 253 characters."
     fi
-    
+
     echo "✅ Hostname '$CURRENT_HOSTNAME' is RFC 1123 compliant"
 }
 
@@ -133,16 +126,16 @@ check_nftables() {
 # Function to check iptables xt_comment module support
 check_iptables_comment_module() {
     echo "🔍 Checking iptables xt_comment module support..."
-    
+
     # Check if iptables command exists
     if ! command -v iptables >/dev/null 2>&1; then
         handle_error "iptables command not found. Please install iptables before proceeding."
     fi
-    
+
     # Test iptables comment module by trying to create a test rule
     # Use a unique comment to avoid conflicts
     TEST_COMMENT="kubesolo-test-$$-$(date +%s)"
-    
+
     # Try to add a test rule with comment (to a non-existent chain to avoid side effects)
     if ! iptables -t filter -A KUBESOLO_TEST_CHAIN -m comment --comment "$TEST_COMMENT" -j ACCEPT 2>/dev/null; then
         # Try to check if the module is available in a different way
@@ -161,7 +154,7 @@ check_iptables_comment_module() {
         # Clean up test rule if it was somehow added (shouldn't happen with non-existent chain)
         iptables -t filter -D KUBESOLO_TEST_CHAIN -m comment --comment "$TEST_COMMENT" -j ACCEPT 2>/dev/null || true
     fi
-    
+
     echo "✅ iptables with xt_comment module support verified"
 }
 
@@ -201,38 +194,38 @@ ensure_alpine_cgroups_service() {
 # Function to check for required cgroups controllers
 check_cgroups() {
     echo "🔍 Checking for required cgroups controllers..."
-    
+
     # Required controllers: cpuset, cpu, io, memory, pids
     local required_controllers="cpuset cpu io memory pids"
     local missing_controllers=""
-    
+
     # Check if cgroups v2 is mounted (unified hierarchy)
     if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
         # cgroups v2 - check unified controllers
         local available_controllers
         available_controllers=$(cat /sys/fs/cgroup/cgroup.controllers 2>/dev/null || echo "")
-        
+
         if [ -z "$available_controllers" ]; then
             handle_error "cgroups v2 is mounted but no controllers are available. Please ensure cgroups are properly configured."
         fi
-        
+
         # Check each required controller
         for controller in $required_controllers; do
             if ! echo "$available_controllers" | grep -qw "$controller"; then
                 missing_controllers="$missing_controllers $controller"
             fi
         done
-        
+
         if [ -n "$missing_controllers" ]; then
             handle_error "Required cgroups v2 controllers are missing:$missing_controllers. Available controllers: $available_controllers. Please enable the required controllers in your kernel or boot parameters."
         fi
-        
+
         echo "✅ All required cgroups v2 controllers are available: $available_controllers"
     elif [ -d /sys/fs/cgroup ]; then
         # cgroups v1 - check individual controller directories
         # Also handle hybrid mode (both v1 and v2)
         local found_controllers=""
-        
+
         for controller in $required_controllers; do
             # Check if controller directory exists
             if [ -d "/sys/fs/cgroup/$controller" ]; then
@@ -251,11 +244,11 @@ check_cgroups() {
                 missing_controllers="$missing_controllers $controller"
             fi
         done
-        
+
         if [ -n "$missing_controllers" ]; then
             handle_error "Required cgroups v1 controllers are missing:$missing_controllers. Please ensure cgroups are mounted. You may need to add 'cgroup_enable=cpuset cgroup_enable=cpu cgroup_enable=io cgroup_memory=1 cgroup_enable=pids' to your kernel boot parameters."
         fi
-        
+
         echo "✅ All required cgroups v1 controllers are available:$found_controllers"
     else
         handle_error "cgroups filesystem not found at /sys/fs/cgroup. Please ensure cgroups are enabled in your kernel and mounted. You may need to add 'cgroup_enable=cpuset cgroup_enable=cpu cgroup_enable=io cgroup_memory=1 cgroup_enable=pids' to your kernel boot parameters."
@@ -325,7 +318,6 @@ stop_running_processes() {
             fi
         done
 
-        # Wait a bit for graceful shutdown
         sleep 2
 
         # Force kill any that are still running
@@ -338,7 +330,6 @@ stop_running_processes() {
             sleep 1
         fi
 
-        # Verify processes are actually stopped with retries
         local retries=5
         local wait_time=1
         while [ $retries -gt 0 ]; do
@@ -367,23 +358,23 @@ stop_running_processes() {
 # Function to stop processes holding KubeSolo ports
 stop_port_processes() {
     echo "🔍 Checking for processes holding KubeSolo ports..."
-    
+
     # KubeSolo ports: 2379 (Kine), 6443 (API Server), 10443 (Webhook), 6060 (pprof)
     local ports="2379 6443 10443 6060"
     local found_kubesolo_processes=false
     local found_non_kubesolo_processes=false
-    
+
     for port in $ports; do
         local pids=""
         local port_name=""
-        
+
         case $port in
             2379) port_name="Kine (etcd replacement)" ;;
             6443) port_name="API Server" ;;
             10443) port_name="Webhook" ;;
             6060) port_name="pprof server" ;;
         esac
-        
+
         # Try lsof first (more reliable)
         if command -v lsof >/dev/null 2>&1; then
             pids=$(lsof -ti ":$port" 2>/dev/null || true)
@@ -394,7 +385,7 @@ stop_port_processes() {
         elif command -v netstat >/dev/null 2>&1; then
             pids=$(netstat -tlnp 2>/dev/null | grep ":$port " | awk '{print $7}' | cut -d'/' -f1 | grep -E '^[0-9]+$' | sort -u || true)
         fi
-        
+
         if [ -n "$pids" ]; then
             for pid in $pids; do
                 # Check if it's actually a kubesolo process by executable path, not
@@ -406,7 +397,7 @@ stop_port_processes() {
                 if [ "$exe" = "/usr/local/bin/kubesolo" ]; then
                     is_kubesolo=true
                 fi
-                
+
                 # Only stop kubesolo-related processes
                 if [ "$is_kubesolo" = "true" ]; then
                     if [ "$found_kubesolo_processes" = "false" ]; then
@@ -422,7 +413,7 @@ stop_port_processes() {
             done
         fi
     done
-    
+
     if [ "$found_kubesolo_processes" = "true" ]; then
         echo "⏳ Waiting for ports to be released..."
         sleep 2
@@ -430,7 +421,7 @@ stop_port_processes() {
     else
         echo "✅ No KubeSolo processes found holding ports"
     fi
-    
+
     if [ "$found_non_kubesolo_processes" = "true" ]; then
         echo "ℹ️  Some KubeSolo ports are in use by non-KubeSolo processes - continuing with the installation"
     fi
@@ -443,56 +434,31 @@ is_pid_in_process_tree() {
     local target_pid="$1"
     local current_pid=$$
     local parent_pid="${PPID:-}"
-    
+
     # Validate target_pid is numeric
     if ! echo "$target_pid" | grep -qE '^[0-9]+$'; then
         return 1
     fi
-    
+
     # Check if it's current or parent (direct relationship)
     if [ "$target_pid" = "$current_pid" ] || [ "$target_pid" = "$parent_pid" ]; then
         return 0
     fi
-    
-    # Walk up the process tree starting from parent to check if target_pid is an ancestor
-    # We verify each step by checking the actual parent relationship
+
     local check_pid="$parent_pid"
     local depth=0
-    local max_depth=15  # Reasonable limit to prevent infinite loops
-    
+    local max_depth=15
+
     while [ -n "$check_pid" ] && [ "$check_pid" != "1" ] && [ "$check_pid" != "0" ] && [ "$depth" -lt "$max_depth" ]; do
-        # Found it in our ancestry
         if [ "$check_pid" = "$target_pid" ]; then
             return 0
         fi
-        
-        # Get parent of check_pid from /proc/pid/stat
-        # Format: pid (comm) state ppid ...
-        # We need to extract ppid which is after the process name in parentheses
-        if [ -f "/proc/$check_pid/stat" ]; then
-            local stat_content
-            stat_content=$(cat "/proc/$check_pid/stat" 2>/dev/null || echo "")
-            if [ -n "$stat_content" ]; then
-                # Extract parent PID: find the closing paren and get the 4th field after it
-                # More reliable: use /proc/pid/status which has PPid: field
-                local parent_from_status
-                if [ -f "/proc/$check_pid/status" ]; then
-                    parent_from_status=$(grep "^PPid:" "/proc/$check_pid/status" 2>/dev/null | awk '{print $2}' || echo "")
-                    if [ -n "$parent_from_status" ] && echo "$parent_from_status" | grep -qE '^[0-9]+$'; then
-                        check_pid="$parent_from_status"
-                    else
-                        break
-                    fi
-                else
-                    # Fallback to stat parsing
-                    local next_pid
-                    next_pid=$(echo "$stat_content" | sed 's/.*) //' | awk '{print $2}' 2>/dev/null || echo "")
-                    if [ -n "$next_pid" ] && echo "$next_pid" | grep -qE '^[0-9]+$'; then
-                        check_pid="$next_pid"
-                    else
-                        break
-                    fi
-                fi
+
+        if [ -f "/proc/$check_pid/status" ]; then
+            local parent_from_status
+            parent_from_status=$(grep "^PPid:" "/proc/$check_pid/status" 2>/dev/null | awk '{print $2}' || echo "")
+            if [ -n "$parent_from_status" ] && echo "$parent_from_status" | grep -qE '^[0-9]+$'; then
+                check_pid="$parent_from_status"
             else
                 break
             fi
@@ -501,7 +467,7 @@ is_pid_in_process_tree() {
         fi
         depth=$((depth + 1))
     done
-    
+
     return 1
 }
 
@@ -510,15 +476,11 @@ is_pid_in_process_tree() {
 should_skip_cleanup() {
     local current_pid=$$
     local parent_pid="${PPID:-}"
-    
-    # Check if parent process is actually kubesolo binary
-    # This is more specific - we only skip if parent is the actual kubesolo executable
+
     if [ -n "$parent_pid" ] && [ -f "/proc/$parent_pid/exe" ]; then
         local parent_exe
         parent_exe=$(readlink -f "/proc/$parent_pid/exe" 2>/dev/null || echo "")
-        # Check if parent executable is the kubesolo binary
-        if echo "$parent_exe" | grep -q "kubesolo" && [ -f "$parent_exe" ]; then
-            # Also verify it's actually kubesolo by checking cmdline
+        if echo "$parent_exe" | grep -q "kubesolo"; then
             if [ -f "/proc/$parent_pid/cmdline" ]; then
                 local parent_cmdline
                 parent_cmdline=$(cat "/proc/$parent_pid/cmdline" 2>/dev/null | tr '\0' ' ' || echo "")
@@ -528,50 +490,44 @@ should_skip_cleanup() {
             fi
         fi
     fi
-    
-    # Check if current process is kubesolo (shouldn't happen, but be safe)
+
     if [ -f "/proc/$current_pid/exe" ]; then
         local current_exe
         current_exe=$(readlink -f "/proc/$current_pid/exe" 2>/dev/null || echo "")
-        if echo "$current_exe" | grep -q "kubesolo" && [ -f "$current_exe" ]; then
+        if echo "$current_exe" | grep -q "kubesolo"; then
             return 0
         fi
     fi
-    
+
     return 1
 }
 
 # Function to clean up file conflicts
 cleanup_file_conflicts() {
     echo "🔍 Checking for file conflicts..."
-    
-    # Use CONFIG_PATH which is set earlier in the script
+
     local install_path="/usr/local/bin/kubesolo"
     local config_path="$CONFIG_PATH"
     local cleanup_needed=false
-    
-    # Get current script PID and parent PID for safety checks
     local current_pid=$$
     local parent_pid="${PPID:-}"
-    
+
+    # $$ and $PPID are constant for the lifetime of the script — compute once
+    local running_under_kubesolo=false
+    if should_skip_cleanup; then
+        running_under_kubesolo=true
+        echo "⚠️  Script appears to be running under kubesolo - being extra careful with cleanup"
+    fi
+
     # Check if binary exists and is in use
     if [ -f "$install_path" ]; then
-        # Check if file is locked or in use (only if lsof is available)
         if command -v lsof >/dev/null 2>&1; then
             local binary_pids
             binary_pids=$(lsof -t "$install_path" 2>/dev/null || true)
             if [ -n "$binary_pids" ]; then
-                cleanup_needed= true
+                cleanup_needed=true
                 echo "🛑 Stopping processes using binary $install_path..."
-                
-                # Check if we're running under kubesolo (for warning only)
-                local running_under_kubesolo=false
-                if should_skip_cleanup; then
-                    running_under_kubesolo=true
-                    echo "⚠️  Script appears to be running under kubesolo - being extra careful with cleanup"
-                fi
-                
-                # Attempt cleanup but skip processes in our process tree
+
                 local cleaned_any=false
                 for pid in $binary_pids; do
                     # Never kill PID 0 (kernel) or PID 1 (init) — would take down the system
@@ -602,39 +558,38 @@ cleanup_file_conflicts() {
                         (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
                     fi
                 done
-                
+
                 if [ "$cleaned_any" = "false" ] && [ "$running_under_kubesolo" = "true" ]; then
                     echo "   No safe processes to clean up (all are in our process tree)"
                 fi
-                # Wait for processes to terminate
-                sleep 2
-                # Verify file is no longer in use (excluding current script and parent)
-                binary_pids=$(lsof -t "$install_path" 2>/dev/null || true)
-                local remaining_pids=""
-                for pid in $binary_pids; do
-                    if [ "$pid" != "$current_pid" ] && [ "$pid" != "$parent_pid" ]; then
-                        remaining_pids="$remaining_pids $pid"
+                if [ "$cleaned_any" = "true" ]; then
+                    sleep 2
+                    binary_pids=$(lsof -t "$install_path" 2>/dev/null || true)
+                    local remaining_pids=""
+                    for pid in $binary_pids; do
+                        if [ "$pid" != "$current_pid" ] && [ "$pid" != "$parent_pid" ]; then
+                            remaining_pids="$remaining_pids $pid"
+                        fi
+                    done
+                    if [ -n "$remaining_pids" ]; then
+                        echo "⚠️  Some processes may still be using the binary, but continuing..."
                     fi
-                done
-                if [ -n "$remaining_pids" ]; then
-                    echo "⚠️  Some processes may still be using the binary, but continuing..."
                 fi
             else
                 echo "ℹ️  Binary $install_path exists (will be replaced during installation)"
             fi
         else
-            # If lsof is not available, just note that binary exists
             echo "ℹ️  Binary $install_path exists (will be replaced during installation)"
         fi
     fi
-    
+
     # Check for socket files that might be in use
     local socket_files="
         $config_path/containerd/containerd.sock
         $config_path/kine/socket
         /run/containerd/containerd.sock
     "
-    
+
     for socket_file in $socket_files; do
         if [ -S "$socket_file" ]; then
             if command -v lsof >/dev/null 2>&1; then
@@ -643,28 +598,17 @@ cleanup_file_conflicts() {
                 if [ -n "$socket_pids" ]; then
                     cleanup_needed=true
                     echo "🛑 Stopping processes using socket $socket_file..."
-                    
-                    # Check if we're running under kubesolo (for warning only)
-                    local running_under_kubesolo=false
-                    if should_skip_cleanup; then
-                        running_under_kubesolo=true
-                        echo "⚠️  Script appears to be running under kubesolo - being extra careful with cleanup"
-                    fi
-                    
-                    # Attempt cleanup but skip processes in our process tree
+
                     local cleaned_any=false
                     for pid in $socket_pids; do
-                        # Always skip if this PID is in our process tree (safety first)
                         if is_pid_in_process_tree "$pid"; then
                             if [ "$running_under_kubesolo" = "true" ]; then
                                 echo "   Skipping PID $pid (in our process tree)"
                             fi
                             continue
                         fi
-                        
-                        # Verify PID is still valid and is actually a kubesolo process
+
                         if kill -0 "$pid" 2>/dev/null; then
-                            # Double-check it's a kubesolo process before killing
                             local is_kubesolo=false
                             if [ -f "/proc/$pid/cmdline" ]; then
                                 local cmdline
@@ -673,48 +617,38 @@ cleanup_file_conflicts() {
                                     is_kubesolo=true
                                 fi
                             fi
-                            
-                            # Only kill if it's a kubesolo process (or if we're not running under kubesolo)
+
                             if [ "$is_kubesolo" = "true" ] || [ "$running_under_kubesolo" = "false" ]; then
                                 cleaned_any=true
                                 echo "   Stopping PID $pid"
-                                # Try graceful termination first (suppress any errors)
                                 (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
                             fi
                         fi
                     done
-                    
+
                     if [ "$cleaned_any" = "false" ] && [ "$running_under_kubesolo" = "true" ]; then
                         echo "   No safe processes to clean up (all are in our process tree)"
                     fi
-                    sleep 1
+                    if [ "$cleaned_any" = "true" ]; then
+                        sleep 1
+                    fi
                 fi
             else
-                # If lsof is not available, try to remove socket (it will be recreated)
                 echo "ℹ️  Socket file $socket_file exists (will be cleaned up)"
                 rm -f "$socket_file" 2>/dev/null || true
             fi
         fi
     done
-    
+
     # Clean up PID file
     local pidfile="/var/run/kubesolo.pid"
     if [ -f "$pidfile" ]; then
         local pid
         pid=$(cat "$pidfile" 2>/dev/null || echo "")
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            # Check if this PID is in our process tree (always skip if it is)
             if is_pid_in_process_tree "$pid"; then
                 echo "⚠️  PID file contains process in our process tree - skipping cleanup to avoid termination"
             else
-                # Check if we're running under kubesolo (for warning only)
-                local running_under_kubesolo=false
-                if should_skip_cleanup; then
-                    running_under_kubesolo=true
-                    echo "⚠️  Script appears to be running under kubesolo - being extra careful"
-                fi
-                
-                # Verify it's actually a kubesolo process before killing
                 local is_kubesolo=false
                 if [ -f "/proc/$pid/cmdline" ]; then
                     local cmdline
@@ -723,12 +657,10 @@ cleanup_file_conflicts() {
                         is_kubesolo=true
                     fi
                 fi
-                
-                # Only kill if it's a kubesolo process (or if we're not running under kubesolo)
+
                 if [ "$is_kubesolo" = "true" ] || [ "$running_under_kubesolo" = "false" ]; then
                     cleanup_needed=true
                     echo "🛑 Stopping process from PID file $pidfile (PID: $pid)..."
-                    # Try graceful termination first (suppress any errors)
                     (kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null) || true
                     sleep 1
                 elif [ "$running_under_kubesolo" = "true" ]; then
@@ -736,13 +668,12 @@ cleanup_file_conflicts() {
                 fi
             fi
         fi
-        # Remove stale PID file (only if process is not running or we're safe to do so)
         if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null || ! is_pid_in_process_tree "$pid"; then
             rm -f "$pidfile" 2>/dev/null || true
             echo "ℹ️  Cleaned up PID file"
         fi
     fi
-    
+
     if [ "$cleanup_needed" = "true" ]; then
         echo "⏳ Waiting for file handles to be released..."
         sleep 2
@@ -752,47 +683,376 @@ cleanup_file_conflicts() {
     fi
 }
 
-# Detect OS and architecture
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
-case $ARCH in
-    x86_64)
-        ARCH="amd64"
+# Function to generate proxy environment variables
+generate_proxy_env() {
+    if [ -n "$PROXY" ]; then
+        echo "Environment=\"HTTP_PROXY=$PROXY\""
+        echo "Environment=\"HTTPS_PROXY=$PROXY\""
+        echo "Environment=\"NO_PROXY=localhost,127.0.0.1\""
+    fi
+}
+
+# Function to generate proxy exports for shell scripts
+generate_proxy_exports() {
+    if [ -n "$PROXY" ]; then
+        echo "export HTTP_PROXY=\"$PROXY\""
+        echo "export HTTPS_PROXY=\"$PROXY\""
+        echo "export NO_PROXY=\"localhost,127.0.0.1\""
+    fi
+}
+
+# Function to generate proxy environment variables for upstart
+generate_proxy_env_upstart() {
+    if [ -n "$PROXY" ]; then
+        echo "env HTTP_PROXY=\"$PROXY\""
+        echo "env HTTPS_PROXY=\"$PROXY\""
+        echo "env NO_PROXY=\"localhost,127.0.0.1\""
+    fi
+}
+
+# Function to create systemd service
+create_systemd_service() {
+    SERVICE_PATH="/etc/systemd/system/$APP_NAME.service"
+    cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create systemd service file"
+[Unit]
+Description=$APP_NAME Service
+After=network.target
+
+[Service]
+ExecStart=$INSTALL_PATH $CMD_ARGS
+Restart=always
+RestartSec=3
+OOMScoreAdjust=-500
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+$(generate_proxy_env)
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reexec || handle_error "Failed to reexecute systemd daemon"
+    systemctl daemon-reload || handle_error "Failed to reload systemd daemon"
+    systemctl enable "$APP_NAME" || handle_error "Failed to enable $APP_NAME service"
+    systemctl restart "$APP_NAME" || handle_error "Failed to start $APP_NAME service"
+    echo "✅ $APP_NAME service created and started with systemd"
+}
+
+# Function to create SysV init script
+create_sysvinit_service() {
+    SERVICE_PATH="/etc/init.d/$APP_NAME"
+    cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create SysV init script"
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          $APP_NAME
+# Required-Start:    \$network \$local_fs
+# Required-Stop:     \$network \$local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: $APP_NAME service
+# Description:       KubeSolo single-node Kubernetes distribution
+### END INIT INFO
+
+$(generate_proxy_exports)
+
+DAEMON="$INSTALL_PATH"
+DAEMON_ARGS="$CMD_ARGS"
+PIDFILE="/var/run/$APP_NAME.pid"
+USER="root"
+
+. /lib/lsb/init-functions
+
+case "\$1" in
+    start)
+        log_daemon_msg "Starting $APP_NAME"
+        start-stop-daemon --start --quiet --pidfile \$PIDFILE --make-pidfile --background --chuid \$USER --exec \$DAEMON -- \$DAEMON_ARGS
+        log_end_msg \$?
         ;;
-    aarch64)
-        ARCH="arm64"
+    stop)
+        log_daemon_msg "Stopping $APP_NAME"
+        start-stop-daemon --stop --quiet --pidfile \$PIDFILE
+        RETVAL=\$?
+        [ \$RETVAL -eq 0 ] && rm -f \$PIDFILE
+        log_end_msg \$RETVAL
         ;;
-    armv7l)
-        ARCH="arm"
+    restart)
+        \$0 stop
+        \$0 start
         ;;
-    riscv64)
-        ARCH="riscv64"
+    status)
+        status_of_proc -p \$PIDFILE \$DAEMON "$APP_NAME" && exit 0 || exit \$?
         ;;
     *)
-        handle_error "Unsupported architecture: $ARCH"
+        echo "Usage: \$0 {start|stop|restart|status}"
+        exit 1
         ;;
 esac
 
-# Detect libc type (glibc vs musl)
-LIBC_SUFFIX=""
-if [ -f /lib/ld-musl-*.so.1 ] || [ -f /usr/lib/ld-musl-*.so.1 ]; then
-    # Check if musl builds are available for this architecture
-    if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
-        LIBC_SUFFIX="-musl"
-        echo "🔍 Detected musl libc system - will download musl-compatible binary"
-    else
-        handle_error "musl libc detected but musl builds are only available for amd64 and arm64 architectures. Current architecture: $ARCH"
+exit 0
+EOF
+
+    chmod +x "$SERVICE_PATH" || handle_error "Failed to make SysV init script executable"
+
+    # Enable service for different runlevels
+    if command -v update-rc.d >/dev/null 2>&1; then
+        update-rc.d "$APP_NAME" defaults || handle_error "Failed to enable $APP_NAME service"
+    elif command -v chkconfig >/dev/null 2>&1; then
+        chkconfig --add "$APP_NAME" || handle_error "Failed to add $APP_NAME service"
+        chkconfig "$APP_NAME" on || handle_error "Failed to enable $APP_NAME service"
     fi
-else
-    echo "🔍 Detected glibc system - will download standard binary"
-fi
 
-# Detect init system and environment
-INIT_SYSTEM=$(detect_init_system)
-ENVIRONMENT=$(detect_environment)
+    # Start the service - try service command first, fall back to direct init script
+    if command -v service >/dev/null 2>&1; then
+        service "$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
+    else
+        "/etc/init.d/$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
+    fi
+    echo "✅ $APP_NAME service created and started with SysV init"
+}
 
-echo "🔍 Detected init system: $INIT_SYSTEM"
-echo "🔍 Detected environment: $ENVIRONMENT"
+# Function to create OpenRC service
+create_openrc_service() {
+    SERVICE_PATH="/etc/init.d/$APP_NAME"
+    cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create OpenRC service script"
+#!/sbin/openrc-run
+
+$(generate_proxy_exports)
+
+name="$APP_NAME"
+description="KubeSolo single-node Kubernetes distribution"
+command="$INSTALL_PATH"
+command_args="$CMD_ARGS"
+command_background=true
+pidfile="/var/run/\${RC_SVCNAME}.pid"
+command_user="root"
+
+depend() {
+    need net
+    after firewall
+}
+EOF
+
+    chmod +x "$SERVICE_PATH" || handle_error "Failed to make OpenRC service script executable"
+    rc-update add "$APP_NAME" default || handle_error "Failed to enable $APP_NAME service"
+    rc-service "$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
+    echo "✅ $APP_NAME service created and started with OpenRC"
+}
+
+# Function to create s6 service
+create_s6_service() {
+    S6_SERVICE_DIR="/etc/s6/sv/$APP_NAME"
+    mkdir -p "$S6_SERVICE_DIR" || handle_error "Failed to create s6 service directory"
+
+    cat <<EOF > "$S6_SERVICE_DIR/run" || handle_error "Failed to create s6 run script"
+#!/bin/sh
+$(generate_proxy_exports)
+exec $INSTALL_PATH $CMD_ARGS
+EOF
+
+    chmod +x "$S6_SERVICE_DIR/run" || handle_error "Failed to make s6 run script executable"
+
+    # Create finish script for proper cleanup
+    cat <<EOF > "$S6_SERVICE_DIR/finish"
+#!/bin/sh
+echo "$APP_NAME service finished"
+EOF
+    chmod +x "$S6_SERVICE_DIR/finish"
+
+    # Enable and start service
+    if [ -d /etc/s6/adminsv/default ]; then
+        ln -sf "$S6_SERVICE_DIR" "/etc/s6/adminsv/default/$APP_NAME" 2>/dev/null || true
+    fi
+
+    if command -v s6-svc >/dev/null 2>&1; then
+        s6-svc -u "$S6_SERVICE_DIR" || handle_error "Failed to start $APP_NAME with s6"
+    fi
+    echo "✅ $APP_NAME service created and started with s6"
+}
+
+# Function to create runit service
+create_runit_service() {
+    RUNIT_SERVICE_DIR="/etc/runit/sv/$APP_NAME"
+    mkdir -p "$RUNIT_SERVICE_DIR" || handle_error "Failed to create runit service directory"
+
+    cat <<EOF > "$RUNIT_SERVICE_DIR/run" || handle_error "Failed to create runit run script"
+#!/bin/sh
+$(generate_proxy_exports)
+exec $INSTALL_PATH $CMD_ARGS
+EOF
+
+    chmod +x "$RUNIT_SERVICE_DIR/run" || handle_error "Failed to make runit run script executable"
+
+    # Enable service
+    if [ -d /var/service ]; then
+        ln -sf "$RUNIT_SERVICE_DIR" "/var/service/$APP_NAME" || handle_error "Failed to enable $APP_NAME service"
+    elif [ -d /etc/runit/runsvdir/default ]; then
+        ln -sf "$RUNIT_SERVICE_DIR" "/etc/runit/runsvdir/default/$APP_NAME" || handle_error "Failed to enable $APP_NAME service"
+    fi
+
+    echo "✅ $APP_NAME service created and started with runit"
+}
+
+# Function to create upstart service
+create_upstart_service() {
+    SERVICE_PATH="/etc/init/$APP_NAME.conf"
+    cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create upstart service file"
+description "$APP_NAME service"
+author "KubeSolo"
+
+start on runlevel [2345]
+stop on runlevel [!2345]
+
+respawn
+respawn limit 10 5
+
+$(generate_proxy_env_upstart)
+
+exec $INSTALL_PATH $CMD_ARGS
+EOF
+
+    initctl reload-configuration || handle_error "Failed to reload upstart configuration"
+    initctl start "$APP_NAME" || handle_error "Failed to start $APP_NAME service"
+    echo "✅ $APP_NAME service created and started with upstart"
+}
+
+# Function to run in foreground mode
+run_foreground() {
+    echo "🚀 Starting $APP_NAME in foreground mode..."
+    echo "📝 Command: $INSTALL_PATH $CMD_ARGS"
+    echo "⚠️  Press Ctrl+C to stop the service"
+    echo "💡 To run in background, use: nohup $INSTALL_PATH $CMD_ARGS > /var/log/$APP_NAME.log 2>&1 &"
+
+    # Set proxy environment variables if configured
+    if [ -n "$PROXY" ]; then
+        export HTTP_PROXY="$PROXY"
+        export HTTPS_PROXY="$PROXY"
+        export NO_PROXY="localhost,127.0.0.1"
+    fi
+
+    eval "exec \"$INSTALL_PATH\" $CMD_ARGS"
+}
+
+# Function to run as daemon
+run_daemon() {
+    PIDFILE="/var/run/$APP_NAME.pid"
+    LOGFILE="/var/log/$APP_NAME.log"
+
+    echo "🚀 Starting $APP_NAME as daemon..."
+
+    # Create log directory if it doesn't exist
+    mkdir -p "$(dirname "$LOGFILE")" || handle_error "Failed to create log directory"
+
+    # Set proxy environment variables if configured
+    if [ -n "$PROXY" ]; then
+        export HTTP_PROXY="$PROXY"
+        export HTTPS_PROXY="$PROXY"
+        export NO_PROXY="localhost,127.0.0.1"
+    fi
+
+    # Start daemon - use eval to properly handle arguments
+    eval "nohup \"$INSTALL_PATH\" $CMD_ARGS > \"$LOGFILE\" 2>&1 &"
+    echo $! > "$PIDFILE" || handle_error "Failed to write PID file"
+
+    echo "✅ $APP_NAME started as daemon (PID: $(cat "$PIDFILE"))"
+    echo "📋 Logs: tail -f $LOGFILE"
+    echo "🛑 Stop: kill \$(cat $PIDFILE)"
+}
+
+# Function to download the binary archive and install script for offline use.
+# Performs its own minimal arch/libc detection — no root or install-path globals needed.
+download_bundle() {
+    local outdir="$1"
+    local os arch libc_suffix archive bin_url script_url
+
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l)  arch="arm"   ;;
+        riscv64) arch="riscv64" ;;
+        *) handle_error "Unsupported architecture: $arch" ;;
+    esac
+
+    libc_suffix=""
+    if [ -f /lib/ld-musl-*.so.1 ] || [ -f /usr/lib/ld-musl-*.so.1 ]; then
+        if [ "$arch" = "amd64" ] || [ "$arch" = "arm64" ]; then
+            libc_suffix="-musl"
+        else
+            handle_error "musl libc detected but musl builds are only available for amd64 and arm64. Current: $arch"
+        fi
+    fi
+
+    archive="kubesolo-${KUBESOLO_VERSION}-${os}-${arch}${libc_suffix}.tar.gz"
+    bin_url="https://github.com/portainer/kubesolo/releases/download/${KUBESOLO_VERSION}/${archive}"
+    script_url="https://get.kubesolo.io"
+
+    mkdir -p "$outdir" || handle_error "Failed to create output directory: $outdir"
+
+    echo "📥 Downloading kubesolo ${KUBESOLO_VERSION} (${os}/${arch}${libc_suffix})..."
+    curl -sfL "$bin_url" -o "$outdir/$archive" || handle_error "Failed to download from $bin_url"
+    echo "✅ Binary archive saved to: $outdir/$archive"
+
+    echo "📥 Downloading install script..."
+    curl -sfL "$script_url" -o "$outdir/install.sh" || handle_error "Failed to download install script"
+    chmod +x "$outdir/install.sh"
+    echo "✅ Install script saved to: $outdir/install.sh"
+
+    echo ""
+    echo "✅ Download complete! Files saved to: $outdir"
+    echo "💡 To install offline, transfer these files to the target machine and run:"
+    echo "   sudo sh install.sh --offline-install=$archive"
+}
+
+# Function to install the kubesolo binary from a local archive/binary or by downloading it.
+# Requires globals: KUBESOLO_OFFLINE_INSTALL, BIN_URL, APP_NAME, INSTALL_PATH, KUBESOLO_VERSION
+install_binary() {
+    local temp_dir
+
+    if [ -n "$KUBESOLO_OFFLINE_INSTALL" ]; then
+        [ -e "$KUBESOLO_OFFLINE_INSTALL" ] || handle_error "Specified offline-install path does not exist: $KUBESOLO_OFFLINE_INSTALL"
+        temp_dir=$(mktemp -d -p "$HOME") || handle_error "Failed to create temporary directory"
+
+        case "$KUBESOLO_OFFLINE_INSTALL" in
+            *.tar.gz|*.tgz)
+                echo "📦 Extracting $APP_NAME from local archive $KUBESOLO_OFFLINE_INSTALL..."
+                tar -xzf "$KUBESOLO_OFFLINE_INSTALL" -C "$temp_dir" || handle_error "Failed to extract $KUBESOLO_OFFLINE_INSTALL"
+                echo "📝 Installing binary..."
+                mv "$temp_dir/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+                ;;
+            *.zip)
+                command -v unzip >/dev/null 2>&1 || handle_error "unzip is required to extract .zip archives but was not found"
+                echo "📦 Extracting $APP_NAME from local zip archive $KUBESOLO_OFFLINE_INSTALL..."
+                unzip -o "$KUBESOLO_OFFLINE_INSTALL" -d "$temp_dir" || handle_error "Failed to extract $KUBESOLO_OFFLINE_INSTALL"
+                echo "📝 Installing binary..."
+                mv "$temp_dir/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+                ;;
+            *)
+                echo "📝 Installing binary from local path $KUBESOLO_OFFLINE_INSTALL..."
+                cp "$KUBESOLO_OFFLINE_INSTALL" "$temp_dir/kubesolo" || handle_error "Failed to copy binary to temporary directory"
+                mv "$temp_dir/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+                ;;
+        esac
+
+        rm -rf "$temp_dir"
+    else
+        temp_dir=$(mktemp -d -p "$HOME") || handle_error "Failed to create temporary directory"
+        echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION..."
+        curl -sfL "$BIN_URL" -o "$temp_dir/kubesolo.tar.gz" || handle_error "Failed to download $APP_NAME from $BIN_URL"
+
+        echo "📦 Extracting $APP_NAME..."
+        tar -xzf "$temp_dir/kubesolo.tar.gz" -C "$temp_dir" || handle_error "Failed to extract $APP_NAME archive"
+
+        echo "📝 Installing binary..."
+        mv "$temp_dir/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+        rm -rf "$temp_dir"
+    fi
+
+    chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
+}
+
+# ── Script entry point ────────────────────────────────────────────────────────
 
 # Default configuration from environment variables
 KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.1.2}"
@@ -884,40 +1144,72 @@ for arg in "$@"; do
   esac
 done
 
-# Binary configuration — shared by both download-only and install paths
+# ── Download-only path ────────────────────────────────────────────────────────
+# Runs without root. No pre-flight checks, no installation.
+if [ -n "$DOWNLOAD_ONLY_DIR" ]; then
+    download_bundle "$DOWNLOAD_ONLY_DIR"
+    exit 0
+fi
+
+# ── Installation path ─────────────────────────────────────────────────────────
+
+# Root is required for installation
+if [ "$(id -u)" -ne 0 ]; then
+    echo "❌ Error: This script must be run as root or via sudo"
+    echo "   Please run: sudo $0 $*"
+    exit 1
+fi
+
+# Detect OS and architecture
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64)
+        ARCH="amd64"
+        ;;
+    aarch64)
+        ARCH="arm64"
+        ;;
+    armv7l)
+        ARCH="arm"
+        ;;
+    riscv64)
+        ARCH="riscv64"
+        ;;
+    *)
+        handle_error "Unsupported architecture: $ARCH"
+        ;;
+esac
+
+# Detect libc type (glibc vs musl)
+LIBC_SUFFIX=""
+if [ -f /lib/ld-musl-*.so.1 ] || [ -f /usr/lib/ld-musl-*.so.1 ]; then
+    # Check if musl builds are available for this architecture
+    if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
+        LIBC_SUFFIX="-musl"
+        echo "🔍 Detected musl libc system"
+    else
+        handle_error "musl libc detected but musl builds are only available for amd64 and arm64 architectures. Current architecture: $ARCH"
+    fi
+else
+    echo "🔍 Detected glibc system"
+fi
+
+# Detect init system and environment
+INIT_SYSTEM=$(detect_init_system)
+ENVIRONMENT=$(detect_environment)
+
+echo "🔍 Detected init system: $INIT_SYSTEM"
+echo "🔍 Detected environment: $ENVIRONMENT"
+
+# Binary configuration
 APP_NAME="kubesolo"
 ARCHIVE_NAME="kubesolo-$KUBESOLO_VERSION-$OS-$ARCH$LIBC_SUFFIX.tar.gz"
 BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/$ARCHIVE_NAME"
 
-# Handle download-only mode before any pre-flight checks or installation
-if [ -n "$DOWNLOAD_ONLY_DIR" ]; then
-    INSTALL_SCRIPT_URL="https://get.kubesolo.io"
-
-    mkdir -p "$DOWNLOAD_ONLY_DIR" || handle_error "Failed to create output directory: $DOWNLOAD_ONLY_DIR"
-
-    echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION ($OS/$ARCH$LIBC_SUFFIX)..."
-    curl -sfL "$BIN_URL" -o "$DOWNLOAD_ONLY_DIR/$ARCHIVE_NAME" || handle_error "Failed to download $APP_NAME from $BIN_URL"
-    echo "✅ Binary archive saved to: $DOWNLOAD_ONLY_DIR/$ARCHIVE_NAME"
-
-    echo "📥 Downloading install script..."
-    curl -sfL "$INSTALL_SCRIPT_URL" -o "$DOWNLOAD_ONLY_DIR/install.sh" || handle_error "Failed to download install script from $INSTALL_SCRIPT_URL"
-    chmod +x "$DOWNLOAD_ONLY_DIR/install.sh"
-    echo "✅ Install script saved to: $DOWNLOAD_ONLY_DIR/install.sh"
-
-    echo ""
-    echo "✅ Download complete! Files saved to: $DOWNLOAD_ONLY_DIR"
-    echo "💡 To install offline, transfer these files to the target machine and run:"
-    echo "   sudo sh install.sh --offline-install=$ARCHIVE_NAME"
-    exit 0
-fi
-
-# Function to check for Docker prerequisite
+# Pre-flight checks
 check_docker_prerequisite
-
-# Function to check hostname RFC 1123 compliance
 check_hostname_compliance
-
-# Function to check iptables xt_comment module support
 check_iptables_comment_module
 
 # Check and optionally install nftables on Alpine
@@ -929,13 +1221,9 @@ ensure_alpine_cgroups_service
 # Function to check for required cgroups controllers
 check_cgroups
 
-# Function to stop running KubeSolo processes
+# Stop any running KubeSolo processes and clean up conflicts
 stop_running_processes
-
-# Function to stop processes holding KubeSolo ports
 stop_port_processes
-
-# Function to clean up file conflicts
 cleanup_file_conflicts
 
 # Service configuration
@@ -943,47 +1231,7 @@ INSTALL_PATH="/usr/local/bin/$APP_NAME"
 
 echo "🔄 Installing $APP_NAME $KUBESOLO_VERSION for $INIT_SYSTEM init system..."
 
-if [ -n "$KUBESOLO_OFFLINE_INSTALL" ]; then
-    # Install from a local binary or archive
-    [ -e "$KUBESOLO_OFFLINE_INSTALL" ] || handle_error "Specified offline-install path does not exist: $KUBESOLO_OFFLINE_INSTALL"
-    TEMP_DIR=$(mktemp -d -p $HOME) || handle_error "Failed to create temporary directory"
-
-    case "$KUBESOLO_OFFLINE_INSTALL" in
-        *.tar.gz|*.tgz)
-            echo "📦 Extracting $APP_NAME from local archive $KUBESOLO_OFFLINE_INSTALL..."
-            tar -xzf "$KUBESOLO_OFFLINE_INSTALL" -C "$TEMP_DIR" || handle_error "Failed to extract $KUBESOLO_OFFLINE_INSTALL"
-            echo "📝 Installing binary..."
-            mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
-            ;;
-        *.zip)
-            command -v unzip >/dev/null 2>&1 || handle_error "unzip is required to extract .zip archives but was not found"
-            echo "📦 Extracting $APP_NAME from local zip archive $KUBESOLO_OFFLINE_INSTALL..."
-            unzip -o "$KUBESOLO_OFFLINE_INSTALL" -d "$TEMP_DIR" || handle_error "Failed to extract $KUBESOLO_OFFLINE_INSTALL"
-            echo "📝 Installing binary..."
-            mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
-            ;;
-        *)
-            echo "📝 Installing binary from local path $KUBESOLO_OFFLINE_INSTALL..."
-            cp "$KUBESOLO_OFFLINE_INSTALL" "$INSTALL_PATH" || handle_error "Failed to copy binary to $INSTALL_PATH"
-            ;;
-    esac
-
-    rm -rf "$TEMP_DIR"
-    chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
-else
-    # Download and extract the archive
-    TEMP_DIR=$(mktemp -d -p $HOME) || handle_error "Failed to create temporary directory"
-    echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION..."
-    curl -sfL "$BIN_URL" -o "$TEMP_DIR/kubesolo.tar.gz" || handle_error "Failed to download $APP_NAME from $BIN_URL"
-
-    echo "📦 Extracting $APP_NAME..."
-    tar -xzf "$TEMP_DIR/kubesolo.tar.gz" -C "$TEMP_DIR" || handle_error "Failed to extract $APP_NAME archive"
-
-    echo "📝 Installing binary..."
-    mv "$TEMP_DIR/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
-    rm -rf "$TEMP_DIR"
-    chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
-fi
+install_binary
 
 # Handle SELinux file contexts if SELinux tools are available
 if command -v restorecon >/dev/null 2>&1; then
@@ -1017,282 +1265,6 @@ fi
 if [ "$PPROF_SERVER" = "true" ]; then
   CMD_ARGS="$CMD_ARGS --pprof-server=$PPROF_SERVER"
 fi
-
-# Function to generate proxy environment variables
-generate_proxy_env() {
-    if [ -n "$PROXY" ]; then
-        echo "Environment=\"HTTP_PROXY=$PROXY\""
-        echo "Environment=\"HTTPS_PROXY=$PROXY\""
-        echo "Environment=\"NO_PROXY=localhost,127.0.0.1\""
-    fi
-}
-
-# Function to generate proxy exports for shell scripts
-generate_proxy_exports() {
-    if [ -n "$PROXY" ]; then
-        echo "export HTTP_PROXY=\"$PROXY\""
-        echo "export HTTPS_PROXY=\"$PROXY\""
-        echo "export NO_PROXY=\"localhost,127.0.0.1\""
-    fi
-}
-
-# Function to generate proxy environment variables for upstart
-generate_proxy_env_upstart() {
-    if [ -n "$PROXY" ]; then
-        echo "env HTTP_PROXY=\"$PROXY\""
-        echo "env HTTPS_PROXY=\"$PROXY\""
-        echo "env NO_PROXY=\"localhost,127.0.0.1\""
-    fi
-}
-
-# Function to create systemd service
-create_systemd_service() {
-    SERVICE_PATH="/etc/systemd/system/$APP_NAME.service"
-    cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create systemd service file"
-[Unit]
-Description=$APP_NAME Service
-After=network.target
-
-[Service]
-ExecStart=$INSTALL_PATH $CMD_ARGS
-Restart=always
-RestartSec=3
-OOMScoreAdjust=-500
-LimitNOFILE=65535
-StandardOutput=journal
-StandardError=journal
-$(generate_proxy_env)
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    
-    systemctl daemon-reexec || handle_error "Failed to reexecute systemd daemon"
-    systemctl daemon-reload || handle_error "Failed to reload systemd daemon"
-    systemctl enable "$APP_NAME" || handle_error "Failed to enable $APP_NAME service"
-    systemctl restart "$APP_NAME" || handle_error "Failed to start $APP_NAME service"
-    echo "✅ $APP_NAME service created and started with systemd"
-}
-
-# Function to create SysV init script
-create_sysvinit_service() {
-    SERVICE_PATH="/etc/init.d/$APP_NAME"
-    cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create SysV init script"
-#!/bin/sh
-### BEGIN INIT INFO
-# Provides:          $APP_NAME
-# Required-Start:    \$network \$local_fs
-# Required-Stop:     \$network \$local_fs
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: $APP_NAME service
-# Description:       KubeSolo single-node Kubernetes distribution
-### END INIT INFO
-
-$(generate_proxy_exports)
-
-DAEMON="$INSTALL_PATH"
-DAEMON_ARGS="$CMD_ARGS"
-PIDFILE="/var/run/$APP_NAME.pid"
-USER="root"
-
-. /lib/lsb/init-functions
-
-case "\$1" in
-    start)
-        log_daemon_msg "Starting $APP_NAME"
-        start-stop-daemon --start --quiet --pidfile \$PIDFILE --make-pidfile --background --chuid \$USER --exec \$DAEMON -- \$DAEMON_ARGS
-        log_end_msg \$?
-        ;;
-    stop)
-        log_daemon_msg "Stopping $APP_NAME"
-        start-stop-daemon --stop --quiet --pidfile \$PIDFILE
-        RETVAL=\$?
-        [ \$RETVAL -eq 0 ] && rm -f \$PIDFILE
-        log_end_msg \$RETVAL
-        ;;
-    restart)
-        \$0 stop
-        \$0 start
-        ;;
-    status)
-        status_of_proc -p \$PIDFILE \$DAEMON "$APP_NAME" && exit 0 || exit \$?
-        ;;
-    *)
-        echo "Usage: \$0 {start|stop|restart|status}"
-        exit 1
-        ;;
-esac
-
-exit 0
-EOF
-    
-    chmod +x "$SERVICE_PATH" || handle_error "Failed to make SysV init script executable"
-    
-    # Enable service for different runlevels
-    if command -v update-rc.d >/dev/null 2>&1; then
-        update-rc.d "$APP_NAME" defaults || handle_error "Failed to enable $APP_NAME service"
-    elif command -v chkconfig >/dev/null 2>&1; then
-        chkconfig --add "$APP_NAME" || handle_error "Failed to add $APP_NAME service"
-        chkconfig "$APP_NAME" on || handle_error "Failed to enable $APP_NAME service"
-    fi
-    
-    # Start the service - try service command first, fall back to direct init script
-    if command -v service >/dev/null 2>&1; then
-        service "$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
-    else
-        "/etc/init.d/$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
-    fi
-    echo "✅ $APP_NAME service created and started with SysV init"
-}
-
-# Function to create OpenRC service
-create_openrc_service() {
-    SERVICE_PATH="/etc/init.d/$APP_NAME"
-    cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create OpenRC service script"
-#!/sbin/openrc-run
-
-$(generate_proxy_exports)
-
-name="$APP_NAME"
-description="KubeSolo single-node Kubernetes distribution"
-command="$INSTALL_PATH"
-command_args="$CMD_ARGS"
-command_background=true
-pidfile="/var/run/\${RC_SVCNAME}.pid"
-command_user="root"
-
-depend() {
-    need net
-    after firewall
-}
-EOF
-    
-    chmod +x "$SERVICE_PATH" || handle_error "Failed to make OpenRC service script executable"
-    rc-update add "$APP_NAME" default || handle_error "Failed to enable $APP_NAME service"
-    rc-service "$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
-    echo "✅ $APP_NAME service created and started with OpenRC"
-}
-
-# Function to create s6 service
-create_s6_service() {
-    S6_SERVICE_DIR="/etc/s6/sv/$APP_NAME"
-    mkdir -p "$S6_SERVICE_DIR" || handle_error "Failed to create s6 service directory"
-    
-    cat <<EOF > "$S6_SERVICE_DIR/run" || handle_error "Failed to create s6 run script"
-#!/bin/sh
-$(generate_proxy_exports)
-exec $INSTALL_PATH $CMD_ARGS
-EOF
-    
-    chmod +x "$S6_SERVICE_DIR/run" || handle_error "Failed to make s6 run script executable"
-    
-    # Create finish script for proper cleanup
-    cat <<EOF > "$S6_SERVICE_DIR/finish"
-#!/bin/sh
-echo "$APP_NAME service finished"
-EOF
-    chmod +x "$S6_SERVICE_DIR/finish"
-    
-    # Enable and start service
-    if [ -d /etc/s6/adminsv/default ]; then
-        ln -sf "$S6_SERVICE_DIR" "/etc/s6/adminsv/default/$APP_NAME" 2>/dev/null || true
-    fi
-    
-    if command -v s6-svc >/dev/null 2>&1; then
-        s6-svc -u "$S6_SERVICE_DIR" || handle_error "Failed to start $APP_NAME with s6"
-    fi
-    echo "✅ $APP_NAME service created and started with s6"
-}
-
-# Function to create runit service
-create_runit_service() {
-    RUNIT_SERVICE_DIR="/etc/runit/sv/$APP_NAME"
-    mkdir -p "$RUNIT_SERVICE_DIR" || handle_error "Failed to create runit service directory"
-    
-    cat <<EOF > "$RUNIT_SERVICE_DIR/run" || handle_error "Failed to create runit run script"
-#!/bin/sh
-$(generate_proxy_exports)
-exec $INSTALL_PATH $CMD_ARGS
-EOF
-    
-    chmod +x "$RUNIT_SERVICE_DIR/run" || handle_error "Failed to make runit run script executable"
-    
-    # Enable service
-    if [ -d /var/service ]; then
-        ln -sf "$RUNIT_SERVICE_DIR" "/var/service/$APP_NAME" || handle_error "Failed to enable $APP_NAME service"
-    elif [ -d /etc/runit/runsvdir/default ]; then
-        ln -sf "$RUNIT_SERVICE_DIR" "/etc/runit/runsvdir/default/$APP_NAME" || handle_error "Failed to enable $APP_NAME service"
-    fi
-    
-    echo "✅ $APP_NAME service created and started with runit"
-}
-
-# Function to create upstart service
-create_upstart_service() {
-    SERVICE_PATH="/etc/init/$APP_NAME.conf"
-    cat <<EOF > "$SERVICE_PATH" || handle_error "Failed to create upstart service file"
-description "$APP_NAME service"
-author "KubeSolo"
-
-start on runlevel [2345]
-stop on runlevel [!2345]
-
-respawn
-respawn limit 10 5
-
-$(generate_proxy_env_upstart)
-
-exec $INSTALL_PATH $CMD_ARGS
-EOF
-    
-    initctl reload-configuration || handle_error "Failed to reload upstart configuration"
-    initctl start "$APP_NAME" || handle_error "Failed to start $APP_NAME service"
-    echo "✅ $APP_NAME service created and started with upstart"
-}
-
-# Function to run in foreground mode
-run_foreground() {
-    echo "🚀 Starting $APP_NAME in foreground mode..."
-    echo "📝 Command: $INSTALL_PATH $CMD_ARGS"
-    echo "⚠️  Press Ctrl+C to stop the service"
-    echo "💡 To run in background, use: nohup $INSTALL_PATH $CMD_ARGS > /var/log/$APP_NAME.log 2>&1 &"
-    
-    # Set proxy environment variables if configured
-    if [ -n "$PROXY" ]; then
-        export HTTP_PROXY="$PROXY"
-        export HTTPS_PROXY="$PROXY"
-        export NO_PROXY="localhost,127.0.0.1"
-    fi
-    
-    eval "exec \"$INSTALL_PATH\" $CMD_ARGS"
-}
-
-# Function to run as daemon
-run_daemon() {
-    PIDFILE="/var/run/$APP_NAME.pid"
-    LOGFILE="/var/log/$APP_NAME.log"
-    
-    echo "🚀 Starting $APP_NAME as daemon..."
-    
-    # Create log directory if it doesn't exist
-    mkdir -p "$(dirname "$LOGFILE")" || handle_error "Failed to create log directory"
-    
-    # Set proxy environment variables if configured
-    if [ -n "$PROXY" ]; then
-        export HTTP_PROXY="$PROXY"
-        export HTTPS_PROXY="$PROXY"
-        export NO_PROXY="localhost,127.0.0.1"
-    fi
-    
-    # Start daemon - use eval to properly handle arguments
-    eval "nohup \"$INSTALL_PATH\" $CMD_ARGS > \"$LOGFILE\" 2>&1 &"
-    echo $! > "$PIDFILE" || handle_error "Failed to write PID file"
-    
-    echo "✅ $APP_NAME started as daemon (PID: $(cat "$PIDFILE"))"
-    echo "📋 Logs: tail -f $LOGFILE"
-    echo "🛑 Stop: kill \$(cat $PIDFILE)"
-}
 
 # Main service creation logic
 echo "📝 Setting up $APP_NAME service..."
@@ -1367,13 +1339,13 @@ fi
 
 if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foreground" ]; then
     echo "🔍 Detected kubectl installation at $KUBECTL_PATH"
-    
+
     # Detect real user when running under sudo
     REAL_USER="$USER"
     REAL_HOME="$HOME"
     REAL_UID=""
     REAL_GID=""
-    
+
     if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
         REAL_USER="$SUDO_USER"
         REAL_UID="$SUDO_UID"
@@ -1385,7 +1357,7 @@ if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foregro
         fi
         echo "🔍 Detected sudo usage - using real user: $REAL_USER (home: $REAL_HOME)"
     fi
-    
+
     # Wait for kubesolo to generate the kubeconfig
     echo "⏳ Waiting for kubesolo to generate kubeconfig..."
     i=1
@@ -1403,15 +1375,15 @@ if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foregro
 
     if [ -f "$CONFIG_PATH/pki/admin/admin.kubeconfig" ]; then
         echo "🔄 Merging kubeconfig..."
-        
+
         # Create backup of existing kubeconfig
         if [ -f "$REAL_HOME/.kube/config" ]; then
             cp "$REAL_HOME/.kube/config" "$REAL_HOME/.kube/config.backup-$(date +%Y%m%d%H%M%S)" || handle_error "Failed to backup existing kubeconfig"
         fi
-        
+
         # Create .kube directory if it doesn't exist
         mkdir -p "$REAL_HOME/.kube" || handle_error "Failed to create .kube directory"
-        
+
         # Merge the configs
         export KUBECONFIG="$REAL_HOME/.kube/config:$CONFIG_PATH/pki/admin/admin.kubeconfig"
         if "$KUBECTL_PATH" config view --flatten > "$REAL_HOME/.kube/config.tmp" 2>/dev/null; then
@@ -1423,13 +1395,13 @@ if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foregro
             cp "$CONFIG_PATH/pki/admin/admin.kubeconfig" "$REAL_HOME/.kube/config" || handle_error "Failed to copy kubeconfig"
         fi
         unset KUBECONFIG
-        
+
         # Fix ownership if we're running under sudo
         if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ] && [ -n "$REAL_UID" ] && [ -n "$REAL_GID" ]; then
             echo "🔧 Fixing kubeconfig ownership for user $REAL_USER..."
             chown -R "$REAL_UID:$REAL_GID" "$REAL_HOME/.kube" || echo "⚠️  Could not fix kubeconfig ownership (this may be normal)"
         fi
-        
+
         echo "📁 Kubeconfig location: $REAL_HOME/.kube/config"
     fi
 else
