@@ -49,7 +49,7 @@ func (s *service) checkKubeletHealth() error {
 
 		select {
 		case <-s.ctx.Done():
-			return nil
+			return s.ctx.Err()
 		case <-time.After(5 * time.Second):
 		}
 	}

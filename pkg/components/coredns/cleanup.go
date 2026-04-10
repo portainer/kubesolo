@@ -30,6 +30,7 @@ func cleanupLegacyResources(ctx context.Context, clientset *kubernetes.Clientset
 	deleteClusterRoleBinding(ctx, clientset)
 	deleteClusterRole(ctx, clientset)
 	deleteService(ctx, clientset)
+	deleteEndpointSlices(ctx, clientset)
 }
 
 func deleteDeployment(ctx context.Context, clientset *kubernetes.Clientset) {
@@ -71,5 +72,14 @@ func deleteService(ctx context.Context, clientset *kubernetes.Clientset) {
 	err := clientset.CoreV1().Services(coreDNSNamespace).Delete(ctx, coreDNSServiceName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		log.Warn().Str("component", "coredns").Err(err).Msg("failed to delete legacy CoreDNS service")
+	}
+}
+
+func deleteEndpointSlices(ctx context.Context, clientset *kubernetes.Clientset) {
+	err := clientset.DiscoveryV1().EndpointSlices(coreDNSNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+		LabelSelector: "discovery.k8s.io/service-name=" + coreDNSServiceName + ",endpointslice.kubernetes.io/managed-by=kubesolo",
+	})
+	if err != nil && !errors.IsNotFound(err) {
+		log.Warn().Str("component", "coredns").Err(err).Msg("failed to delete legacy CoreDNS endpoint slices")
 	}
 }

@@ -119,9 +119,9 @@ func (s *service) startClusterAwareDNS() error {
 	s.mu.Lock()
 	cf := clusterAwareCorefile(
 		"https://127.0.0.1:6443",
-		s.embedded.CACerts.Cert,
 		s.embedded.AdminCerts.Cert,
 		s.embedded.AdminCerts.Key,
+		s.embedded.CACerts.Cert,
 	)
 	newInstance, err := s.instance.Restart(newCorefileInput(cf))
 	s.mu.Unlock()

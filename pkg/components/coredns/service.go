@@ -51,22 +51,29 @@ func createService(ctx context.Context, clientset *kubernetes.Clientset, nodeIP 
 	_, err := clientset.CoreV1().Services(coreDNSNamespace).Create(ctx, service, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			return createEndpointSlice(ctx, clientset, nodeIP)
-		}
-		// The IP may be allocated in kine from a previous incomplete run while the
-		// Service object itself no longer exists. Check if it already exists before failing.
-		if existing, getErr := clientset.CoreV1().Services(coreDNSNamespace).Get(ctx, coreDNSServiceName, metav1.GetOptions{}); getErr == nil {
-			if existing.Spec.ClusterIP == types.DefaultCoreDNSIP {
-				return createEndpointSlice(ctx, clientset, nodeIP)
+			// Validate the existing Service has the expected ClusterIP and is selectorless
+			existing, getErr := clientset.CoreV1().Services(coreDNSNamespace).Get(ctx, coreDNSServiceName, metav1.GetOptions{})
+			if getErr != nil {
+				return fmt.Errorf("failed to get existing CoreDNS service: %v", getErr)
 			}
+			if existing.Spec.ClusterIP != types.DefaultCoreDNSIP || len(existing.Spec.Selector) > 0 {
+				// Service doesn't match expected spec — delete and recreate
+				if delErr := clientset.CoreV1().Services(coreDNSNamespace).Delete(ctx, coreDNSServiceName, metav1.DeleteOptions{}); delErr != nil {
+					return fmt.Errorf("failed to delete mismatched CoreDNS service: %v", delErr)
+				}
+				if _, createErr := clientset.CoreV1().Services(coreDNSNamespace).Create(ctx, service, metav1.CreateOptions{}); createErr != nil {
+					return fmt.Errorf("failed to recreate CoreDNS service: %v", createErr)
+				}
+			}
+			return ensureEndpointSlice(ctx, clientset, nodeIP)
 		}
 		return fmt.Errorf("failed to create CoreDNS service: %v", err)
 	}
 
-	return createEndpointSlice(ctx, clientset, nodeIP)
+	return ensureEndpointSlice(ctx, clientset, nodeIP)
 }
 
-func createEndpointSlice(ctx context.Context, clientset *kubernetes.Clientset, nodeIP string) error {
+func ensureEndpointSlice(ctx context.Context, clientset *kubernetes.Clientset, nodeIP string) error {
 	dnsPort := int32(dnsBoundPort)
 	epSlice := &discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -92,8 +99,19 @@ func createEndpointSlice(ctx context.Context, clientset *kubernetes.Clientset, n
 	}
 
 	_, err := clientset.DiscoveryV1().EndpointSlices(coreDNSNamespace).Create(ctx, epSlice, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create CoreDNS EndpointSlice: %v", err)
+	if err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create CoreDNS EndpointSlice: %v", err)
+		}
+		// Update existing EndpointSlice to ensure endpoints/ports match current nodeIP
+		existing, getErr := clientset.DiscoveryV1().EndpointSlices(coreDNSNamespace).Get(ctx, coreDNSServiceName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("failed to get existing CoreDNS EndpointSlice: %v", getErr)
+		}
+		epSlice.ObjectMeta.ResourceVersion = existing.ResourceVersion
+		if _, updateErr := clientset.DiscoveryV1().EndpointSlices(coreDNSNamespace).Update(ctx, epSlice, metav1.UpdateOptions{}); updateErr != nil {
+			return fmt.Errorf("failed to update CoreDNS EndpointSlice: %v", updateErr)
+		}
 	}
 
 	return nil

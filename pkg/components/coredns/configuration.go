@@ -10,21 +10,22 @@ const dnsBoundPort = 553
 // forwardOnlyCorefile returns a Corefile bound to all interfaces with upstream forwarding only.
 // Starts before the apiserver is ready; provides upstream DNS forwarding immediately.
 func forwardOnlyCorefile() string {
-	return fmt.Sprintf(`.:553 {
+	return fmt.Sprintf(`.:%d {
     errors
     loop
     cache 30
     forward . /etc/resolv.conf
     health :8080
     ready :8181
-}`)
+}`, dnsBoundPort)
 }
 
 // clusterAwareCorefile returns a full Corefile with the kubernetes plugin enabled.
 // apiServerEndpoint is the HTTPS address of the apiserver (e.g. "https://127.0.0.1:6443").
-// caCert, clientCert, clientKey are paths from types.Embedded PKI.
-func clusterAwareCorefile(apiServerEndpoint, caCert, clientCert, clientKey string) string {
-	return fmt.Sprintf(`.:553 {
+// clientCert, clientKey, caCert are paths from types.Embedded PKI, ordered to match
+// the CoreDNS tls directive: tls CERT KEY CA.
+func clusterAwareCorefile(apiServerEndpoint, clientCert, clientKey, caCert string) string {
+	return fmt.Sprintf(`.:%d {
     errors
     loop
     cache 30 {
@@ -40,5 +41,5 @@ func clusterAwareCorefile(apiServerEndpoint, caCert, clientCert, clientKey strin
     forward . /etc/resolv.conf
     health :8080
     ready :8181
-}`, apiServerEndpoint, clientCert, clientKey, caCert)
+}`, dnsBoundPort, apiServerEndpoint, clientCert, clientKey, caCert)
 }
