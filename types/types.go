@@ -117,7 +117,6 @@ type Embedded struct {
 
 	// Images
 	PortainerAgentImageFile       string
-	CorednsImageFile              string
 	SandboxImageFile              string
 	LocalPathProvisionerImageFile string
 

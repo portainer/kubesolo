@@ -15,10 +15,6 @@ import (
 // importImages imports the images into the containerd registry
 func (s *service) importImages(ctx context.Context, client *client.Client, isPortainerAgent bool) error {
 	context := namespaces.WithNamespace(ctx, types.DefaultK8sNamespace)
-	if err := s.importImage(context, client, s.corednsImageFile); err != nil {
-		return err
-	}
-
 	if err := s.importImage(context, client, s.sandboxImageFile); err != nil {
 		return err
 	}

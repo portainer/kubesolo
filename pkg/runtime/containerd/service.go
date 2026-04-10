@@ -24,7 +24,6 @@ type service struct {
 	runcBinaryFile                string
 	containerdShimBinaryFile      string
 	portainerAgentImageFile       string
-	corednsImageFile              string
 	sandboxImageFile              string
 	localPathProvisionerImageFile string
 	isPortainerEdge               bool
@@ -47,7 +46,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, containerdReady 
 		runcBinaryFile:                embedded.RuncBinaryFile,
 		containerdShimBinaryFile:      embedded.ContainerdShimBinaryFile,
 		portainerAgentImageFile:       embedded.PortainerAgentImageFile,
-		corednsImageFile:              embedded.CorednsImageFile,
 		sandboxImageFile:              embedded.SandboxImageFile,
 		localPathProvisionerImageFile: embedded.LocalPathProvisionerImageFile,
 		isPortainerEdge:               embedded.IsPortainerEdge,

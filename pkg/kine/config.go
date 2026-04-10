@@ -14,7 +14,7 @@ import (
 // notifyInterval sets the notify interval to 10 seconds
 func (s *service) generateKineConfig() endpoint.Config {
 	return endpoint.Config{
-		Endpoint: fmt.Sprintf("sqlite://%s/state.db?_journal=WAL&cache=shared&_busy_timeout=30000&_txlock=immediate", s.databaseDir),
+		Endpoint: fmt.Sprintf("sqlite://%s/state.db?_journal=WAL&cache=shared&_busy_timeout=30000", s.databaseDir),
 		Listener: types.DefaultKineEndpoint,
 		ConnectionPoolConfig: generic.ConnectionPoolConfig{
 			MaxIdle:     3,

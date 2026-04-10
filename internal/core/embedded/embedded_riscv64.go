@@ -28,9 +28,6 @@ var cniPluginPortmap []byte
 //go:embed bin/cni/loopback
 var cniPluginLoopback []byte
 
-//go:embed bin/images/coredns.tar.gz
-var corednsImageFile []byte
-
 // portainerAgentImageFile is empty for riscv64 as portainer-agent is not available for this architecture
 var portainerAgentImageFile []byte
 

@@ -28,9 +28,6 @@ var cniPluginPortmap []byte
 //go:embed bin/cni/loopback
 var cniPluginLoopback []byte
 
-//go:embed bin/images/coredns.tar.gz
-var corednsImageFile []byte
-
 //go:embed bin/images/portainer-agent.tar.gz
 var portainerAgentImageFile []byte
 

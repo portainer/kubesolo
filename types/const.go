@@ -28,7 +28,6 @@ const (
 	DefaultControllerManagerDir      = "controller-manager"
 	DefaultSandboxImage              = "docker.io/portainer/pause:latest"
 	DefaultPortainerAgentImage       = "docker.io/portainer/agent:2.39.0"
-	DefaultCoreDNSImage              = "docker.io/coredns/coredns:1.14.1"
 	DefaultLocalPathProvisionerImage = "docker.io/rancher/local-path-provisioner:v0.0.34"
 	DefaultLocalPathStorageDir       = "local-path-storage"
 	DefaultWebhookReadWriteTimeout   = 10 * time.Second

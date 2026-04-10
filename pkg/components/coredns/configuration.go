@@ -1,58 +1,44 @@
 package coredns
 
-import (
-	"context"
+import "fmt"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-)
+// dnsBoundPort is the port CoreDNS listens on. A non-privileged port above 1024
+// avoids conflicts with systemd-resolved (127.0.0.53:53) and does not require
+// CAP_NET_BIND_SERVICE. kube-proxy DNATs ClusterIP:53 → nodeIP:dnsBoundPort.
+const dnsBoundPort = 553
 
-// CoreDNSConfig contains minimal CoreDNS Corefile configuration
-const CoreDNSConfig = `.:53 {
-	errors
-	loop
-	cache 30 {
-		disable denial cluster.local
-	}
-	kubernetes cluster.local in-addr.arpa ip6.arpa {
-		pods insecure
-		fallthrough in-addr.arpa ip6.arpa
-		ttl 30
-	}
-	forward . /etc/resolv.conf
-	minimal
-	reload
-	health :8080
-	ready :8181
-}`
+// forwardOnlyCorefile returns a Corefile bound to all interfaces with upstream forwarding only.
+// Starts before the apiserver is ready; provides upstream DNS forwarding immediately.
+func forwardOnlyCorefile() string {
+	return fmt.Sprintf(`.:553 {
+    errors
+    loop
+    cache 30
+    forward . /etc/resolv.conf
+    health :8080
+    ready :8181
+}`)
+}
 
-// createConfigMap creates a configMap with the bare minimum CoreDNS configuration
-// it creates a new configmap if it does not exist
-// it updates the configmap if it already exists
-// it returns an error if it fails
-func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset) error {
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      coreDNSConfigMapName,
-			Namespace: coreDNSNamespace,
-		},
-		Data: map[string]string{
-			"Corefile": CoreDNSConfig,
-		},
-	}
-
-	_, err := clientset.CoreV1().ConfigMaps(coreDNSNamespace).Create(ctx, configMap, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return err
-	}
-
-	if errors.IsAlreadyExists(err) {
-		_, err = clientset.CoreV1().ConfigMaps(coreDNSNamespace).Update(ctx, configMap, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+// clusterAwareCorefile returns a full Corefile with the kubernetes plugin enabled.
+// apiServerEndpoint is the HTTPS address of the apiserver (e.g. "https://127.0.0.1:6443").
+// caCert, clientCert, clientKey are paths from types.Embedded PKI.
+func clusterAwareCorefile(apiServerEndpoint, caCert, clientCert, clientKey string) string {
+	return fmt.Sprintf(`.:553 {
+    errors
+    loop
+    cache 30 {
+        disable denial cluster.local
+    }
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        endpoint %s
+        tls %s %s %s
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+        ttl 30
+    }
+    forward . /etc/resolv.conf
+    health :8080
+    ready :8181
+}`, apiServerEndpoint, clientCert, clientKey, caCert)
 }

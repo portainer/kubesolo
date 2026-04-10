@@ -56,6 +56,7 @@ var (
 	containerdReadyCh = make(chan struct{})
 	kineReadyCh       = make(chan struct{})
 	apiServerReadyCh  = make(chan struct{})
+	coreDNSReadyCh    = make(chan struct{})
 	kubeletReadyCh    = make(chan struct{})
 	controllerReadyCh = make(chan struct{})
 	kubeproxyReadyCh  = make(chan struct{})
@@ -167,6 +168,18 @@ func (s *kubesolo) run() {
 			readyCh: apiServerReadyCh,
 		},
 		{
+			name: "coredns",
+			start: func() {
+				coreDNSService := coredns.NewService(ctx, cancel, coreDNSReadyCh, apiServerReadyCh, s.embedded)
+				s.wg.Go(func() {
+					if err := coreDNSService.Run(); err != nil {
+						log.Error().Str("component", "coredns").Err(err).Msg("coredns exited with error")
+					}
+				})
+			},
+			readyCh: coreDNSReadyCh,
+		},
+		{
 			name: "controller",
 			start: func() {
 				controllerService := controller.NewService(ctx, cancel, controllerReadyCh, s.embedded.ControllerDir, s.embedded)
@@ -204,11 +217,6 @@ func (s *kubesolo) run() {
 		if !waitForService(ctx, svc.name, svc.readyCh) {
 			return
 		}
-	}
-
-	log.Info().Str("component", "kubesolo").Msg("deploying coredns...")
-	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile); err != nil {
-		log.Fatal().Err(err).Msg("failed to deploy coredns")
 	}
 
 	if s.localStorage {
@@ -395,7 +403,6 @@ func (s *kubesolo) bootstrap() {
 
 		// Image paths
 		PortainerAgentImageFile:       filepath.Join(basePath, types.DefaultContainerdDir, "images", "portainer-agent.tar.gz"),
-		CorednsImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "coredns.tar.gz"),
 		SandboxImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "pause.tar.gz"),
 		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
 
