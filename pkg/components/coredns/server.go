@@ -83,7 +83,7 @@ func (s *service) Run() error {
 func (s *service) startForwardOnlyDNS() error {
 	log.Info().Str("component", "coredns").Int("port", dnsBoundPort).Msg("starting forward-only DNS...")
 
-	instance, err := caddy.Start(newCorefileInput(forwardOnlyCorefile()))
+	instance, err := caddy.Start(newCorefileInput(forwardOnlyCorefile(s.embedded.NodeIP)))
 	if err != nil {
 		log.Error().Str("component", "coredns").Err(err).Msg("forward-only DNS failed to start")
 		s.cancel()
@@ -118,6 +118,7 @@ func (s *service) startClusterAwareDNS() error {
 
 	s.mu.Lock()
 	cf := clusterAwareCorefile(
+		s.embedded.NodeIP,
 		"https://127.0.0.1:6443",
 		s.embedded.AdminCerts.Cert,
 		s.embedded.AdminCerts.Key,
