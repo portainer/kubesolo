@@ -21,7 +21,7 @@ type service struct {
 	containerdSocketFile          string
 	containerdCNIPluginsDir       string
 	containerdRegistryConfigDir   string
-	runcBinaryFile                string
+	crunBinaryFile                string
 	containerdShimBinaryFile      string
 	portainerAgentImageFile       string
 	corednsImageFile              string
@@ -44,7 +44,7 @@ func NewService(ctx context.Context, cancel context.CancelFunc, containerdReady 
 		containerdSocketFile:          embedded.ContainerdSocketFile,
 		containerdCNIPluginsDir:       embedded.ContainerdCNIPluginsDir,
 		containerdRegistryConfigDir:   embedded.ContainerdRegistryConfigDir,
-		runcBinaryFile:                embedded.RuncBinaryFile,
+		crunBinaryFile:                embedded.CrunBinaryFile,
 		containerdShimBinaryFile:      embedded.ContainerdShimBinaryFile,
 		portainerAgentImageFile:       embedded.PortainerAgentImageFile,
 		corednsImageFile:              embedded.CorednsImageFile,

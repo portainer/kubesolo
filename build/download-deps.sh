@@ -6,12 +6,15 @@ OS="linux"
 ARCH="amd64"
 # Set versions
 CONTAINERD_VERSION="2.1.5"
-RUNC_VERSION="v1.3.3"
+CRUN_VERSION="1.26"
 CNI_VERSION="v1.9.0"
 PORTAINER_AGENT_VERSION="2.39.0"
 COREDNS_VERSION="1.14.1"
 LOCAL_PATH_PROVISIONER_VERSION="v0.0.34"
 PAUSE_IMAGE_VERSION="3.10"
+
+# Offline mode embeds all OCI images; online mode (default) skips optional images
+OFFLINE=false
 
 # Process command line arguments
 while [[ "$#" -gt 0 ]]; do
@@ -20,11 +23,12 @@ while [[ "$#" -gt 0 ]]; do
         --os) OS="$2"; shift 2 ;;
         --arch=*) ARCH="${1#*=}"; shift ;;
         --arch) ARCH="$2"; shift 2 ;;
+        --offline) OFFLINE=true; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
 done
 
-echo "Using OS: ${OS}, Architecture: ${ARCH}"
+echo "Using OS: ${OS}, Architecture: ${ARCH}, Offline: ${OFFLINE}"
 
 # Create bin directories
 mkdir -p internal/core/embedded/bin/containerd
@@ -86,23 +90,25 @@ else
     fi
 fi
 
-# Extract containerd binaries
+# Extract containerd binaries and zstd-compress the shim for embedding
 tar -xzf internal/core/embedded/bin/containerd.tar.gz -C internal/core/embedded/bin/containerd
 rm internal/core/embedded/bin/containerd.tar.gz
+zstd -19 --rm -q internal/core/embedded/bin/containerd/bin/containerd-shim-runc-v2
 
-# Download runc - add error checking
-# Map architecture to runc filename (arm -> armhf for runc releases)
-RUNC_ARCH=${ARCH}
+# Download crun - add error checking
+# crun does not publish 32-bit ARM binaries; fail early for unsupported architectures
 if [ "${ARCH}" = "arm" ]; then
-    RUNC_ARCH="armhf"
-fi
-
-echo "Downloading runc ${RUNC_VERSION} for ${ARCH} (using runc.${RUNC_ARCH})..."
-if ! curl -L -f --silent -o internal/core/embedded/bin/runc https://github.com/opencontainers/runc/releases/download/${RUNC_VERSION}/runc.${RUNC_ARCH}; then
-    echo "Error downloading runc. Please check the version and URL."
+    echo "Error: crun does not provide pre-built binaries for 32-bit ARM (armhf)."
+    echo "Please build crun from source or use a supported architecture (amd64, arm64, riscv64)."
     exit 1
 fi
-chmod +x internal/core/embedded/bin/runc
+
+echo "Downloading crun ${CRUN_VERSION} for ${ARCH}..."
+if ! curl -L -f --silent -o internal/core/embedded/bin/crun https://github.com/containers/crun/releases/download/${CRUN_VERSION}/crun-${CRUN_VERSION}-linux-${ARCH}; then
+    echo "Error downloading crun. Please check the version and URL."
+    exit 1
+fi
+zstd -19 --rm -q internal/core/embedded/bin/crun
 
 # Download CNI plugins - add error checking
 echo "Downloading CNI plugins ${CNI_VERSION} for ${OS}-${ARCH}..."
@@ -120,6 +126,11 @@ fi
 tar -xzf internal/core/embedded/bin/cni/cni-plugins.tgz -C internal/core/embedded/bin/cni
 rm internal/core/embedded/bin/cni/cni-plugins.tgz
 
+# zstd-compress CNI plugin binaries for embedding
+for plugin in bridge host-local portmap loopback; do
+    zstd -19 --rm -q "internal/core/embedded/bin/cni/${plugin}"
+done
+
 # Download container images
 echo "Checking if Crane is available..."
 if ! command -v crane &> /dev/null; then
@@ -129,52 +140,53 @@ if ! command -v crane &> /dev/null; then
     rm -f go-containerregistry.tar.gz
 fi
 
-# Download Portainer Agent (skip for riscv64 as it's not supported)
-if [ "${ARCH}" != "riscv64" ]; then
-    echo "Downloading Portainer Agent ${PORTAINER_AGENT_VERSION}..."
-    PORTAINER_IMAGE="portainer/agent:${PORTAINER_AGENT_VERSION}"
-    # Pull the image as uncompressed tar
-    if ! crane pull --platform ${OS}/${ARCH} ${PORTAINER_IMAGE} internal/core/embedded/bin/images/portainer-agent.tar; then
-        echo "Error pulling Portainer Agent image."
-        exit 1
-    fi
-    # Compress it to save space
-    if ! gzip -f internal/core/embedded/bin/images/portainer-agent.tar; then
-        echo "Error compressing Portainer Agent image."
-        exit 1
-    fi
-    echo "Portainer Agent image saved and compressed successfully."
-else
-    echo "Skipping Portainer Agent download for ${ARCH} (not supported)"
-fi
-
-# Download CoreDNS
+# Download CoreDNS (always embedded)
 echo "Downloading CoreDNS ${COREDNS_VERSION}..."
 COREDNS_IMAGE="coredns/coredns:${COREDNS_VERSION}"
 if ! crane pull --platform ${OS}/${ARCH} ${COREDNS_IMAGE} internal/core/embedded/bin/images/coredns.tar; then
     echo "Error pulling CoreDNS image."
     exit 1
 fi
-# Compress it to save space
 if ! gzip -f internal/core/embedded/bin/images/coredns.tar; then
     echo "Error compressing CoreDNS image."
     exit 1
 fi
 echo "CoreDNS image saved successfully."
 
-# Download Local Path Provisioner
-echo "Downloading Local Path Provisioner ${LOCAL_PATH_PROVISIONER_VERSION}..."
-LOCAL_PATH_PROVISIONER_IMAGE="rancher/local-path-provisioner:${LOCAL_PATH_PROVISIONER_VERSION}"
-if ! crane pull --platform ${OS}/${ARCH} ${LOCAL_PATH_PROVISIONER_IMAGE} internal/core/embedded/bin/images/local-path-provisioner.tar; then
-    echo "Error pulling Local Path Provisioner image."
-    exit 1
+# Download optional images only for offline builds
+if [ "${OFFLINE}" = "true" ]; then
+    # Download Portainer Agent (skip for riscv64 as it's not supported)
+    if [ "${ARCH}" != "riscv64" ]; then
+        echo "Downloading Portainer Agent ${PORTAINER_AGENT_VERSION}..."
+        PORTAINER_IMAGE="portainer/agent:${PORTAINER_AGENT_VERSION}"
+        if ! crane pull --platform ${OS}/${ARCH} ${PORTAINER_IMAGE} internal/core/embedded/bin/images/portainer-agent.tar; then
+            echo "Error pulling Portainer Agent image."
+            exit 1
+        fi
+        if ! gzip -f internal/core/embedded/bin/images/portainer-agent.tar; then
+            echo "Error compressing Portainer Agent image."
+            exit 1
+        fi
+        echo "Portainer Agent image saved and compressed successfully."
+    else
+        echo "Skipping Portainer Agent download for ${ARCH} (not supported)"
+    fi
+
+    # Download Local Path Provisioner
+    echo "Downloading Local Path Provisioner ${LOCAL_PATH_PROVISIONER_VERSION}..."
+    LOCAL_PATH_PROVISIONER_IMAGE="rancher/local-path-provisioner:${LOCAL_PATH_PROVISIONER_VERSION}"
+    if ! crane pull --platform ${OS}/${ARCH} ${LOCAL_PATH_PROVISIONER_IMAGE} internal/core/embedded/bin/images/local-path-provisioner.tar; then
+        echo "Error pulling Local Path Provisioner image."
+        exit 1
+    fi
+    if ! gzip -f internal/core/embedded/bin/images/local-path-provisioner.tar; then
+        echo "Error compressing Local Path Provisioner image."
+        exit 1
+    fi
+    echo "Local Path Provisioner image saved successfully."
+else
+    echo "Skipping optional image downloads (online build). Images will be pulled at runtime."
 fi
-# Compress it to save space
-if ! gzip -f internal/core/embedded/bin/images/local-path-provisioner.tar; then
-    echo "Error compressing Local Path Provisioner image."
-    exit 1
-fi
-echo "Local Path Provisioner image saved successfully."
 
 # Download Kubernetes pause image
 echo "Downloading Portainer pause image..."

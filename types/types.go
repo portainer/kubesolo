@@ -89,8 +89,8 @@ type Embedded struct {
 	ContainerdCNIConfigDir  string
 	ContainerdCNIConfigFile string
 
-	// Runc binary
-	RuncBinaryFile string
+	// Crun binary
+	CrunBinaryFile string
 
 	// Kubelet directories
 	KubeletDir            string

@@ -13,22 +13,22 @@ import (
 )
 
 // importImages imports the images into the containerd registry
-func (s *service) importImages(ctx context.Context, client *client.Client, isPortainerAgent bool) error {
-	context := namespaces.WithNamespace(ctx, types.DefaultK8sNamespace)
-	if err := s.importImage(context, client, s.corednsImageFile); err != nil {
+func (s *service) importImages(ctx context.Context, c *client.Client, isPortainerAgent bool) error {
+	nsCtx := namespaces.WithNamespace(ctx, types.DefaultK8sNamespace)
+	if err := s.importImage(nsCtx, c, s.corednsImageFile, types.DefaultCoreDNSImage); err != nil {
 		return err
 	}
 
-	if err := s.importImage(context, client, s.sandboxImageFile); err != nil {
+	if err := s.importImage(nsCtx, c, s.sandboxImageFile, types.DefaultSandboxImage); err != nil {
 		return err
 	}
 
-	if err := s.importImage(context, client, s.localPathProvisionerImageFile); err != nil {
+	if err := s.importImage(nsCtx, c, s.localPathProvisionerImageFile, types.DefaultLocalPathProvisionerImage); err != nil {
 		return err
 	}
 
 	if isPortainerAgent {
-		if err := s.importImage(context, client, s.portainerAgentImageFile); err != nil {
+		if err := s.importImage(nsCtx, c, s.portainerAgentImageFile, types.DefaultPortainerAgentImage); err != nil {
 			return err
 		}
 	}
@@ -36,34 +36,35 @@ func (s *service) importImages(ctx context.Context, client *client.Client, isPor
 	return nil
 }
 
-// importImage imports an image into the containerd registry
-func (s *service) importImage(ctx context.Context, client *client.Client, image string) error {
-	log.Debug().Str("component", "containerd").Str("image", image).Msg("importing image")
+// importImage imports an image into the containerd registry from a local file.
+// If the local file is not found (not embedded), it falls back to pulling from the registry.
+func (s *service) importImage(ctx context.Context, c *client.Client, imageFile string, imageRef string) error {
+	log.Debug().Str("component", "containerd").Str("image", imageRef).Msg("loading image")
 
-	if _, err := os.Stat(image); err != nil {
-		if os.IsNotExist(err) {
-			log.Warn().Str("component", "containerd").Str("image", image).Msg("image file not found, skipping import (likely not embedded for this architecture)")
-			return nil
-		} else {
-			return fmt.Errorf("failed to check image file %s: %v", image, err)
+	info, err := os.Stat(imageFile)
+	if err != nil || info.Size() == 0 {
+		log.Info().Str("component", "containerd").Str("image", imageRef).Msg("embedded image not available, pulling from registry")
+		if _, pullErr := c.Pull(ctx, imageRef, client.WithPullUnpack); pullErr != nil {
+			return fmt.Errorf("failed to pull image %s: %v", imageRef, pullErr)
 		}
+		return nil
 	}
 
-	log.Debug().Str("component", "containerd").Str("image", image).Msg("importing image")
-	imageFile, err := os.Open(image)
+	log.Debug().Str("component", "containerd").Str("image", imageRef).Msg("importing embedded image")
+	f, err := os.Open(imageFile)
 	if err != nil {
 		return fmt.Errorf("failed to open image file: %v", err)
 	}
-	defer imageFile.Close()
+	defer f.Close()
 
-	gzipReader, err := gzip.NewReader(imageFile)
+	gzipReader, err := gzip.NewReader(f)
 	if err != nil {
 		return err
 	}
 	defer gzipReader.Close()
 
-	if _, err := client.Import(ctx, gzipReader); err != nil {
-		return fmt.Errorf("failed to import image: %v", err)
+	if _, err := c.Import(ctx, gzipReader); err != nil {
+		return fmt.Errorf("failed to import image %s: %v", imageRef, err)
 	}
 
 	return nil

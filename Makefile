@@ -53,6 +53,10 @@ release-workflow-deps: install-cross-compilers install-musl-cross-compilers
 deps:
 	./build/download-deps.sh --os=$(GOOS) --arch=$(GOARCH)
 
+.PHONY: deps-offline
+deps-offline:
+	./build/download-deps.sh --os=$(GOOS) --arch=$(GOARCH) --offline
+
 # Generic build function that uses the correct cross-compiler based on GOARCH
 .PHONY: build
 build: lint deps
@@ -72,6 +76,27 @@ else ifeq ($(GOARCH),riscv64)
 else ifeq ($(GOARCH),arm)
 	CC=$(CC_arm) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else
+	@echo "Unsupported architecture: $(GOARCH)"
+	@exit 1
+endif
+
+# Build offline variant with all OCI images embedded (air-gapped deployments)
+.PHONY: build-offline
+build-offline: lint deps-offline
+	@mkdir -p $(dir $(OUTPUT))
+ifeq ($(GOARCH),arm64)
+	CC=$(CC_arm64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),amd64)
+	CC=$(CC_amd64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),riscv64)
+	CC=$(CC_riscv64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else
 	@echo "Unsupported architecture: $(GOARCH)"

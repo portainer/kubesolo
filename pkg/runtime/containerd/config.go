@@ -10,6 +10,8 @@ import (
 )
 
 // isCgroupV2 returns true if the host uses the cgroupv2 unified hierarchy.
+// When true, crun must use the systemd cgroup driver (SystemdCgroup=true)
+// instead of the cgroupfs driver which generates cgroupv1-style paths.
 func isCgroupV2() bool {
 	_, err := os.Stat("/sys/fs/cgroup/cgroup.controllers")
 	return err == nil
@@ -109,11 +111,11 @@ func (s *service) generateContainerdConfig() map[string]any {
 				"drain_exec_sync_io_timeout":             "0s",
 				"ignore_deprecation_warnings":            []string{},
 				"containerd": map[string]any{
-					"default_runtime_name":              "runc",
+					"default_runtime_name":              "crun",
 					"ignore_blockio_not_enabled_errors": false,
 					"ignore_rdt_not_enabled_errors":     false,
 					"runtimes": map[string]any{
-						"runc": map[string]any{
+						"crun": map[string]any{
 							"runtime_type":                    "io.containerd.runc.v2",
 							"runtime_path":                    s.containerdShimBinaryFile,
 							"pod_annotations":                 []string{},
@@ -127,7 +129,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 							"sandboxer":         "podsandbox",
 							"io_type":           "",
 							"options": map[string]any{
-								"BinaryName":    s.runcBinaryFile,
+								"BinaryName":    s.crunBinaryFile,
 								"SystemdCgroup": useSystemdCgroup(),
 							},
 						},

@@ -24,7 +24,7 @@ func loadContainerdComponents(embedded types.Embedded) error {
 		name        string
 	}{
 		{containerdShimBinary, embedded.ContainerdShimBinaryFile, "containerd-shim-runc-v2"},
-		{runcBinary, embedded.RuncBinaryFile, "runc"},
+		{crunBinary, embedded.CrunBinaryFile, "crun"},
 	}
 
 	for _, binary := range binaries {
