@@ -240,29 +240,43 @@ func (s *kubesolo) run() {
 }
 
 // cleanStaleState removes stale runtime artifacts from a previous run.
-// After a reboot, the old container is gone but stale sockets and containerd
-// state (shim PIDs, etc.) remain on the persistent volume. This prevents
-// containerd and kine from starting cleanly.
+// After a reboot, the old container is gone but stale containerd metadata,
+// sockets, and runtime state remain on the persistent volume. The containerd
+// metadata DB (meta.db) retains references to EXITED containers, causing
+// kubelet to fail pod synchronization on restart.
 //
-// Preserved: containerd images (root/), kine database (state.db), PKI certs
-// Removed: stale sockets, containerd runtime state (dead shim references)
+// Strategy: remove everything in the containerd directory except the embedded
+// image archives (images/). These are re-imported by importImages() on every
+// startup, so no data is lost. This gives containerd a clean slate while
+// preserving the kine database (Kubernetes state) and PKI certificates.
 func cleanStaleState(basePath string) {
-	// Stale containerd socket
-	containerdSock := filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket)
-	if err := os.Remove(containerdSock); err == nil {
-		log.Info().Str("component", "kubesolo").Msgf("removed stale containerd socket: %s", containerdSock)
-	}
-
 	// Stale system containerd socket symlink
 	if err := os.Remove(types.DefaultSystemContainerdSock); err == nil {
 		log.Info().Str("component", "kubesolo").Msgf("removed stale system containerd socket: %s", types.DefaultSystemContainerdSock)
 	}
 
-	// Stale containerd runtime state (shim PIDs, bundle refs from dead processes)
-	// The root dir (images, snapshots) is intentionally preserved.
-	containerdStateDir := filepath.Join(basePath, types.DefaultContainerdDir, "state")
-	if err := os.RemoveAll(containerdStateDir); err == nil {
-		log.Info().Str("component", "kubesolo").Msgf("removed stale containerd state: %s", containerdStateDir)
+	// Clean all containerd subdirectories except images/ (embedded tar archives)
+	containerdDir := filepath.Join(basePath, types.DefaultContainerdDir)
+	entries, err := os.ReadDir(containerdDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		// Preserve embedded image archives — they are re-imported on startup
+		if name == "images" {
+			continue
+		}
+		// Preserve embedded binaries and config template
+		if name == "containerd" || name == "containerd-shim-runc-v2" || name == "crun" {
+			continue
+		}
+
+		target := filepath.Join(containerdDir, name)
+		if err := os.RemoveAll(target); err == nil {
+			log.Info().Str("component", "kubesolo").Msgf("cleaned stale containerd artifact: %s", target)
+		}
 	}
 }
 
