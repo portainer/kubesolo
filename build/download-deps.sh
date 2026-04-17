@@ -96,17 +96,44 @@ rm internal/core/embedded/bin/containerd.tar.gz
 zstd -19 --rm -q internal/core/embedded/bin/containerd/bin/containerd-shim-runc-v2
 
 # Download crun - add error checking
-# crun does not publish 32-bit ARM binaries; fail early for unsupported architectures
+# crun does not publish 32-bit ARM binaries; build from source for arm
 if [ "${ARCH}" = "arm" ]; then
-    echo "Error: crun does not provide pre-built binaries for 32-bit ARM (armhf)."
-    echo "Please build crun from source or use a supported architecture (amd64, arm64, riscv64)."
-    exit 1
-fi
+    echo "Building crun ${CRUN_VERSION} for ${OS}-${ARCH} using Docker..."
 
-echo "Downloading crun ${CRUN_VERSION} for ${ARCH}..."
-if ! curl -L -f --silent -o internal/core/embedded/bin/crun https://github.com/containers/crun/releases/download/${CRUN_VERSION}/crun-${CRUN_VERSION}-linux-${ARCH}; then
-    echo "Error downloading crun. Please check the version and URL."
-    exit 1
+    # Check if Docker is available
+    if ! command -v docker &> /dev/null; then
+        echo "Docker is required to build crun for ARM but is not installed."
+        exit 1
+    fi
+
+    # Build the crun image with the specified version (native arm/v7 via QEMU)
+    if ! docker build --platform linux/arm/v7 -f build/crun.Dockerfile --build-arg CRUN_VERSION=${CRUN_VERSION} -t crun-arm32-builder .; then
+        echo "Error building crun Docker image."
+        exit 1
+    fi
+
+    # Extract the compiled binary
+    echo "Extracting crun binary..."
+    if ! docker create --name temp-crun crun-arm32-builder noop; then
+        echo "Error creating temporary container."
+        exit 1
+    fi
+
+    if ! docker cp temp-crun:/crun internal/core/embedded/bin/crun; then
+        echo "Error extracting crun binary from container."
+        docker rm temp-crun 2>/dev/null
+        exit 1
+    fi
+
+    docker rm temp-crun
+
+    echo "Successfully built crun for ARM."
+else
+    echo "Downloading crun ${CRUN_VERSION} for ${ARCH}..."
+    if ! curl -L -f --silent -o internal/core/embedded/bin/crun https://github.com/containers/crun/releases/download/${CRUN_VERSION}/crun-${CRUN_VERSION}-linux-${ARCH}; then
+        echo "Error downloading crun. Please check the version and URL."
+        exit 1
+    fi
 fi
 zstd -19 --rm -q internal/core/embedded/bin/crun
 
