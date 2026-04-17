@@ -239,6 +239,33 @@ func (s *kubesolo) run() {
 	log.Info().Str("component", "kubesolo").Msg("all services have shutdown gracefully")
 }
 
+// cleanStaleState removes stale runtime artifacts from a previous run.
+// After a reboot, the old container is gone but stale sockets and containerd
+// state (shim PIDs, etc.) remain on the persistent volume. This prevents
+// containerd and kine from starting cleanly.
+//
+// Preserved: containerd images (root/), kine database (state.db), PKI certs
+// Removed: stale sockets, containerd runtime state (dead shim references)
+func cleanStaleState(basePath string) {
+	// Stale containerd socket
+	containerdSock := filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket)
+	if err := os.Remove(containerdSock); err == nil {
+		log.Info().Str("component", "kubesolo").Msgf("removed stale containerd socket: %s", containerdSock)
+	}
+
+	// Stale system containerd socket symlink
+	if err := os.Remove(types.DefaultSystemContainerdSock); err == nil {
+		log.Info().Str("component", "kubesolo").Msgf("removed stale system containerd socket: %s", types.DefaultSystemContainerdSock)
+	}
+
+	// Stale containerd runtime state (shim PIDs, bundle refs from dead processes)
+	// The root dir (images, snapshots) is intentionally preserved.
+	containerdStateDir := filepath.Join(basePath, types.DefaultContainerdDir, "state")
+	if err := os.RemoveAll(containerdStateDir); err == nil {
+		log.Info().Str("component", "kubesolo").Msgf("removed stale containerd state: %s", containerdStateDir)
+	}
+}
+
 // waitForService waits for a service to be ready
 // it returns true if the service is ready
 // it returns false if the service is not ready and the shutdown signal has been received
@@ -286,6 +313,11 @@ func (s *kubesolo) bootstrap() {
 
 	// Setup paths
 	basePath := *flags.Path
+	// Clean stale runtime state from previous runs (e.g., after reboot)
+	// This removes stale sockets and containerd runtime state that reference
+	// dead processes, while preserving images, kine database, and PKI certs.
+	cleanStaleState(basePath)
+
 	s.embedded = types.Embedded{
 		// System Node IP
 		NodeIP: nodeIP,
