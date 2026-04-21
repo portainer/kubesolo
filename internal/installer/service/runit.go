@@ -37,15 +37,19 @@ func (m *runitManager) Install(cfg *config.Config, cmdArgs []string) error {
 		return fmt.Errorf("failed to write runit run script: %w", err)
 	}
 
-	// Enable by symlinking into the active service directory
+	// Enable by symlinking into the active service directory.
+	// Not all runit layouts use /var/service or /etc/runit/runsvdir/default; if
+	// neither directory exists the service must be enabled manually, so a missing
+	// directory is a warning rather than a hard failure.
 	for _, svcDir := range []string{"/var/service", "/etc/runit/runsvdir/default"} {
 		if _, err := os.Stat(svcDir); err == nil {
 			link := filepath.Join(svcDir, config.AppName)
 			_ = os.Remove(link)
 			if err := os.Symlink(runitServiceDir, link); err != nil {
-				return fmt.Errorf("failed to enable runit service in %s: %w", svcDir, err)
+				log.Warn().Err(err).Msgf("could not symlink runit service into %s", svcDir)
+			} else {
+				log.Info().Msgf("runit service enabled in %s", svcDir)
 			}
-			log.Info().Msgf("runit service enabled in %s", svcDir)
 			break
 		}
 	}

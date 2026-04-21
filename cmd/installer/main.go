@@ -162,15 +162,6 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 }
 
 func runInstall(cfg *config.Config) error {
-	// ── download-only shortcut (no root required) ─────────────────────────────
-	if cfg.DownloadOnlyDir != "" {
-		info, err := detect.Detect()
-		if err != nil {
-			return err
-		}
-		return download.DownloadBundle(cfg.DownloadOnlyDir, info.ArchiveName(cfg.Version), cfg.Version)
-	}
-
 	// ── detect host ───────────────────────────────────────────────────────────
 	info, err := detect.Detect()
 	if err != nil {
@@ -356,29 +347,45 @@ func runServiceAction(init detect.InitSystem, action string) error {
 
 func downloadCmd(cfg *config.Config) *cobra.Command {
 	var dir string
+	var targetArch string
 	cmd := &cobra.Command{
 		Use:   "download",
 		Short: "Download the KubeSolo binary bundle for offline installation",
 		Long: `Download the KubeSolo release tarball and installer binary to a local
 directory for use on air-gapped machines.
 
-Example:
-  installer download --version=v1.1.2 --path=./offline-bundle`,
+By default the bundle targets the current host's architecture. Use --arch to
+prepare a bundle for a different target, e.g. when downloading on an amd64
+laptop for deployment to an arm64 device.
+
+Examples:
+  installer download --version=v1.1.2 --path=./offline-bundle
+  installer download --version=v1.1.2 --path=./offline-bundle --arch=arm64
+  installer download --version=v1.1.2 --path=./offline-bundle --arch=amd64-musl`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dir == "" {
 				dir = "."
 			}
-			info, err := detect.Detect()
+			var info *detect.SystemInfo
+			var err error
+			if targetArch != "" {
+				info, err = detect.ForTarget(targetArch)
+			} else {
+				info, err = detect.Detect()
+			}
 			if err != nil {
 				return err
 			}
-			return download.DownloadBundle(dir, info.ArchiveName(cfg.Version), cfg.Version)
+			return download.DownloadBundle(dir, info.ArchiveName(cfg.Version), info.InstallerName(), cfg.Version)
 		},
 	}
 	cmd.Flags().StringVar(&cfg.Version, "version",
 		envOr("KUBESOLO_VERSION", config.DefaultVersion),
 		"Version to download")
 	cmd.Flags().StringVar(&dir, "path", ".", "Directory to download files into")
+	cmd.Flags().StringVar(&targetArch, "arch", "",
+		"Target architecture for the bundle (default: current host).\n"+
+			"Valid values: amd64, arm64, arm, riscv64, amd64-musl, arm64-musl")
 	return cmd
 }
 

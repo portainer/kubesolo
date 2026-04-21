@@ -45,10 +45,10 @@ func (m *openrcManager) Install(cfg *config.Config, cmdArgs []string) error {
 	}
 	log.Info().Msgf("wrote OpenRC init script: %s", openrcServicePath)
 
-	if err := rcUpdate("add", config.AppName, "default"); err != nil {
+	if err := runRCUpdate("add", config.AppName, "default"); err != nil {
 		return fmt.Errorf("rc-update add: %w", err)
 	}
-	if err := rcService(config.AppName, "start"); err != nil {
+	if err := runRCService(config.AppName, "start"); err != nil {
 		return fmt.Errorf("rc-service start: %w", err)
 	}
 	log.Info().Msg("KubeSolo service installed and started via OpenRC")
@@ -56,14 +56,14 @@ func (m *openrcManager) Install(cfg *config.Config, cmdArgs []string) error {
 }
 
 func (m *openrcManager) Uninstall() error {
-	_ = rcService(config.AppName, "stop")
-	_ = rcUpdate("del", config.AppName, "default")
+	_ = runRCService(config.AppName, "stop")
+	_ = runRCUpdate("del", config.AppName, "default")
 	_ = os.Remove(openrcServicePath)
 	log.Info().Msg("KubeSolo OpenRC service removed")
 	return nil
 }
 
-func rcUpdate(args ...string) error {
+func runRCUpdate(args ...string) error {
 	out, err := exec.Command("rc-update", args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w (output: %s)", err, string(out))
@@ -71,7 +71,7 @@ func rcUpdate(args ...string) error {
 	return nil
 }
 
-func rcService(args ...string) error {
+func runRCService(args ...string) error {
 	out, err := exec.Command("rc-service", args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w (output: %s)", err, string(out))

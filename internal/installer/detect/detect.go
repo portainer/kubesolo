@@ -67,6 +67,51 @@ func (s *SystemInfo) ArchiveName(version string) string {
 	return fmt.Sprintf("kubesolo-%s-%s-%s%s.tar.gz", version, s.OS, s.ArchiveSuffix, s.LibCSuffix)
 }
 
+// InstallerName returns the release asset name of the installer binary for
+// this host, e.g. "installer-linux-amd64" or "installer-linux-arm64-musl".
+// It follows the same arch/libc suffix conventions as ArchiveName.
+func (s *SystemInfo) InstallerName() string {
+	return fmt.Sprintf("installer-%s-%s%s", s.OS, s.ArchiveSuffix, s.LibCSuffix)
+}
+
+// ForTarget constructs a SystemInfo for a specific target architecture without
+// probing the current host. Use this when preparing an offline bundle for a
+// machine with a different architecture than the one running the installer.
+//
+// arch must be one of: amd64, arm64, arm, riscv64, amd64-musl, arm64-musl.
+// The -musl suffix selects the musl libc variant (only published for amd64 and arm64).
+// InitSystem and Environment are set to Unknown/Standard — they are not relevant
+// for bundle downloads.
+func ForTarget(arch string) (*SystemInfo, error) {
+	type entry struct {
+		archSuffix string
+		libcSuffix string
+	}
+	targets := map[string]entry{
+		"amd64":      {"amd64", ""},
+		"arm64":      {"arm64", ""},
+		"arm":        {"arm", ""},
+		"riscv64":    {"riscv64", ""},
+		"amd64-musl": {"amd64", "-musl"},
+		"arm64-musl": {"arm64", "-musl"},
+	}
+	t, ok := targets[arch]
+	if !ok {
+		return nil, fmt.Errorf(
+			"unsupported target arch %q: valid values are amd64, arm64, arm, riscv64, amd64-musl, arm64-musl",
+			arch,
+		)
+	}
+	return &SystemInfo{
+		OS:            "linux",
+		Arch:          t.archSuffix,
+		ArchiveSuffix: t.archSuffix,
+		LibCSuffix:    t.libcSuffix,
+		InitSystem:    InitUnknown,
+		Environment:   EnvStandard,
+	}, nil
+}
+
 // Detect collects all relevant system information and returns a populated
 // SystemInfo. It returns an error only for unsupported (untargetable) hosts,
 // e.g. a musl system on riscv64 where no musl binary exists.

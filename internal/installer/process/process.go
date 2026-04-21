@@ -76,7 +76,7 @@ func StopByExecutablePath() {
 	backoff := time.Second
 	for attempt := 0; attempt < 5; attempt++ {
 		time.Sleep(backoff)
-		backoff = minDuration(backoff*2, 4*time.Second)
+		backoff = min(backoff*2, 4*time.Second)
 		if remaining := findKubeSoloPIDs(); len(remaining) == 0 {
 			log.Info().Msg("KubeSolo processes stopped cleanly")
 			return
@@ -315,12 +315,16 @@ func cleanupPIDFile() {
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
-		_ = os.Remove(config.PIDFile)
+		if err := os.Remove(config.PIDFile); err != nil {
+			log.Debug().Err(err).Msgf("failed to remove malformed PID file %s", config.PIDFile)
+		}
 		return
 	}
 	if !processAlive(pid) {
 		log.Debug().Msgf("removing stale PID file (PID %d no longer running)", pid)
-		_ = os.Remove(config.PIDFile)
+		if err := os.Remove(config.PIDFile); err != nil {
+			log.Debug().Err(err).Msgf("failed to remove stale PID file %s", config.PIDFile)
+		}
 	}
 }
 
@@ -330,11 +334,3 @@ func runCommand(name string, args ...string) error {
 	return cmd.Run()
 }
 
-// minDuration returns the smaller of two durations.
-// Named to avoid shadowing the Go 1.21+ builtin min.
-func minDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
-}

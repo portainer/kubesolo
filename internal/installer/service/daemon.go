@@ -62,6 +62,10 @@ func (m *daemonManager) Install(cfg *config.Config, cmdArgs []string) error {
 	}
 
 	pid := proc.Pid
+	// PID file write failure is non-fatal: the daemon is already running at this
+	// point, so returning an error would leave the system in an inconsistent state.
+	// A warning is enough — Uninstall() cross-checks /proc/<pid>/exe rather than
+	// the PID file as the authoritative source of truth.
 	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d\n", pid)), 0o644); err != nil {
 		log.Warn().Err(err).Msgf("failed to write PID file %s", pidFile)
 	}

@@ -30,9 +30,11 @@ func TestPidFromProcPath(t *testing.T) {
 	}
 }
 
-// ── minDuration ──────────────────────────────────────────────────────────────
+// ── backoff cap ───────────────────────────────────────────────────────────────
 
-func TestMinDuration(t *testing.T) {
+// TestBackoffCap verifies the exponential back-off cap used in StopByExecutablePath.
+// The capped expression is min(backoff*2, 4*time.Second).
+func TestBackoffCap(t *testing.T) {
 	cases := []struct {
 		a, b time.Duration
 		want time.Duration
@@ -44,9 +46,9 @@ func TestMinDuration(t *testing.T) {
 		{time.Millisecond, time.Microsecond, time.Microsecond},
 	}
 	for _, c := range cases {
-		got := minDuration(c.a, c.b)
+		got := min(c.a, c.b)
 		if got != c.want {
-			t.Errorf("minDuration(%v, %v) = %v, want %v", c.a, c.b, got, c.want)
+			t.Errorf("min(%v, %v) = %v, want %v", c.a, c.b, got, c.want)
 		}
 	}
 }

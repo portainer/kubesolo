@@ -47,7 +47,6 @@ func (m *systemdManager) Install(cfg *config.Config, cmdArgs []string) error {
 	log.Info().Msgf("wrote systemd unit: %s", systemdServicePath)
 
 	for _, args := range [][]string{
-		{"daemon-reexec"},
 		{"daemon-reload"},
 		{"enable", config.AppName},
 		{"restart", config.AppName},

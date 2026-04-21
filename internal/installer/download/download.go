@@ -14,15 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portainer/kubesolo/internal/installer/config"
 	"github.com/rs/zerolog/log"
 )
 
 const (
 	releaseBaseURL  = "https://github.com/portainer/kubesolo/releases/download"
-	installerURL    = "https://get.kubesolo.io"
-	binaryName      = "kubesolo"
-	installDir      = "/usr/local/bin"
-	installPath     = installDir + "/" + binaryName
 	downloadTimeout = 10 * time.Minute
 )
 
@@ -39,30 +36,40 @@ func Install(offlineSrc, archiveName, version string) error {
 	return installOnline(archiveName, version)
 }
 
-// DownloadBundle fetches the release tarball and the install script into outDir
-// for later offline use (mirrors --download-only from the bash script).
-func DownloadBundle(outDir, archiveName, version string) error {
+// DownloadBundle downloads the KubeSolo release tarball and the installer
+// binary for this host into outDir, producing a fully self-contained offline
+// bundle ready to be transferred to an air-gapped machine.
+//
+//   - archiveName  is the kubesolo release tarball, e.g. "kubesolo-v1.1.2-linux-amd64.tar.gz"
+//   - installerName is the installer binary asset, e.g. "installer-linux-amd64"
+//   - version      is the kubesolo release tag, e.g. "v1.1.2"
+//
+// On the target machine, run: sudo ./install --offline-install=./<archiveName>
+func DownloadBundle(outDir, archiveName, installerName, version string) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory %s: %w", outDir, err)
 	}
 
+	// 1. KubeSolo binary tarball
 	tarURL := fmt.Sprintf("%s/%s/%s", releaseBaseURL, version, archiveName)
 	tarDest := filepath.Join(outDir, archiveName)
 	log.Info().Msgf("downloading KubeSolo %s (%s)...", version, archiveName)
 	if err := downloadFile(tarURL, tarDest); err != nil {
-		return fmt.Errorf("failed to download binary archive: %w", err)
+		return fmt.Errorf("failed to download KubeSolo archive: %w", err)
 	}
-	log.Info().Msgf("binary archive saved to: %s", tarDest)
+	log.Info().Msgf("KubeSolo archive saved to: %s", tarDest)
 
+	// 2. Installer binary for the target arch
+	installerURL := fmt.Sprintf("%s/%s/%s", releaseBaseURL, version, installerName)
 	installerDest := filepath.Join(outDir, "install")
-	log.Info().Msg("downloading installer...")
+	log.Info().Msgf("downloading installer (%s)...", installerName)
 	if err := downloadFile(installerURL, installerDest); err != nil {
-		return fmt.Errorf("failed to download installer: %w", err)
+		return fmt.Errorf("failed to download installer binary: %w", err)
 	}
 	if err := os.Chmod(installerDest, 0o755); err != nil {
 		return fmt.Errorf("failed to make installer executable: %w", err)
 	}
-	log.Info().Msgf("installer saved to: %s", installerDest)
+	log.Info().Msgf("installer binary saved to: %s", installerDest)
 
 	log.Info().Msgf(
 		"download complete — transfer to the target machine and run: sudo %s --offline-install=%s",
@@ -113,7 +120,7 @@ func installOffline(src string) error {
 	default:
 		// Treat as a raw binary
 		log.Info().Msgf("installing binary from %s...", src)
-		tmpBin := filepath.Join(tmpDir, binaryName)
+		tmpBin := filepath.Join(tmpDir, config.AppName)
 		if err := copyFile(src, tmpBin); err != nil {
 			return fmt.Errorf("failed to copy binary: %w", err)
 		}
@@ -126,8 +133,8 @@ func installOffline(src string) error {
 // extractAndInstall unpacks a .tar.gz archive, finds the kubesolo binary inside,
 // and atomically moves it to /usr/local/bin/kubesolo.
 func extractAndInstall(archivePath, tmpDir string) error {
-	extractedBin := filepath.Join(tmpDir, binaryName)
-	if err := extractTarGz(archivePath, tmpDir, binaryName); err != nil {
+	extractedBin := filepath.Join(tmpDir, config.AppName)
+	if err := extractTarGz(archivePath, tmpDir, config.AppName); err != nil {
 		return fmt.Errorf("failed to extract archive: %w", err)
 	}
 	return atomicInstall(extractedBin)
@@ -137,7 +144,7 @@ func extractAndInstall(archivePath, tmpDir string) error {
 // os.Rename is atomic on Linux when both paths are on the same filesystem;
 // for cross-device installs we fall back to a copy-then-rename sequence.
 func atomicInstall(src string) error {
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(config.DefaultInstallPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create install directory: %w", err)
 	}
 
@@ -145,29 +152,29 @@ func atomicInstall(src string) error {
 		return fmt.Errorf("failed to set executable permission on binary: %w", err)
 	}
 
-	if err := os.Rename(src, installPath); err != nil {
+	if err := os.Rename(src, config.DefaultInstallPath); err != nil {
 		// Cross-device (e.g. tmpfs → ext4 on Alpine): copy then replace.
-		if err2 := copyFile(src, installPath+".tmp"); err2 != nil {
+		if err2 := copyFile(src, config.DefaultInstallPath+".tmp"); err2 != nil {
 			return fmt.Errorf("failed to copy binary to install path: %w", err2)
 		}
 		// copyFile uses os.Create which gives 0o644 — re-apply execute bits.
-		if err2 := os.Chmod(installPath+".tmp", 0o755); err2 != nil {
-			_ = os.Remove(installPath + ".tmp")
+		if err2 := os.Chmod(config.DefaultInstallPath+".tmp", 0o755); err2 != nil {
+			_ = os.Remove(config.DefaultInstallPath + ".tmp")
 			return fmt.Errorf("failed to set executable permission on staged binary: %w", err2)
 		}
-		if err2 := os.Rename(installPath+".tmp", installPath); err2 != nil {
-			_ = os.Remove(installPath + ".tmp")
+		if err2 := os.Rename(config.DefaultInstallPath+".tmp", config.DefaultInstallPath); err2 != nil {
+			_ = os.Remove(config.DefaultInstallPath + ".tmp")
 			return fmt.Errorf("failed to rename binary into place: %w", err2)
 		}
 	}
 
 	// Belt-and-suspenders: guarantee the installed binary is executable
 	// regardless of which code path above ran (direct rename vs. copy fallback).
-	if err := os.Chmod(installPath, 0o755); err != nil {
+	if err := os.Chmod(config.DefaultInstallPath, 0o755); err != nil {
 		return fmt.Errorf("failed to set executable permission on installed binary: %w", err)
 	}
 
-	log.Info().Msgf("KubeSolo installed to %s", installPath)
+	log.Info().Msgf("KubeSolo installed to %s", config.DefaultInstallPath)
 	return nil
 }
 

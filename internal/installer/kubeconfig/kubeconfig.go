@@ -70,7 +70,9 @@ func MergeAfterStartup(dataPath string) {
 	}
 
 	// Merge: KUBECONFIG="existing:new" kubectl config view --flatten > merged
-	// Run kubectl as the real user so it can read its own home directory.
+	// kubectl runs as root (current process), but both source files are already
+	// readable by root. The merged output is written to a temp file and ownership
+	// of the entire ~/.kube tree is corrected to the real user below.
 	mergedTemp := existingConfig + ".tmp"
 	mergeEnv := append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s:%s", existingConfig, ksKubeconfig))
 	cmd := exec.Command(kubectlPath, "config", "view", "--flatten")

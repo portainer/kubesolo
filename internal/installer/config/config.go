@@ -53,10 +53,6 @@ type Config struct {
 	// OfflineInstall is a path to a local binary or tarball to install instead of downloading
 	OfflineInstall string
 
-	// DownloadOnlyDir, when non-empty, causes the installer to download the binary bundle
-	// to this directory and exit without performing any installation
-	DownloadOnlyDir string
-
 	// InstallPrereqs causes the installer to automatically install missing OS-level
 	// prerequisites (e.g. nftables on Alpine Linux) instead of hard-failing
 	InstallPrereqs bool
@@ -95,5 +91,10 @@ func (c *Config) CmdArgs() []string {
 		args = append(args, "--pprof-server")
 	}
 
+	// Proxy is intentionally omitted here: it is injected as HTTP_PROXY /
+	// HTTPS_PROXY / NO_PROXY environment variables into the service unit or
+	// daemon environment (see service templates and daemon.go). Go's net/http
+	// transport reads those variables automatically, so no --proxy flag is
+	// needed on the kubesolo command line.
 	return args
 }
