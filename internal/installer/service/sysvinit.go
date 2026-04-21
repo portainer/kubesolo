@@ -22,13 +22,13 @@ const sysvinitTemplate = `#!/bin/sh
 # Description:       KubeSolo single-node Kubernetes distribution
 ### END INIT INFO
 {{- if .Proxy}}
-export HTTP_PROXY="{{.Proxy}}"
-export HTTPS_PROXY="{{.Proxy}}"
-export NO_PROXY="localhost,127.0.0.1"
+export HTTP_PROXY={{.Proxy | shellQuote}}
+export HTTPS_PROXY={{.Proxy | shellQuote}}
+export NO_PROXY='localhost,127.0.0.1'
 {{- end}}
 
 DAEMON="{{.InstallPath}}"
-DAEMON_ARGS="{{.CmdArgs}}"
+DAEMON_ARGS="{{.CmdArgs | shellDoubleQuoteVal}}"
 PIDFILE="/var/run/{{.AppName}}.pid"
 USER="root"
 

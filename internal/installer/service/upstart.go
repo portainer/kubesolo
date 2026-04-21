@@ -20,12 +20,12 @@ stop on runlevel [!2345]
 respawn
 respawn limit 10 5
 {{- if .Proxy}}
-env HTTP_PROXY="{{.Proxy}}"
-env HTTPS_PROXY="{{.Proxy}}"
-env NO_PROXY="localhost,127.0.0.1"
+env HTTP_PROXY={{.Proxy | shellQuote}}
+env HTTPS_PROXY={{.Proxy | shellQuote}}
+env NO_PROXY=localhost,127.0.0.1
 {{- end}}
 
-exec {{.InstallPath}} {{.CmdArgs}}
+exec {{.InstallPath}}{{range .CmdArgsList}} {{. | shellQuote}}{{end}}
 `
 
 type upstartManager struct{}

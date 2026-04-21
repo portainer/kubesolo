@@ -69,6 +69,13 @@ func CheckHostname() error {
 	if err != nil {
 		return fmt.Errorf("could not determine hostname: %w", err)
 	}
+	return validateHostname(hostname)
+}
+
+// validateHostname checks a hostname string against RFC 1123 rules.
+// Extracted from CheckHostname so tests can exercise the validation logic
+// directly without depending on the host's actual hostname.
+func validateHostname(hostname string) error {
 	if hostname == "" {
 		return fmt.Errorf("hostname is empty — please configure a hostname before installing")
 	}

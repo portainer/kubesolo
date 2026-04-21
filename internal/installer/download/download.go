@@ -27,9 +27,11 @@ const (
 )
 
 // Install places the KubeSolo binary at /usr/local/bin/kubesolo.
-// If offlineSrc is non-empty it is used as the source (tarball, zip, or raw
-// binary) instead of downloading. Otherwise the binary is fetched from GitHub
-// Releases using archiveName and version to build the URL.
+// If offlineSrc is non-empty it is used as the source instead of downloading.
+// Supported formats: .tar.gz / .tgz (archive containing the kubesolo binary),
+// or any other path (treated as a raw binary and copied directly).
+// Otherwise the binary is fetched from GitHub Releases using archiveName and
+// version to build the URL.
 func Install(offlineSrc, archiveName, version string) error {
 	if offlineSrc != "" {
 		return installOffline(offlineSrc)

@@ -13,15 +13,15 @@ const openrcServicePath = "/etc/init.d/kubesolo"
 
 const openrcTemplate = `#!/sbin/openrc-run
 {{- if .Proxy}}
-export HTTP_PROXY="{{.Proxy}}"
-export HTTPS_PROXY="{{.Proxy}}"
-export NO_PROXY="localhost,127.0.0.1"
+export HTTP_PROXY={{.Proxy | shellQuote}}
+export HTTPS_PROXY={{.Proxy | shellQuote}}
+export NO_PROXY='localhost,127.0.0.1'
 {{- end}}
 
 name="{{.AppName}}"
 description="KubeSolo single-node Kubernetes distribution"
 command="{{.InstallPath}}"
-command_args="{{.CmdArgs}}"
+command_args="{{.CmdArgs | shellDoubleQuoteVal}}"
 command_background=true
 pidfile="/var/run/${RC_SVCNAME}.pid"
 command_user="root"

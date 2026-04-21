@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/portainer/kubesolo/internal/installer/config"
 	"github.com/rs/zerolog/log"
@@ -36,12 +38,20 @@ func (m *daemonManager) Install(cfg *config.Config, cmdArgs []string) error {
 		return fmt.Errorf("failed to open log file %s: %w", logFile, err)
 	}
 
+	// os.StartProcess calls Fd() on every Files entry; nil panics at runtime.
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
+	if err != nil {
+		logFH.Close()
+		return fmt.Errorf("failed to open %s: %w", os.DevNull, err)
+	}
+
 	args := append([]string{config.DefaultInstallPath}, cmdArgs...)
 	proc, err := os.StartProcess(config.DefaultInstallPath, args, &os.ProcAttr{
 		Env:   env,
-		Files: []*os.File{nil, logFH, logFH},
+		Files: []*os.File{devNull, logFH, logFH},
 		Sys:   daemonSysProcAttr(),
 	})
+	devNull.Close()
 	logFH.Close()
 	if err != nil {
 		return fmt.Errorf("failed to start KubeSolo daemon: %w", err)
@@ -70,13 +80,38 @@ func (m *daemonManager) Uninstall() error {
 	pidStr := strings.TrimSpace(string(data))
 	var pid int
 	if _, err := fmt.Sscan(pidStr, &pid); err != nil || pid <= 0 {
+		_ = os.Remove(config.PIDFile)
 		return nil
 	}
+
+	// Verify the PID belongs to the KubeSolo binary before signalling.
+	// A recycled PID pointing to an unrelated process must not be killed.
+	exePath := fmt.Sprintf("/proc/%d/exe", pid)
+	target, err := os.Readlink(exePath)
+	if err != nil || target != config.DefaultInstallPath {
+		log.Debug().Msgf("PID %d in pid file does not resolve to KubeSolo (exe: %q) — skipping signal", pid, target)
+		_ = os.Remove(config.PIDFile)
+		return nil
+	}
+
 	proc, err := os.FindProcess(pid)
 	if err != nil {
+		_ = os.Remove(config.PIDFile)
 		return nil
 	}
-	_ = proc.Kill()
+
+	// SIGTERM first; give the process up to 5 s to exit cleanly.
+	_ = proc.Signal(syscall.SIGTERM)
+	for i := 0; i < 5; i++ {
+		time.Sleep(time.Second)
+		if err := proc.Signal(syscall.Signal(0)); err != nil {
+			// Process no longer exists
+			break
+		}
+	}
+	// SIGKILL any survivor
+	_ = proc.Signal(syscall.SIGKILL)
+
 	_ = os.Remove(config.PIDFile)
 	log.Info().Msgf("KubeSolo daemon (PID %d) stopped", pid)
 	return nil

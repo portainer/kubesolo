@@ -311,6 +311,21 @@ Actions: start | stop | restart | status | logs | enable | disable`,
 }
 
 func runServiceAction(init detect.InitSystem, action string) error {
+	// "logs" is not a valid sub-command for any init system's control binary;
+	// handle it explicitly per init system before the general dispatch below.
+	if action == "logs" {
+		switch init {
+		case detect.InitSystemd:
+			return runCmd("journalctl", "-u", config.AppName, "-f")
+		case detect.InitOpenRC, detect.InitSysV:
+			return runCmd("tail", "-f", "/var/log/messages")
+		case detect.InitUpstart:
+			return runCmd("tail", "-f", "/var/log/upstart/"+config.AppName+".log")
+		default:
+			return runCmd("tail", "-f", config.LogFile)
+		}
+	}
+
 	switch init {
 	case detect.InitSystemd:
 		return runCmd("systemctl", action, config.AppName)
@@ -436,17 +451,30 @@ func envBool(key string, fallback bool) bool {
 
 // initControlBinary returns the path to the init system's service control
 // binary so process.StopViaInitSystem can invoke a graceful shutdown.
+// It uses exec.LookPath first (respects $PATH) and falls back to a list of
+// known absolute locations, since the binary may be in /usr/bin on some
+// distros and /bin or /sbin on others.
 func initControlBinary(init detect.InitSystem) string {
+	var candidates []string
 	switch init {
 	case detect.InitSystemd:
-		return "/bin/systemctl"
+		candidates = []string{"systemctl", "/usr/bin/systemctl", "/bin/systemctl"}
 	case detect.InitOpenRC:
-		return "/sbin/rc-service"
+		candidates = []string{"rc-service", "/sbin/rc-service", "/usr/sbin/rc-service"}
 	case detect.InitSysV:
-		return "/usr/sbin/service"
+		candidates = []string{"service", "/usr/sbin/service", "/sbin/service"}
 	default:
 		return ""
 	}
+	if p, err := exec.LookPath(candidates[0]); err == nil {
+		return p
+	}
+	for _, p := range candidates[1:] {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 // restoreSELinux restores SELinux file contexts for path if restorecon exists.

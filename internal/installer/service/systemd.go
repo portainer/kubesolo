@@ -16,7 +16,7 @@ Description=KubeSolo single-node Kubernetes distribution
 After=network.target
 
 [Service]
-ExecStart={{.InstallPath}} {{.CmdArgs}}
+ExecStart={{.InstallPath}}{{range .CmdArgsList}} {{. | shellQuote}}{{end}}
 Restart=always
 RestartSec=3
 OOMScoreAdjust=-500
@@ -24,8 +24,8 @@ LimitNOFILE=65535
 StandardOutput=journal
 StandardError=journal
 {{- if .Proxy}}
-Environment="HTTP_PROXY={{.Proxy}}"
-Environment="HTTPS_PROXY={{.Proxy}}"
+Environment="HTTP_PROXY={{.Proxy | systemdEnvVal}}"
+Environment="HTTPS_PROXY={{.Proxy | systemdEnvVal}}"
 Environment="NO_PROXY=localhost,127.0.0.1"
 {{- end}}
 

@@ -13,11 +13,11 @@ const runitServiceDir = "/etc/runit/sv/kubesolo"
 
 const runitRunTemplate = `#!/bin/sh
 {{- if .Proxy}}
-export HTTP_PROXY="{{.Proxy}}"
-export HTTPS_PROXY="{{.Proxy}}"
-export NO_PROXY="localhost,127.0.0.1"
+export HTTP_PROXY={{.Proxy | shellQuote}}
+export HTTPS_PROXY={{.Proxy | shellQuote}}
+export NO_PROXY='localhost,127.0.0.1'
 {{- end}}
-exec {{.InstallPath}} {{.CmdArgs}}
+exec {{.InstallPath}}{{range .CmdArgsList}} {{. | shellQuote}}{{end}}
 `
 
 type runitManager struct{}

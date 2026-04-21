@@ -45,14 +45,30 @@ func TestCheckHostname_InvalidNames(t *testing.T) {
 }
 
 func TestCheckHostname_TooLong(t *testing.T) {
-	// Build a 254-character hostname (over the 253 limit)
 	long := ""
 	for len(long) < 254 {
 		long += "a"
 	}
-	// Manually invoke length check logic
-	if len(long) <= 253 {
-		t.Fatal("test setup error: hostname should be longer than 253 chars")
+	if err := validateHostname(long); err == nil {
+		t.Errorf("expected error for %d-char hostname, got nil", len(long))
+	}
+}
+
+func TestCheckHostname_Empty(t *testing.T) {
+	if err := validateHostname(""); err == nil {
+		t.Error("expected error for empty hostname, got nil")
+	}
+}
+
+func TestCheckHostname_ValidDirect(t *testing.T) {
+	if err := validateHostname("my-node-01"); err != nil {
+		t.Errorf("expected valid hostname to pass, got: %v", err)
+	}
+}
+
+func TestCheckHostname_InvalidDirect(t *testing.T) {
+	if err := validateHostname("My_Node"); err == nil {
+		t.Error("expected error for non-RFC-1123 hostname, got nil")
 	}
 }
 

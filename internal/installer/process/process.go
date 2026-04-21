@@ -13,12 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/portainer/kubesolo/internal/installer/config"
 	"github.com/rs/zerolog/log"
-)
-
-const (
-	kubeBinary = "/usr/local/bin/kubesolo"
-	pidFile    = "/var/run/kubesolo.pid"
 )
 
 // KubeSoloPorts are the TCP ports KubeSolo opens; processes holding any of
@@ -160,7 +156,7 @@ func CleanupFileConflicts(dataPath string) {
 
 // ── internal helpers ──────────────────────────────────────────────────────────
 
-// findKubeSoloPIDs returns PIDs whose /proc/<pid>/exe resolves to kubeBinary,
+// findKubeSoloPIDs returns PIDs whose /proc/<pid>/exe resolves to config.DefaultInstallPath,
 // excluding the current process.
 func findKubeSoloPIDs() []int {
 	self := os.Getpid()
@@ -171,7 +167,7 @@ func findKubeSoloPIDs() []int {
 	var pids []int
 	for _, exeLink := range entries {
 		target, err := os.Readlink(exeLink)
-		if err != nil || target != kubeBinary {
+		if err != nil || target != config.DefaultInstallPath {
 			continue
 		}
 		pid := pidFromProcPath(exeLink)
@@ -279,7 +275,7 @@ func inodesToPIDs(targetInodes map[uint64]bool) []int {
 // isKubeSoloPID returns true if /proc/<pid>/exe resolves to the KubeSolo binary.
 func isKubeSoloPID(pid int) bool {
 	target, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-	return err == nil && target == kubeBinary
+	return err == nil && target == config.DefaultInstallPath
 }
 
 // processAlive returns true if the process with the given PID is still running.
@@ -313,18 +309,18 @@ func pidFromProcPath(path string) int {
 // cleanupPIDFile removes a stale /var/run/kubesolo.pid if the process it
 // references is no longer running.
 func cleanupPIDFile() {
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(config.PIDFile)
 	if err != nil {
 		return // no PID file, nothing to do
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
-		_ = os.Remove(pidFile)
+		_ = os.Remove(config.PIDFile)
 		return
 	}
 	if !processAlive(pid) {
 		log.Debug().Msgf("removing stale PID file (PID %d no longer running)", pid)
-		_ = os.Remove(pidFile)
+		_ = os.Remove(config.PIDFile)
 	}
 }
 

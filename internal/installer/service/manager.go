@@ -66,22 +66,45 @@ func newServiceManager(init detect.InitSystem) (Manager, error) {
 type templateData struct {
 	AppName     string
 	InstallPath string
-	CmdArgs     string // space-joined argument list for service files
-	Proxy       string // optional HTTP/HTTPS proxy URL
+	CmdArgs     string   // space-joined sanitised argument list (for double-quoted shell variables)
+	CmdArgsList []string // sanitised arguments as individual strings (for per-arg shell quoting)
+	Proxy       string   // optional HTTP/HTTPS proxy URL (sanitised, no newlines)
 }
 
+// buildTemplateData constructs templateData from cfg and cmdArgs.
+// It strips CR/LF from all string fields so that no user-supplied value
+// can break the line-oriented format of the generated service files.
 func buildTemplateData(cfg *config.Config, cmdArgs []string) templateData {
+	// Strip newlines from proxy — they would inject extra lines into the file.
+	proxy := strings.ReplaceAll(cfg.Proxy, "\r", "")
+	proxy = strings.ReplaceAll(proxy, "\n", "")
+
+	// Strip newlines from each argument for the same reason.
+	sanitised := make([]string, len(cmdArgs))
+	for i, a := range cmdArgs {
+		a = strings.ReplaceAll(a, "\r", "")
+		sanitised[i] = strings.ReplaceAll(a, "\n", "")
+	}
+
 	return templateData{
 		AppName:     config.AppName,
 		InstallPath: config.DefaultInstallPath,
-		CmdArgs:     strings.Join(cmdArgs, " "),
-		Proxy:       cfg.Proxy,
+		CmdArgs:     strings.Join(sanitised, " "),
+		CmdArgsList: sanitised,
+		Proxy:       proxy,
 	}
 }
 
 // renderTemplate parses and executes a text/template, returning the result.
+// The FuncMap exposes shellQuote, shellDoubleQuoteVal, and systemdEnvVal so
+// that templates can safely embed user-controlled strings.
 func renderTemplate(name, tmpl string, data templateData) (string, error) {
-	t, err := template.New(name).Parse(tmpl)
+	funcs := template.FuncMap{
+		"shellQuote":          shellQuote,
+		"shellDoubleQuoteVal": shellDoubleQuoteVal,
+		"systemdEnvVal":       systemdEnvVal,
+	}
+	t, err := template.New(name).Funcs(funcs).Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse %s template: %w", name, err)
 	}
@@ -90,4 +113,43 @@ func renderTemplate(name, tmpl string, data templateData) (string, error) {
 		return "", fmt.Errorf("failed to render %s template: %w", name, err)
 	}
 	return buf.String(), nil
+}
+
+// ── escaping helpers ──────────────────────────────────────────────────────────
+
+// shellQuote wraps s in POSIX single quotes, using the '"'"' idiom to embed
+// any literal single-quote characters. Newlines are stripped because they
+// would break the line-based format of shell scripts and service unit files.
+// Use this for proxy values in shell export statements and for individual
+// args in exec positions.
+func shellQuote(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
+
+// shellDoubleQuoteVal escapes a value so it is safe to embed inside a
+// double-quoted shell string ("..."). It escapes \, `, $, and " and strips
+// newlines. Use this for shell variable assignments like DAEMON_ARGS="...".
+func shellDoubleQuoteVal(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "`", "\\`")
+	s = strings.ReplaceAll(s, "$", `\$`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
+}
+
+// systemdEnvVal escapes a value for safe embedding inside a systemd
+// Environment= directive that is already wrapped in double quotes.
+// It escapes \, ", and % (systemd unit-file specifier prefix) and strips
+// newlines.
+func systemdEnvVal(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, `%`, `%%`)
+	return s
 }
