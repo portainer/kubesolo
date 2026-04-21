@@ -215,6 +215,47 @@ archive:
 archive-musl:
 	tar -czf dist/kubesolo-musl.tar.gz dist/kubesolo install.sh
 
+# ── Installer binary ──────────────────────────────────────────────────────────
+#
+# The installer is built with CGO_ENABLED=0 (pure Go). A single binary per
+# architecture runs on both glibc and musl systems, so there is no libc split.
+#
+# Supported targets: linux/amd64, linux/arm64, linux/arm (armhf), linux/riscv64
+
+INSTALLER_LDFLAGS = -s -w \
+	-X main.Version=$(VERSION) \
+	-X main.Commit=$(COMMIT) \
+	-X main.BuildDate=$(BUILD_DATE)
+
+INSTALLER_OUTPUT ?= ./dist/installer-$(GOOS)-$(GOARCH)
+
+# Build the installer for the current GOOS/GOARCH
+.PHONY: build-installer
+build-installer:
+	@mkdir -p $(dir $(INSTALLER_OUTPUT))
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-ldflags="$(INSTALLER_LDFLAGS)" \
+		-o $(INSTALLER_OUTPUT) \
+		./cmd/installer
+
+# Build the installer for all supported architectures
+.PHONY: build-installer-all
+build-installer-all:
+	GOARCH=amd64   INSTALLER_OUTPUT=./dist/installer-linux-amd64   make build-installer
+	GOARCH=arm64   INSTALLER_OUTPUT=./dist/installer-linux-arm64   make build-installer
+	GOARCH=arm     INSTALLER_OUTPUT=./dist/installer-linux-arm     make build-installer GOARM=7
+	GOARCH=riscv64 INSTALLER_OUTPUT=./dist/installer-linux-riscv64 make build-installer
+
+# Run installer tests (no CGO required, no cross-compiler needed)
+.PHONY: test-installer
+test-installer:
+	CGO_ENABLED=0 go test ./internal/installer/... -v -count=1
+
+# Clean installer build artefacts
+.PHONY: clean-installer
+clean-installer:
+	rm -f ./dist/installer-*
+
 # Include custom make targets
 -include $(wildcard .dev/*.make)
 
