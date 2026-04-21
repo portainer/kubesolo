@@ -10,11 +10,22 @@ import (
 )
 
 // isCgroupV2 returns true if the host uses the cgroupv2 unified hierarchy.
-// When true, runc must use the systemd cgroup driver (SystemdCgroup=true)
-// instead of the cgroupfs driver which generates cgroupv1-style paths.
 func isCgroupV2() bool {
 	_, err := os.Stat("/sys/fs/cgroup/cgroup.controllers")
 	return err == nil
+}
+
+// isSystemdRunning returns true if systemd is the active init system.
+// On non-systemd hosts (e.g. Alpine with OpenRC), the systemd cgroup driver
+// must not be used even when cgroupv2 is available.
+func isSystemdRunning() bool {
+	_, err := os.Stat("/run/systemd/private")
+	return err == nil
+}
+
+// useSystemdCgroup returns true only when both cgroupv2 and systemd are present.
+func useSystemdCgroup() bool {
+	return isCgroupV2() && isSystemdRunning()
 }
 
 // writeConfigFile writes the containerd config to a file
@@ -117,7 +128,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 							"io_type":           "",
 							"options": map[string]any{
 								"BinaryName":    s.runcBinaryFile,
-								"SystemdCgroup": isCgroupV2(),
+								"SystemdCgroup": useSystemdCgroup(),
 							},
 						},
 					},
