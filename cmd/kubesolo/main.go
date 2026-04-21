@@ -239,6 +239,47 @@ func (s *kubesolo) run() {
 	log.Info().Str("component", "kubesolo").Msg("all services have shutdown gracefully")
 }
 
+// cleanStaleState removes stale runtime artifacts from a previous run.
+// After a reboot, the old container is gone but stale containerd metadata,
+// sockets, and runtime state remain on the persistent volume. The containerd
+// metadata DB (meta.db) retains references to EXITED containers, causing
+// kubelet to fail pod synchronization on restart.
+//
+// Strategy: remove everything in the containerd directory except the embedded
+// image archives (images/). These are re-imported by importImages() on every
+// startup, so no data is lost. This gives containerd a clean slate while
+// preserving the kine database (Kubernetes state) and PKI certificates.
+func cleanStaleState(basePath string) {
+	// Stale system containerd socket symlink
+	if err := os.Remove(types.DefaultSystemContainerdSock); err == nil {
+		log.Info().Str("component", "kubesolo").Msgf("removed stale system containerd socket: %s", types.DefaultSystemContainerdSock)
+	}
+
+	// Clean all containerd subdirectories except images/ (embedded tar archives)
+	containerdDir := filepath.Join(basePath, types.DefaultContainerdDir)
+	entries, err := os.ReadDir(containerdDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		// Preserve embedded image archives — they are re-imported on startup
+		if name == "images" {
+			continue
+		}
+		// Preserve embedded binaries and config template
+		if name == "containerd" || name == "containerd-shim-runc-v2" || name == "crun" {
+			continue
+		}
+
+		target := filepath.Join(containerdDir, name)
+		if err := os.RemoveAll(target); err == nil {
+			log.Info().Str("component", "kubesolo").Msgf("cleaned stale containerd artifact: %s", target)
+		}
+	}
+}
+
 // waitForService waits for a service to be ready
 // it returns true if the service is ready
 // it returns false if the service is not ready and the shutdown signal has been received
@@ -286,6 +327,11 @@ func (s *kubesolo) bootstrap() {
 
 	// Setup paths
 	basePath := *flags.Path
+	// Clean stale runtime state from previous runs (e.g., after reboot)
+	// This removes stale sockets and containerd runtime state that reference
+	// dead processes, while preserving images, kine database, and PKI certs.
+	cleanStaleState(basePath)
+
 	s.embedded = types.Embedded{
 		// System Node IP
 		NodeIP: nodeIP,
