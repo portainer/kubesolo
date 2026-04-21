@@ -94,12 +94,41 @@ else ifeq ($(GOARCH),amd64)
 	CC=$(CC_amd64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),arm)
+	CC=$(CC_arm) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else ifeq ($(GOARCH),riscv64)
 	CC=$(CC_riscv64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else
 	@echo "Unsupported architecture: $(GOARCH)"
+	@exit 1
+endif
+
+# Build offline variant with musl for Alpine Linux compatibility (air-gapped deployments)
+.PHONY: build-musl-offline
+build-musl-offline: lint deps-offline
+	@mkdir -p $(dir $(OUTPUT))
+ifeq ($(GOARCH),arm64)
+	CC=$(CC_arm64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),amd64)
+	CC=$(CC_amd64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),arm)
+	CC=$(CC_arm_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=7 go build \
+		-tags offline -ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),riscv64)
+	CC=$(CC_riscv64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else
+	@echo "Unsupported architecture for musl offline build: $(GOARCH)"
 	@exit 1
 endif
 

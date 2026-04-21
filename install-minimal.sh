@@ -28,6 +28,7 @@ INSTALL_PATH="/usr/local/bin/kubesolo"
 USE_MUSL="${USE_MUSL:-false}"
 TEMP_DIR="${TEMP_DIR:-/tmp/kubesolo-install-$$}"
 KUBESOLO_BIN_PATH="${KUBESOLO_BIN_PATH:-}"
+OFFLINE="${KUBESOLO_OFFLINE:-false}"
 
 # Parse basic arguments
 for arg in "$@"; do
@@ -37,6 +38,7 @@ for arg in "$@"; do
         --temp-dir=*) TEMP_DIR="${arg#*=}" ;;
         --musl) USE_MUSL="true" ;;
         --glibc) USE_MUSL="false" ;;
+        --offline) OFFLINE="true" ;;
         --bin-path=*) KUBESOLO_BIN_PATH="${arg#*=}" ;;
         --help)
             echo "Minimal KubeSolo installer for embedded systems"
@@ -48,6 +50,7 @@ for arg in "$@"; do
             echo "  --temp-dir=PATH     Temporary directory for download/extraction (default: /tmp/kubesolo-install-\$\$)"
             echo "  --musl              Use musl-based binary (for Alpine Linux)"
             echo "  --glibc             Use glibc-based binary (default, for standard Linux)"
+            echo "  --offline           Download the offline build (all images embedded, for air-gapped environments)"
             echo "  --bin-path=PATH     Use a local binary or archive instead of downloading"
             echo ""
             echo "Environment variables:"
@@ -55,6 +58,7 @@ for arg in "$@"; do
             echo "  KUBESOLO_PATH       - Config path"
             echo "  USE_MUSL            - Use musl binary (true/false)"
             echo "  KUBESOLO_BIN_PATH   - Local binary or archive path"
+            echo "  KUBESOLO_OFFLINE    - Use offline build (true/false)"
             echo "  TEMP_DIR            - Temporary directory"
             exit 0
             ;;
@@ -92,12 +96,18 @@ if [ -n "$KUBESOLO_BIN_PATH" ]; then
     rm -rf "$TEMP_DIR"
     chmod +x "$INSTALL_PATH" || die "Failed to set permissions"
 else
-    # Build download URL based on musl/glibc choice
+    # Build download URL based on musl/glibc choice and offline flag
+    OFFLINE_SUFFIX=""
+    if [ "$OFFLINE" = "true" ]; then
+        OFFLINE_SUFFIX="-offline"
+        echo "Using offline build (air-gapped, all images embedded)"
+    fi
+
     if [ "$USE_MUSL" = "true" ]; then
-        BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH-musl.tar.gz"
+        BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH-musl${OFFLINE_SUFFIX}.tar.gz"
         echo "Using musl-based binary (Alpine Linux compatible)"
     else
-        BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH.tar.gz"
+        BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/kubesolo-$KUBESOLO_VERSION-linux-$ARCH${OFFLINE_SUFFIX}.tar.gz"
         echo "Using glibc-based binary (standard Linux, default)"
     fi
 

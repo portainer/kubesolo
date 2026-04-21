@@ -984,7 +984,12 @@ download_bundle() {
         fi
     fi
 
-    archive="kubesolo-${KUBESOLO_VERSION}-${os}-${arch}${libc_suffix}.tar.gz"
+    local offline_suffix=""
+    if [ "$OFFLINE" = "true" ]; then
+        offline_suffix="-offline"
+    fi
+
+    archive="kubesolo-${KUBESOLO_VERSION}-${os}-${arch}${libc_suffix}${offline_suffix}.tar.gz"
     bin_url="https://github.com/portainer/kubesolo/releases/download/${KUBESOLO_VERSION}/${archive}"
     script_url="https://get.kubesolo.io"
 
@@ -1069,6 +1074,7 @@ PROXY="${KUBESOLO_PROXY:-}"
 KUBESOLO_OFFLINE_INSTALL="${KUBESOLO_OFFLINE_INSTALL:-}"
 DOWNLOAD_ONLY_DIR="${KUBESOLO_DOWNLOAD_DIR:-}"
 INSTALL_PREREQS="${KUBESOLO_INSTALL_PREREQS:-false}"
+OFFLINE="${KUBESOLO_OFFLINE:-false}"
 
 # Parse command line arguments
 for arg in "$@"; do
@@ -1109,6 +1115,9 @@ for arg in "$@"; do
     --offline-install=*)
       KUBESOLO_OFFLINE_INSTALL="${arg#*=}"
       ;;
+    --offline)
+      OFFLINE="true"
+      ;;
     --install-prereqs)
       INSTALL_PREREQS="true"
       ;;
@@ -1132,6 +1141,7 @@ for arg in "$@"; do
       echo "  --pprof-server=true|false    Enable pprof server (default: $PPROF_SERVER)"
       echo "  --run-mode=MODE              Run mode: service, foreground, or daemon (default: $RUN_MODE)"
       echo "  --proxy=URL                  Set proxy for HTTP/HTTPS requests"
+      echo "  --offline                    Download the offline build (all images embedded, for air-gapped environments)"
       echo "  --offline-install=PATH       Use a local binary or archive instead of downloading"
       echo "  --download-only[=DIR]        Download binary archive and install script for offline use (default dir: .)"
       echo "  --install-prereqs            Automatically install missing prerequisites (e.g. nftables on Alpine)"
@@ -1204,7 +1214,12 @@ echo "🔍 Detected environment: $ENVIRONMENT"
 
 # Binary configuration
 APP_NAME="kubesolo"
-ARCHIVE_NAME="kubesolo-$KUBESOLO_VERSION-$OS-$ARCH$LIBC_SUFFIX.tar.gz"
+OFFLINE_SUFFIX=""
+if [ "$OFFLINE" = "true" ]; then
+    OFFLINE_SUFFIX="-offline"
+    echo "🔍 Using offline build (air-gapped, all images embedded)"
+fi
+ARCHIVE_NAME="kubesolo-$KUBESOLO_VERSION-$OS-$ARCH$LIBC_SUFFIX$OFFLINE_SUFFIX.tar.gz"
 BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSION/$ARCHIVE_NAME"
 
 # Pre-flight checks
