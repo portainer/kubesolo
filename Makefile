@@ -154,6 +154,7 @@ build-using-alpine:
 
 .PHONY: lint
 lint:
+	go mod tidy
 	go fmt ./...
 
 .PHONY: run
