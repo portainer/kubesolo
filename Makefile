@@ -138,7 +138,7 @@ build-using-image:
 		-e GOCACHE=/root/.cache/go-build \
 		-e GOMODCACHE=/go/pkg/mod \
 		-e CGO_ENABLED=1 -e CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) -e VERSION=$(VERSION) \
-		registry.k8s.io/build-image/kube-cross:v1.36.0-go1.25.7-bullseye.0 \
+		registry.k8s.io/build-image/kube-cross:v1.36.0-go1.26.1-bullseye.0 \
 		make build
 
 .PHONY: build-using-alpine
@@ -149,7 +149,7 @@ build-using-alpine:
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
 		-e CGO_ENABLED=1 -e CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
-		golang:1.25-alpine \
+		golang:1.26-alpine \
 		sh -c "apk add --no-cache gcc musl-dev && go build -ldflags='${LDFLAGS_STRING} -linkmode external -extldflags \"-static\"' -a -o dist/kubesolo ./cmd/kubesolo/main.go"
 
 .PHONY: lint
