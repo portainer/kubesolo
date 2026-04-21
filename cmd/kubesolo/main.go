@@ -367,8 +367,8 @@ func (s *kubesolo) bootstrap() {
 		ContainerdCNIConfigDir:  filepath.Join(basePath, types.DefaultContainerdDir, "cni", "conf"),
 		ContainerdCNIConfigFile: filepath.Join(basePath, types.DefaultContainerdDir, "cni", "conf", types.DefaultCNIConfigName),
 
-		// Runc binary
-		RuncBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "runc"),
+		// Crun binary
+		CrunBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "crun"),
 
 		// Kubelet paths
 		KubeletDir:            filepath.Join(basePath, types.DefaultKubeletDir),
