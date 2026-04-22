@@ -94,7 +94,7 @@ func (s *service) postSetup() error {
 	// kube-proxy's own chains were programmed; this ensures kubeproxyReady only
 	// fires once SNAT for pod egress is confirmed.
 	if err := network.EnsurePodMasquerade(types.DefaultPodCIDR); err != nil {
-		log.Warn().Str("component", "kubeproxy").Msgf("failed to ensure pod masquerade: %v", err)
+		log.Error().Str("component", "kubeproxy").Msgf("failed to ensure pod masquerade: %v", err)
 	}
 	return nil
 }

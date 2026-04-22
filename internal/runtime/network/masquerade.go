@@ -27,7 +27,11 @@ func EnsurePodMasquerade(podCIDR string) error {
 }
 
 func ensureIPTablesMasquerade(podCIDR string) error {
+	// -w 5: wait up to 5 s for the xtables lock. This function is called during
+	// kube-proxy startup when other processes may also be modifying iptables;
+	// without -w, concurrent access causes "Resource temporarily unavailable".
 	args := []string{
+		"-w", "5",
 		"-t", "nat", "-C", "POSTROUTING",
 		"-s", podCIDR, "!", "-d", podCIDR,
 		"-m", "comment", "--comment", masqueradeComment,
@@ -39,7 +43,7 @@ func ensureIPTablesMasquerade(podCIDR string) error {
 		return nil
 	}
 
-	args[2] = "-A"
+	args[3] = "-A"
 	if out, err := exec.Command("iptables", args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("iptables: failed to add pod masquerade rule: %v (output: %s)", err, out)
 	}
@@ -50,37 +54,60 @@ func ensureIPTablesMasquerade(podCIDR string) error {
 	return nil
 }
 
+func nftCombinedOutput(args ...string) ([]byte, error) {
+	return exec.Command("nft", args...).CombinedOutput()
+}
+
+func nftAlreadyExists(out []byte) bool {
+	msg := strings.ToLower(string(out))
+	return strings.Contains(msg, "file exists") || strings.Contains(msg, "already exists")
+}
+
+// ensureNftObject ensures an nftables object (table or chain) exists. It tries
+// listArgs first; if the object is absent it runs addArgs, tolerating a
+// concurrent creation racing us to it.
+func ensureNftObject(listArgs, addArgs []string) error {
+	if _, err := nftCombinedOutput(listArgs...); err == nil {
+		return nil
+	}
+	if out, err := nftCombinedOutput(addArgs...); err != nil && !nftAlreadyExists(out) {
+		return fmt.Errorf("nft %s: %v (output: %s)", strings.Join(addArgs, " "), err, out)
+	}
+	return nil
+}
+
 func ensureNftablesMasquerade(podCIDR string) error {
-	present, err := nftRulePresent(types.DefaultNftMasqTable, masqueradeComment)
-	if err != nil {
+	if err := ensureNftObject(
+		[]string{"list", "table", "ip", types.DefaultNftMasqTable},
+		[]string{"add", "table", "ip", types.DefaultNftMasqTable},
+	); err != nil {
 		return err
 	}
-	if present {
+
+	if err := ensureNftObject(
+		[]string{"list", "chain", "ip", types.DefaultNftMasqTable, "postrouting"},
+		[]string{"add", "chain", "ip", types.DefaultNftMasqTable, "postrouting",
+			"{ type nat hook postrouting priority srcnat; policy accept; }"},
+	); err != nil {
+		return err
+	}
+
+	out, err := nftCombinedOutput("list", "chain", "ip", types.DefaultNftMasqTable, "postrouting")
+	if err != nil {
+		return fmt.Errorf("nft list chain ip %s postrouting: %v (output: %s)", types.DefaultNftMasqTable, err, out)
+	}
+	if strings.Contains(string(out), masqueradeComment) {
 		log.Debug().Str("component", "network").Msg("pod masquerade rule already present (nftables)")
 		return nil
 	}
 
-	// Create table — idempotent: nft add table succeeds even if it already exists.
-	if out, err := exec.Command("nft", "add", "table", "ip", types.DefaultNftMasqTable).CombinedOutput(); err != nil {
-		return fmt.Errorf("nft add table %s: %v (output: %s)", types.DefaultNftMasqTable, err, out)
-	}
-
-	// Create base chain — tolerate "already exists" because the chain may be
-	// present from a previous partial run while the masquerade rule is missing.
-	chainOut, chainErr := exec.Command("nft", "add", "chain", "ip", types.DefaultNftMasqTable, "postrouting",
-		"{ type nat hook postrouting priority srcnat; policy accept; }").CombinedOutput()
-	if chainErr != nil && !strings.Contains(strings.ToLower(string(chainOut)), "already exists") {
-		return fmt.Errorf("nft add chain postrouting: %v (output: %s)", chainErr, chainOut)
-	}
-
-	// Add masquerade rule.
-	ruleArgs := []string{
+	args := []string{
 		"add", "rule", "ip", types.DefaultNftMasqTable, "postrouting",
 		"ip", "saddr", podCIDR, "ip", "daddr", "!=", podCIDR,
 		"masquerade", "comment", `"` + masqueradeComment + `"`,
 	}
-	if out, err := exec.Command("nft", ruleArgs...).CombinedOutput(); err != nil {
-		return fmt.Errorf("nft add rule masquerade: %v (output: %s)", err, out)
+	if out, err := nftCombinedOutput(args...); err != nil {
+		return fmt.Errorf("nft %s: %v (output: %s)", strings.Join(args, " "), err, out)
 	}
 
 	log.Info().Str("component", "network").
@@ -88,21 +115,4 @@ func ensureNftablesMasquerade(podCIDR string) error {
 		Str("table", types.DefaultNftMasqTable).
 		Msg("added pod masquerade rule (nftables)")
 	return nil
-}
-
-// nftRulePresent reports whether the named table contains a rule matching
-// comment. It returns an error only for unexpected failures — a missing table
-// is not an error, it simply means the rule is absent.
-func nftRulePresent(table, comment string) (bool, error) {
-	out, err := exec.Command("nft", "list", "table", "ip", table).CombinedOutput()
-	if err != nil {
-		outLower := strings.ToLower(string(out))
-		if strings.Contains(outLower, "no such file") ||
-			strings.Contains(outLower, "table not found") ||
-			strings.Contains(outLower, "no such table") {
-			return false, nil
-		}
-		return false, fmt.Errorf("nft list table %s: %v (output: %s)", table, err, out)
-	}
-	return strings.Contains(string(out), comment), nil
 }
