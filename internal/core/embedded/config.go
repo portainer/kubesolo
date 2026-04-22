@@ -12,7 +12,7 @@ func generateCNIConfigFile() map[string]any {
 				"type":        "bridge",
 				"bridge":      "cni0",
 				"isGateway":   true,
-				"ipMasq":      true,
+				"ipMasq":      false,
 				"hairpinMode": true,
 				"capabilities": map[string]any{
 					"portMappings": true,
