@@ -183,7 +183,7 @@ func runInstall(cfg *config.Config) error {
 	process.CleanupFileConflicts(cfg.Path)
 
 	// ── pre-flight checks ─────────────────────────────────────────────────────
-	if err := preflight.RunSuite(preflight.Suite(cfg.InstallPrereqs)); err != nil {
+	if err := preflight.RunSuite(preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer)); err != nil {
 		return fmt.Errorf("pre-flight check failed: %w", err)
 	}
 
@@ -329,12 +329,39 @@ func runServiceAction(init detect.InitSystem, action string) error {
 		}
 		return runCmd("rc-service", config.AppName, action)
 	case detect.InitSysV:
-		return runCmd("service", config.AppName, action)
-	case detect.InitUpstart:
-		if action == "status" {
-			return runCmd("initctl", "status", config.AppName)
+		switch action {
+		case "enable":
+			if err := runCmd("update-rc.d", config.AppName, "defaults"); err != nil {
+				// update-rc.d not found (RHEL/CentOS style); try chkconfig
+				if err2 := runCmd("chkconfig", "--add", config.AppName); err2 != nil {
+					return fmt.Errorf("enable: neither update-rc.d nor chkconfig found")
+				}
+				return runCmd("chkconfig", config.AppName, "on")
+			}
+			return nil
+		case "disable":
+			if err := runCmd("update-rc.d", "-f", config.AppName, "remove"); err != nil {
+				if err2 := runCmd("chkconfig", "--del", config.AppName); err2 != nil {
+					return fmt.Errorf("disable: neither update-rc.d nor chkconfig found")
+				}
+			}
+			return nil
+		case "start", "stop", "restart", "status":
+			return runCmd("service", config.AppName, action)
+		default:
+			return fmt.Errorf("action %q is not supported for SysV init", action)
 		}
-		return runCmd("initctl", action, config.AppName)
+	case detect.InitUpstart:
+		switch action {
+		case "enable", "disable":
+			// Upstart manages service availability through the presence of the
+			// job conf file in /etc/init/; there is no initctl enable/disable command.
+			return fmt.Errorf("action %q is not supported for Upstart — add or remove /etc/init/%s.conf to enable/disable the service", action, config.AppName)
+		case "start", "stop", "restart", "status":
+			return runCmd("initctl", action, config.AppName)
+		default:
+			return fmt.Errorf("action %q is not supported for Upstart", action)
+		}
 	default:
 		return fmt.Errorf(
 			"service management not supported for init system %q — use direct process signals instead",
@@ -385,7 +412,8 @@ Examples:
 	cmd.Flags().StringVar(&dir, "path", ".", "Directory to download files into")
 	cmd.Flags().StringVar(&targetArch, "arch", "",
 		"Target architecture for the bundle (default: current host).\n"+
-			"Valid values: amd64, arm64, arm, riscv64, amd64-musl, arm64-musl")
+			"Valid values: amd64, arm64, arm, riscv64, amd64-musl, arm64-musl.\n"+
+			"The -musl suffix selects the musl KubeSolo archive; the installer binary has no libc split.")
 	return cmd
 }
 
@@ -407,7 +435,7 @@ func checkCmd(cfg *config.Config) *cobra.Command {
 				Str("init", string(info.InitSystem)).
 				Str("env", string(info.Environment)).
 				Msg("host detected")
-			return preflight.RunSuite(preflight.Suite(cfg.InstallPrereqs))
+			return preflight.RunSuite(preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer))
 		},
 	}
 }
@@ -470,6 +498,8 @@ func initControlBinary(init detect.InitSystem) string {
 		candidates = []string{"rc-service", "/sbin/rc-service", "/usr/sbin/rc-service"}
 	case detect.InitSysV:
 		candidates = []string{"service", "/usr/sbin/service", "/sbin/service"}
+	case detect.InitUpstart:
+		candidates = []string{"initctl", "/sbin/initctl", "/usr/sbin/initctl"}
 	default:
 		return ""
 	}

@@ -68,10 +68,12 @@ func (s *SystemInfo) ArchiveName(version string) string {
 }
 
 // InstallerName returns the release asset name of the installer binary for
-// this host, e.g. "installer-linux-amd64" or "installer-linux-arm64-musl".
-// It follows the same arch/libc suffix conventions as ArchiveName.
+// this host, e.g. "installer-linux-amd64".
+// Unlike ArchiveName, the installer binary is published as a single asset per
+// arch with no libc split — the installer is a pure-Go CGO_ENABLED=0 binary
+// that runs on both glibc and musl systems.
 func (s *SystemInfo) InstallerName() string {
-	return fmt.Sprintf("installer-%s-%s%s", s.OS, s.ArchiveSuffix, s.LibCSuffix)
+	return fmt.Sprintf("installer-%s-%s", s.OS, s.ArchiveSuffix)
 }
 
 // ForTarget constructs a SystemInfo for a specific target architecture without
@@ -79,7 +81,9 @@ func (s *SystemInfo) InstallerName() string {
 // machine with a different architecture than the one running the installer.
 //
 // arch must be one of: amd64, arm64, arm, riscv64, amd64-musl, arm64-musl.
-// The -musl suffix selects the musl libc variant (only published for amd64 and arm64).
+// The -musl suffix selects the musl libc variant for the KubeSolo archive
+// (only published for amd64 and arm64); it does not affect the installer binary
+// asset name, which has no libc split (see InstallerName).
 // InitSystem and Environment are set to Unknown/Standard — they are not relevant
 // for bundle downloads.
 func ForTarget(arch string) (*SystemInfo, error) {

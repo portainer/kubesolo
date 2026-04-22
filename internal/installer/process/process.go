@@ -47,6 +47,8 @@ func StopViaInitSystem(initBinary string) {
 		args = []string{"kubesolo", "stop"}
 	case "service":
 		args = []string{"kubesolo", "stop"}
+	case "initctl":
+		args = []string{"stop", "kubesolo"}
 	default:
 		return
 	}

@@ -61,8 +61,12 @@ func MergeAfterStartup(dataPath string) {
 
 	existingConfig := filepath.Join(dotKube, "config")
 	if _, err := os.Stat(existingConfig); err == nil {
+		// Copy (not rename) the backup so existingConfig stays in place.
+		// KUBECONFIG below points to existingConfig:ksKubeconfig — if we
+		// renamed it away, existingConfig would be missing and kubectl would
+		// silently skip it, discarding all prior contexts from the merge.
 		backup := existingConfig + ".backup-" + time.Now().Format("20060102150405")
-		if err := os.Rename(existingConfig, backup); err != nil {
+		if err := copyFile(existingConfig, backup); err != nil {
 			log.Warn().Err(err).Msgf("failed to back up existing kubeconfig to %s", backup)
 		} else {
 			log.Info().Msgf("backed up existing kubeconfig to %s", backup)

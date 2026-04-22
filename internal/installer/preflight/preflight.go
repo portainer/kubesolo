@@ -24,8 +24,9 @@ type Check struct {
 
 // Suite returns the ordered list of pre-flight checks to run before installation.
 // installPrereqs controls whether missing OS packages are installed automatically
-// (e.g. nftables on Alpine Linux).
-func Suite(installPrereqs bool) []Check {
+// (e.g. nftables on Alpine Linux). pprofServer mirrors the --pprof-server flag;
+// when true, port 6060 is added to the port availability check.
+func Suite(installPrereqs, pprofServer bool) []Check {
 	return []Check{
 		{Name: "root privileges", Run: CheckRoot},
 		{Name: "hostname RFC 1123 compliance", Run: CheckHostname},
@@ -33,7 +34,7 @@ func Suite(installPrereqs bool) []Check {
 		{Name: "iptables xt_comment module", Run: CheckIptablesComment},
 		{Name: "nftables and iptables", Run: func() error { return CheckAlpineNetworking(installPrereqs) }},
 		{Name: "cgroups controllers", Run: func() error { return CheckCgroups(installPrereqs) }},
-		{Name: "required ports available", Run: CheckPorts},
+		{Name: "required ports available", Run: func() error { return CheckPorts(pprofServer) }},
 	}
 }
 
@@ -271,7 +272,9 @@ func CheckCgroups(installPrereqs bool) error {
 
 // CheckPorts verifies that KubeSolo's required ports are not in use.
 // We probe via net.Listen rather than shelling out to lsof/ss/netstat.
-func CheckPorts() error {
+// pprofServer should match the --pprof-server flag; when true, port 6060 is
+// also checked so a conflict is caught at preflight rather than at runtime.
+func CheckPorts(pprofServer bool) error {
 	type portEntry struct {
 		port int
 		name string
@@ -280,6 +283,9 @@ func CheckPorts() error {
 		{2379, "Kine (etcd replacement)"},
 		{6443, "Kubernetes API server"},
 		{10443, "Webhook server"},
+	}
+	if pprofServer {
+		entries = append(entries, portEntry{6060, "pprof HTTP server"})
 	}
 	var conflicts []string
 	for _, e := range entries {
