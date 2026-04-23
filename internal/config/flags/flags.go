@@ -25,4 +25,5 @@ var (
 	LocalStorageSharedPath = Application.Flag("local-storage-shared-path", "Path to the shared file system for the local storage. Defaults to empty string.").Envar("KUBESOLO_LOCAL_STORAGE_SHARED_PATH").Default("").String()
 	Debug                  = Application.Flag("debug", "Enable debug logging. Defaults to false.").Envar("KUBESOLO_DEBUG").Default("false").Bool()
 	PprofServer            = Application.Flag("pprof-server", "Enable pprof server. Defaults to false.").Envar("KUBESOLO_PPROF_SERVER").Default("false").Bool()
+	DisableIPv6            = Application.Flag("disable-ipv6", "Disable IPv6 support. When set, CoreDNS will not serve ip6.arpa reverse zones and kubelet will register with an explicit IPv4 node address. Defaults to false.").Envar("KUBESOLO_DISABLE_IPV6").Default("false").Bool()
 )

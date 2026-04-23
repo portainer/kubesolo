@@ -48,6 +48,7 @@ type kubesolo struct {
 	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
+	disableIPv6            bool
 	embedded               types.Embedded
 }
 
@@ -74,6 +75,7 @@ func service() (*kubesolo, error) {
 		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
+		disableIPv6:            *flags.DisableIPv6,
 	}, nil
 }
 
@@ -207,7 +209,7 @@ func (s *kubesolo) run() {
 	}
 
 	log.Info().Str("component", "kubesolo").Msg("deploying coredns...")
-	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile); err != nil {
+	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.DisableIPv6); err != nil {
 		log.Fatal().Err(err).Msg("failed to deploy coredns")
 	}
 
@@ -453,5 +455,8 @@ func (s *kubesolo) bootstrap() {
 
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+
+		// IPv6
+		DisableIPv6: s.disableIPv6,
 	}
 }

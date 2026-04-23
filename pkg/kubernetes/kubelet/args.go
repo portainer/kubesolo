@@ -8,6 +8,7 @@ func (s *service) configureKubeletArgs(command *cobra.Command) {
 	command.SetArgs([]string{
 		"--config", s.kubeletConfigFile,
 		"--hostname-override", s.nodeName,
+		"--node-ip", s.nodeIP,
 		"--root-dir", s.kubeletDir,
 		"--kubeconfig", s.kubeletKubeConfigFile,
 	})

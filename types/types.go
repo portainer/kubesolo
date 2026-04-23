@@ -129,6 +129,9 @@ type Embedded struct {
 
 	// Portainer Edge
 	IsPortainerEdge bool
+
+	// IPv6
+	DisableIPv6 bool
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent
