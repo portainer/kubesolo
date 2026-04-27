@@ -133,11 +133,14 @@ func (s *kubesolo) run() {
 	}
 	log.Info().Str("component", "kubesolo").Msg("starting kubesolo services... this may take a few minutes...")
 
-	services := []struct {
+	type service struct {
 		name    string
 		start   func()
 		readyCh chan struct{}
-	}{
+	}
+
+	// infraServices must be fully ready before pod masquerade is set up.
+	infraServices := []service{
 		{
 			name: "containerd",
 			start: func() {
@@ -178,6 +181,10 @@ func (s *kubesolo) run() {
 			},
 			readyCh: controllerReadyCh,
 		},
+	}
+
+	// nodeServices start after masquerade is guaranteed to be in place.
+	nodeServices := []service{
 		{
 			name: "kubelet",
 			start: func() {
@@ -200,7 +207,23 @@ func (s *kubesolo) run() {
 		},
 	}
 
-	for _, svc := range services {
+	for _, svc := range infraServices {
+		log.Info().Str("component", "kubesolo").Msgf("starting %s...", svc.name)
+		svc.start()
+		if !waitForService(ctx, svc.name, svc.readyCh) {
+			return
+		}
+	}
+
+	// Ensure pod→external masquerade (SNAT) is in place before kubelet starts.
+	// kine persists cluster state across reboots, so kubelet will immediately
+	// reconcile existing pods — they must not start into a network with no SNAT.
+	log.Info().Str("component", "kubesolo").Msg("setting up pod masquerade rules...")
+	if err := network.EnsurePodMasquerade(types.DefaultPodCIDR); err != nil {
+		log.Fatal().Err(err).Msg("failed to set up pod masquerade")
+	}
+
+	for _, svc := range nodeServices {
 		log.Info().Str("component", "kubesolo").Msgf("starting %s...", svc.name)
 		svc.start()
 		if !waitForService(ctx, svc.name, svc.readyCh) {

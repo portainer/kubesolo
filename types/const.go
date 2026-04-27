@@ -36,4 +36,5 @@ const (
 	DefaultContextTimeout            = 15 * time.Second
 	DefaultComponentSleep            = 5 * time.Second
 	DefaultRetryCount                = 5
+	DefaultNftMasqTable              = "kubesolo-masq"
 )
