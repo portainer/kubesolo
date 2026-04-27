@@ -43,7 +43,7 @@ func ensureIPTablesMasquerade(podCIDR string) error {
 		return nil
 	}
 
-	args[3] = "-A"
+	args[4] = "-A"
 	if out, err := exec.Command("iptables", args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("iptables: failed to add pod masquerade rule: %v (output: %s)", err, out)
 	}
