@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	kubesoloservice "github.com/portainer/kubesolo/internal/runtime/service"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
@@ -25,6 +26,12 @@ func flushNftablesNat() {
 		return
 	}
 	log.Info().Str("component", "kubeproxy").Msg("flushed nftables ip nat table to avoid iptables-nft conflicts")
+
+	// The flush above wipes CNI masquerade rules for already-running pods.
+	// Re-add immediately so the gap where pods have no SNAT is negligible.
+	if err := network.EnsurePodMasquerade(types.DefaultPodCIDR); err != nil {
+		log.Warn().Str("component", "kubeproxy").Msgf("failed to restore pod masquerade after nat flush: %v", err)
+	}
 }
 
 // Run starts the kube proxy in the following order:
@@ -82,6 +89,12 @@ func (s *service) postSetup() error {
 		log.Error().Str("component", "kubeproxy").Msgf("kubeproxy health check failed: %v...", err)
 		s.cancelShutdown()
 		return err
+	}
+	// Re-verify masquerade is in place. flushNftablesNat may have run before
+	// kube-proxy's own chains were programmed; this ensures kubeproxyReady only
+	// fires once SNAT for pod egress is confirmed.
+	if err := network.EnsurePodMasquerade(types.DefaultPodCIDR); err != nil {
+		log.Error().Str("component", "kubeproxy").Msgf("failed to ensure pod masquerade: %v", err)
 	}
 	return nil
 }
