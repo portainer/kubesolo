@@ -48,6 +48,7 @@ type kubesolo struct {
 	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
+	fullMode               bool
 	disableIPv6            bool
 	embedded               types.Embedded
 }
@@ -75,6 +76,7 @@ func service() (*kubesolo, error) {
 		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
+		fullMode:               *flags.Full,
 		disableIPv6:            *flags.DisableIPv6,
 	}, nil
 }
@@ -116,10 +118,16 @@ func (s *kubesolo) run() {
 		cancel()
 	}()
 
+	profile := "edge"
+	if s.fullMode {
+		profile = "full"
+	}
+
 	log.Info().
 		Str("version", Version).
 		Str("build-date", BuildDate).
 		Str("commit", Commit).
+		Str("profile", profile).
 		Msg("starting kubesolo...")
 
 	log.Info().Str("component", "kubesolo").Msg("ensuring all embedded dependencies are available...")
@@ -198,7 +206,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kubeproxy",
 			start: func() {
-				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile)
+				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.FullMode)
 				s.wg.Go(func() {
 					kubeproxyService.Run(kubeletReadyCh)
 				})
@@ -422,12 +430,12 @@ func (s *kubesolo) bootstrap() {
 		},
 
 		// Containerd paths
-		ContainerdDir:            filepath.Join(basePath, types.DefaultContainerdDir),
-		ContainerdSocketFile:     filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket),
-		ContainerdBinaryFile:     filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
-		ContainerdImagesDir:      filepath.Join(basePath, types.DefaultContainerdDir, "images"),
-		ContainerdShimBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
-		ContainerdConfigFile:     filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
+		ContainerdDir:               filepath.Join(basePath, types.DefaultContainerdDir),
+		ContainerdSocketFile:        filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket),
+		ContainerdBinaryFile:        filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
+		ContainerdImagesDir:         filepath.Join(basePath, types.DefaultContainerdDir, "images"),
+		ContainerdShimBinaryFile:    filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
+		ContainerdConfigFile:        filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
 		ContainerdRootDir:           filepath.Join(basePath, types.DefaultContainerdDir, "root"),
 		ContainerdStateDir:          filepath.Join(basePath, types.DefaultContainerdDir, "state"),
 		ContainerdRegistryConfigDir: filepath.Join(basePath, types.DefaultContainerdDir, "registry"),
@@ -478,6 +486,9 @@ func (s *kubesolo) bootstrap() {
 
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+
+		// Full mode
+		FullMode: s.fullMode,
 
 		// IPv6
 		DisableIPv6: s.disableIPv6,

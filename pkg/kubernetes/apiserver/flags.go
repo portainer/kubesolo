@@ -10,16 +10,11 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 
 	// networking settings
 	_ = flags.Set("insecure-port", "0")
-	_ = flags.Set("secure-port", "6443")
-	_ = flags.Set("bind-address", "0.0.0.0")
 	_ = flags.Set("advertise-address", s.nodeIP)
 	_ = flags.Set("service-cluster-ip-range", types.DefaultServiceClusterIPRange)
 
 	// etcd configuration
 	_ = flags.Set("etcd-servers", types.DefaultKineEndpoint)
-	_ = flags.Set("etcd-compaction-interval", "5m")
-	_ = flags.Set("etcd-count-metric-poll-period", "0")
-	_ = flags.Set("etcd-db-metric-poll-interval", "0")
 
 	// security and certificates
 	_ = flags.Set("cert-dir", s.pkiAPIServerDir)
@@ -40,33 +35,40 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	_ = flags.Set("proxy-client-cert-file", s.requestHeaderClientCert)
 	_ = flags.Set("proxy-client-key-file", s.requestHeaderClientKey)
 
-	// authorization and admission
+	// authorization
 	_ = flags.Set("allow-privileged", "true")
 	_ = flags.Set("authorization-mode", "Node,RBAC")
-	_ = flags.Set("enable-admission-plugins", "NodeRestriction,ServiceAccount,ValidatingAdmissionWebhook,MutatingAdmissionWebhook,DefaultStorageClass,CertificateApproval,CertificateSigning,CertificateSubjectRestriction,ValidatingAdmissionPolicy,MutatingAdmissionPolicy")
-	_ = flags.Set("disable-admission-plugins", "RuntimeClass,PodSecurity,ClusterTrustBundleAttest,DefaultIngressClass,TaintNodesByCondition,DefaultTolerationSeconds,StorageObjectInUseProtection,PersistentVolumeClaimResize,ResourceQuota,LimitRanger,Priority")
-	_ = flags.Set("enable-bootstrap-token-auth", "false")
-
-	// performance and resource limits
-	_ = flags.Set("max-requests-inflight", "2000")
-	_ = flags.Set("max-mutating-requests-inflight", "1000")
-	_ = flags.Set("min-request-timeout", "180")
-	_ = flags.Set("request-timeout", "900s")
-	_ = flags.Set("kubelet-timeout", "30s")
-	_ = flags.Set("watch-cache", "true")
-	_ = flags.Set("event-ttl", "1h")
-
-	// features and garbage collection
-	_ = flags.Set("enable-garbage-collector", "true")
-	_ = flags.Set("profiling", "false")
 
 	// feature gates - disable SizeBasedListCostEstimate to suppress "Error getting keys" messages
 	_ = flags.Set("feature-gates", "SizeBasedListCostEstimate=false")
 
-	// audit logging
-	_ = flags.Set("audit-log-path", "-")
-	_ = flags.Set("audit-log-maxage", "0")
-	_ = flags.Set("audit-log-maxbackup", "0")
-	_ = flags.Set("audit-log-maxsize", "0")
+	// Edge-optimised overrides — only applied when not in full mode.
+	// When full mode is enabled, upstream Kubernetes defaults are used instead.
+	if !s.fullMode {
+		// etcd metric collection
+		_ = flags.Set("etcd-count-metric-poll-period", "0")
+		_ = flags.Set("etcd-db-metric-poll-interval", "0")
+
+		// request throttling and timeouts
+		_ = flags.Set("max-requests-inflight", "2000")
+		_ = flags.Set("max-mutating-requests-inflight", "1000")
+		_ = flags.Set("min-request-timeout", "180")
+		_ = flags.Set("request-timeout", "900s")
+		_ = flags.Set("kubelet-timeout", "30s")
+
+		// diagnostics
+		_ = flags.Set("profiling", "false")
+
+		// admission control
+		_ = flags.Set("enable-admission-plugins", "NodeRestriction,ServiceAccount,ValidatingAdmissionWebhook,MutatingAdmissionWebhook,DefaultStorageClass,CertificateApproval,CertificateSigning,CertificateSubjectRestriction,ValidatingAdmissionPolicy,MutatingAdmissionPolicy")
+		_ = flags.Set("disable-admission-plugins", "RuntimeClass,PodSecurity,ClusterTrustBundleAttest,DefaultIngressClass,TaintNodesByCondition,DefaultTolerationSeconds,StorageObjectInUseProtection,PersistentVolumeClaimResize,ResourceQuota,LimitRanger,Priority")
+
+		// audit logging
+		_ = flags.Set("audit-log-path", "-")
+		_ = flags.Set("audit-log-maxage", "0")
+		_ = flags.Set("audit-log-maxbackup", "0")
+		_ = flags.Set("audit-log-maxsize", "0")
+	}
+
 	return nil
 }

@@ -28,6 +28,7 @@ type service struct {
 	nodeIP                string
 	kubeletCertPath       string
 	adminKubeconfig       string
+	fullMode              bool
 }
 
 // NewService creates a new kubelet service
@@ -49,5 +50,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		keyFile:               embedded.KubeletCerts.Key,
 		nodeName:              system.GetHostname(),
 		adminKubeconfig:       embedded.AdminKubeconfigFile,
+		fullMode:              embedded.FullMode,
 	}
 }
