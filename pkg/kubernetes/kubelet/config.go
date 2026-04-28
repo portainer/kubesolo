@@ -51,13 +51,11 @@ func (s *service) writeKubeletConfigFile() error {
 }
 
 func (s *service) generateKubeletConfig() map[string]any {
-	return map[string]any{
-		"kind":         "KubeletConfiguration",
-		"apiVersion":   "kubelet.config.k8s.io/v1beta1",
-		"enableServer": true,
+	config := map[string]any{
+		"kind":       "KubeletConfiguration",
+		"apiVersion": "kubelet.config.k8s.io/v1beta1",
 
 		"containerRuntimeEndpoint": "unix://" + s.containerdSockFile,
-		"imageServiceEndpoint":     "unix://" + s.containerdSockFile,
 
 		"authentication": map[string]any{
 			"anonymous": map[string]any{
@@ -88,52 +86,42 @@ func (s *service) generateKubeletConfig() map[string]any {
 
 		"cgroupDriver": cgroupDriver(),
 
-		"registerNode":                   true,
-		"readOnlyPort":                   0,
-		"port":                           10250,
-		"syncFrequency":                  "5m0s",
-		"fileCheckFrequency":             "2m0s",
-		"httpCheckFrequency":             "2m0s",
-		"nodeStatusUpdateFrequency":      "60s",
-		"nodeStatusReportFrequency":      "15m0s",
-		"volumeStatsAggPeriod":           "5m0s",
-		"imageMinimumGCAge":              "10m0s",
-		"imageMaximumGCAge":              "0s",
-		"imageGCHighThresholdPercent":    95,
-		"imageGCLowThresholdPercent":     80,
-		"runtimeRequestTimeout":          "60s",
-		"cpuManagerReconcilePeriod":      "60s",
-		"streamingConnectionIdleTimeout": "1h0m0s",
-		"rotateCertificates":             true,
+		"readOnlyPort":       0,
+		"rotateCertificates": true,
 
-		"registerWithTaints": []map[string]any{},
+		"failSwapOn": false,
+	}
 
-		"evictionHard": map[string]string{
+	// Edge-optimised overrides — only applied when not in full mode.
+	// When full mode is enabled, upstream Kubernetes defaults are used instead.
+	if !s.fullMode {
+		config["enableProfilingHandler"] = false
+		config["enableDebugFlagsHandler"] = false
+		config["streamingConnectionIdleTimeout"] = "1h0s"
+		config["syncFrequency"] = "5m0s"
+		config["fileCheckFrequency"] = "2m0s"
+		config["httpCheckFrequency"] = "2m0s"
+		config["nodeStatusUpdateFrequency"] = "60s"
+		config["nodeStatusReportFrequency"] = "15m0s"
+		config["volumeStatsAggPeriod"] = "5m0s"
+		config["imageMinimumGCAge"] = "10m0s"
+		config["imageMaximumGCAge"] = "0s"
+		config["imageGCHighThresholdPercent"] = 95
+		config["runtimeRequestTimeout"] = "60s"
+		config["cpuManagerReconcilePeriod"] = "60s"
+		config["kubeAPIQPS"] = 10
+		config["kubeAPIBurst"] = 20
+		config["eventRecordQPS"] = 5
+		config["eventBurst"] = 10
+		config["containerLogMaxSize"] = "512Ki"
+		config["maxPods"] = 20
+		config["evictionHard"] = map[string]string{
 			"memory.available": "75Mi",
 			"nodefs.available": "50Mi",
-		},
-		"systemReserved": map[string]string{"memory": "25Mi"},
-		"kubeReserved":   map[string]string{"memory": "25Mi"},
-		"failSwapOn":     false,
-
-		"kubeAPIQPS":                10,
-		"kubeAPIBurst":              20,
-		"serializeImagePulls":       true,
-		"imagePullProgressDeadline": "1m",
-
-		"registryPullQPS": 5,
-		"registryBurst":   10,
-
-		"eventRecordQPS": 5,
-		"eventBurst":     10,
-
-		"containerLogMaxSize":     "512Ki",
-		"enableProfilingHandler":  false,
-		"enableDebugFlagsHandler": false,
-		"maxPods":                 20,
-
-		"featureGates": map[string]bool{
-			"RotateKubeletServerCertificate": true,
-		},
+		}
+		config["systemReserved"] = map[string]string{"memory": "25Mi"}
+		config["kubeReserved"] = map[string]string{"memory": "25Mi"}
 	}
+
+	return config
 }

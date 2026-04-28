@@ -19,6 +19,7 @@ type service struct {
 	caFile                    string
 	adminKubeconfigFile       string
 	serviceAccountKeyFile     string
+	fullMode                  bool
 }
 
 // NewService creates a new controller service
@@ -33,5 +34,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, controllerReady 
 		caFile:                    embedded.CACerts.Cert,
 		adminKubeconfigFile:       embedded.AdminKubeconfigFile,
 		serviceAccountKeyFile:     embedded.ServiceAccountKeyFile,
+		fullMode:                  embedded.FullMode,
 	}
 }

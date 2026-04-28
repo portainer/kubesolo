@@ -31,16 +31,17 @@ func (s *service) configureKubeProxyFlags(command *cobra.Command) {
 
 	// performance settings
 	_ = flags.Set("oom-score-adj", "-998")
-	_ = flags.Set("profiling", "false")
 
 	// proxy mode and conntrack settings
 	_ = flags.Set("proxy-mode", proxyMode)
-	_ = flags.Set("conntrack-max-per-core", "1024")
-	_ = flags.Set("conntrack-min", "1024")
-	_ = flags.Set("min-sync-period", "10s")
+	if !s.fullMode {
+		_ = flags.Set("profiling", "false")
+		_ = flags.Set("conntrack-max-per-core", "1024")
+		_ = flags.Set("conntrack-min", "1024")
+		_ = flags.Set("min-sync-period", "10s")
+	}
 
 	if proxyMode == "iptables" {
-		_ = flags.Set("iptables-masquerade-bit", "14")
 		_ = flags.Set("masquerade-all", "true")
 	}
 }
