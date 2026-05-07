@@ -303,6 +303,10 @@ func cleanStaleState(basePath string) {
 		if name == "containerd" || name == "containerd-shim-runc-v2" || name == "crun" {
 			continue
 		}
+		// Preserve registry
+		if name == "registry" {
+			continue
+		}
 
 		target := filepath.Join(containerdDir, name)
 		if err := os.RemoveAll(target); err == nil {
