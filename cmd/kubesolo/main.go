@@ -49,6 +49,7 @@ type kubesolo struct {
 	localStorage           bool
 	localStorageSharedPath string
 	fullMode               bool
+	disableIPv6            bool
 	embedded               types.Embedded
 }
 
@@ -76,6 +77,7 @@ func service() (*kubesolo, error) {
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
 		fullMode:               *flags.Full,
+		disableIPv6:            *flags.DisableIPv6,
 	}, nil
 }
 
@@ -238,7 +240,7 @@ func (s *kubesolo) run() {
 	}
 
 	log.Info().Str("component", "kubesolo").Msg("deploying coredns...")
-	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile); err != nil {
+	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.DisableIPv6); err != nil {
 		log.Fatal().Err(err).Msg("failed to deploy coredns")
 	}
 
@@ -350,6 +352,12 @@ func (s *kubesolo) bootstrap() {
 
 	// Load required kernel modules before any networking setup
 	system.LoadRequiredModules()
+
+	if s.disableIPv6 {
+		if err := network.DisableIPv6Sysctls(); err != nil {
+			log.Warn().Err(err).Msg("failed to disable ipv6 sysctls")
+		}
+	}
 
 	// System Node IP
 	nodeIP, err := network.GetNodeIP()
@@ -491,5 +499,8 @@ func (s *kubesolo) bootstrap() {
 
 		// Full mode
 		FullMode: s.fullMode,
+
+		// IPv6
+		DisableIPv6: s.disableIPv6,
 	}
 }
