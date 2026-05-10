@@ -229,11 +229,12 @@ INSTALLER_LDFLAGS = -s -w \
 
 INSTALLER_OUTPUT ?= ./dist/installer-$(GOOS)-$(GOARCH)
 
-# Build the installer for the current GOOS/GOARCH
+# Build the installer for the current GOOS/GOARCH.
+# Pass GOARM=7 when targeting arm (armhf/ARMv7), e.g.: make build-installer GOARCH=arm GOARM=7
 .PHONY: build-installer
 build-installer:
 	@mkdir -p $(dir $(INSTALLER_OUTPUT))
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=$(GOARM) go build \
 		-ldflags="$(INSTALLER_LDFLAGS)" \
 		-o $(INSTALLER_OUTPUT) \
 		./cmd/installer

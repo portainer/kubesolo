@@ -1,0 +1,72 @@
+name: release-installer
+run-name: "installer ${{ github.event.inputs.version }} release 🚀"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag, e.g. v1.1.2"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: test installer
+    runs-on: ubuntu-latest
+    steps:
+    - name: "[preparation] checkout the current branch"
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        fetch-depth: 0
+        tags: true
+    - name: "[preparation] set up golang"
+      uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+      with:
+        go-version-file: go.mod
+        cache-dependency-path: go.sum
+    - name: "[execution] run installer tests"
+      run: make test-installer
+
+  build:
+    name: build installer-linux-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    needs: [test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - goarch: amd64
+        - goarch: arm64
+        - goarch: arm
+          goarm: "7"
+        - goarch: riscv64
+    steps:
+    - name: "[preparation] checkout the current branch"
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        fetch-depth: 0
+        tags: true
+    - name: "[preparation] set up golang"
+      uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+      with:
+        go-version-file: go.mod
+        cache-dependency-path: go.sum
+    - name: "[execution] build installer for linux/${{ matrix.goarch }}"
+      env:
+        GOARM: ${{ matrix.goarm }}
+      run: |
+        make build-installer \
+          GOOS=linux \
+          GOARCH=${{ matrix.goarch }} \
+          VERSION="${{ github.event.inputs.version }}" \
+          INSTALLER_OUTPUT=./dist/installer-linux-${{ matrix.goarch }}
+    - name: "[post] upload installer to github release"
+      run: |
+        gh release upload --clobber \
+          --repo portainer/kubesolo \
+          "${{ github.event.inputs.version }}" \
+          "./dist/installer-linux-${{ matrix.goarch }}"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
