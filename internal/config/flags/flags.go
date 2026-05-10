@@ -26,4 +26,5 @@ var (
 	Debug                  = Application.Flag("debug", "Enable debug logging. Defaults to false.").Envar("KUBESOLO_DEBUG").Default("false").Bool()
 	PprofServer            = Application.Flag("pprof-server", "Enable pprof server. Defaults to false.").Envar("KUBESOLO_PPROF_SERVER").Default("false").Bool()
 	Full                   = Application.Flag("full", "Disable memory-saving overrides and use upstream Kubernetes defaults. Kubesolo still uses NodeSetter in favour of the scheduler. Recommended for CI and developer environments where memory is not constrained. Leave unset for edge deployments.").Envar("KUBESOLO_FULL").Default("false").Bool()
+	DisableIPv6            = Application.Flag("disable-ipv6", "Disable IPv6 support. When set, CoreDNS will not serve ip6.arpa reverse zones and kubelet will register with an explicit IPv4 node address. Defaults to false.").Envar("KUBESOLO_DISABLE_IPV6").Default("false").Bool()
 )
