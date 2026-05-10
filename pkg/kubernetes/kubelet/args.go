@@ -1,6 +1,9 @@
 package kubelet
 
 import (
+	"net"
+
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +15,12 @@ func (s *service) configureKubeletArgs(command *cobra.Command) {
 		"--kubeconfig", s.kubeletKubeConfigFile,
 	}
 	if s.disableIPv6 {
-		args = append(args, "--node-ip", s.nodeIP)
+		ip := net.ParseIP(s.nodeIP)
+		if ip != nil && !ip.IsLoopback() {
+			args = append(args, "--node-ip", s.nodeIP)
+		} else {
+			log.Warn().Str("component", "kubelet").Msgf("--disable-ipv6 set but node IP %q is loopback or invalid; skipping --node-ip", s.nodeIP)
+		}
 	}
 	command.SetArgs(args)
 }

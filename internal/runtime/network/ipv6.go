@@ -21,7 +21,12 @@ func DisableIPv6Sysctls() error {
 	var errs []error
 	for _, path := range ipv6SysctlPaths {
 		current, err := os.ReadFile(path)
-		if err == nil && len(current) > 0 && current[0] == '1' {
+		if err != nil {
+			if os.IsNotExist(err) || os.IsPermission(err) {
+				log.Debug().Str("component", "network").Msgf("ipv6 sysctl not available, skipping: %s", path)
+				continue
+			}
+		} else if len(current) > 0 && current[0] == '1' {
 			log.Debug().Str("component", "network").Msgf("ipv6 already disabled: %s", path)
 			continue
 		}
