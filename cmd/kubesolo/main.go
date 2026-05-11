@@ -50,6 +50,7 @@ type kubesolo struct {
 	localStorageSharedPath string
 	fullMode               bool
 	disableIPv6            bool
+	dbWALRepair            bool
 	embedded               types.Embedded
 }
 
@@ -78,6 +79,7 @@ func service() (*kubesolo, error) {
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
 		fullMode:               *flags.Full,
 		disableIPv6:            *flags.DisableIPv6,
+		dbWALRepair:            *flags.DBWALRepair,
 	}, nil
 }
 
@@ -162,7 +164,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kine",
 			start: func() {
-				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh)
+				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.dbWALRepair)
 				s.wg.Go(func() {
 					kineService.Run()
 				})
