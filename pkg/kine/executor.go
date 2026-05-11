@@ -25,9 +25,7 @@ func (s *service) Run() error {
 		return err
 	}
 
-	if s.dbWALRepair {
-		s.repairWALIfCorrupt()
-	}
+	s.repairWALIfCorrupt()
 
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		log.Debug().Str("component", "kine").Msg("starting kine server...")

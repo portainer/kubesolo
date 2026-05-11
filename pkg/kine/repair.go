@@ -12,14 +12,11 @@ import (
 )
 
 // repairWALIfCorrupt runs a quick integrity check against the kine SQLite
-// database. If the check fails (or the DB cannot be opened at all), the WAL
-// artefacts — state.db-wal and state.db-shm — are removed so that SQLite
-// falls back to the last cleanly checkpointed state on the next open.
-//
-// This recovers the common power-loss scenario where unsynced WAL frames
-// leave the database in an unreadable or internally inconsistent state,
-// causing the apiserver identity lease precondition check to fail and
-// KubeSolo to abort on every subsequent boot.
+// database. If the check fails (or the DB cannot be opened at all) and
+// --db-wal-repair is enabled, the WAL artefacts (state.db-wal, state.db-shm)
+// are removed so that SQLite falls back to the last cleanly checkpointed state.
+// Without the flag, a fatal log is emitted with instructions for manual recovery
+// so that operators are never silently left in a broken boot loop.
 func (s *service) repairWALIfCorrupt() {
 	dbPath := filepath.Join(s.databaseDir, "state.db")
 
@@ -29,8 +26,7 @@ func (s *service) repairWALIfCorrupt() {
 
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		log.Warn().Str("component", "kine").Msgf("cannot open SQLite DB for integrity check, removing WAL artefacts: %v", err)
-		removeWALArtefacts(dbPath)
+		s.handleCorruption(dbPath, "cannot open SQLite DB for integrity check: %v", err)
 		return
 	}
 	defer db.Close()
@@ -40,8 +36,7 @@ func (s *service) repairWALIfCorrupt() {
 
 	rows, err := db.QueryContext(ctx, "PRAGMA quick_check")
 	if err != nil {
-		log.Warn().Str("component", "kine").Msgf("SQLite quick_check query failed, removing WAL artefacts: %v", err)
-		removeWALArtefacts(dbPath)
+		s.handleCorruption(dbPath, "SQLite quick_check query failed: %v", err)
 		return
 	}
 	defer rows.Close()
@@ -54,8 +49,21 @@ func (s *service) repairWALIfCorrupt() {
 		}
 	}
 
-	log.Warn().Str("component", "kine").Msg("SQLite integrity check failed, removing WAL artefacts to recover from unclean shutdown")
-	removeWALArtefacts(dbPath)
+	s.handleCorruption(dbPath, "SQLite integrity check failed")
+}
+
+func (s *service) handleCorruption(dbPath string, format string, args ...any) {
+	if s.dbWALRepair {
+		log.Warn().Str("component", "kine").Msgf(format+", removing WAL artefacts to recover from unclean shutdown", args...)
+		removeWALArtefacts(dbPath)
+		return
+	}
+
+	log.Fatal().Str("component", "kine").Msgf(
+		format+". The SQLite WAL artefacts may be corrupt after an unclean shutdown. "+
+			"Remove %s-wal and %s-shm manually, or restart with --db-wal-repair to remove them automatically.",
+		append(args, dbPath, dbPath)...,
+	)
 }
 
 func removeWALArtefacts(dbPath string) {
