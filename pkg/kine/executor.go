@@ -25,6 +25,8 @@ func (s *service) Run() error {
 		return err
 	}
 
+	s.repairWALIfCorrupt()
+
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		log.Debug().Str("component", "kine").Msg("starting kine server...")
 		_, err := endpoint.Listen(s.ctx, s.generateKineConfig())
