@@ -1060,7 +1060,7 @@ install_binary() {
 # ── Script entry point ────────────────────────────────────────────────────────
 
 # Default configuration from environment variables
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.1.4}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.1.5}"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 APISERVER_EXTRA_SANS="${KUBESOLO_APISERVER_EXTRA_SANS:-}"
 PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
