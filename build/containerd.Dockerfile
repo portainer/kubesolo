@@ -1,5 +1,5 @@
 # Containerd cross-compilation for arm32 on native host
-FROM golang:1.26-bullseye
+FROM golang:1.24-bullseye
 
 # Install cross-compilation toolchain and dependencies
 RUN dpkg --add-architecture armhf && \
