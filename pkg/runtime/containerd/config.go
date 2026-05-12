@@ -83,7 +83,7 @@ func (s *service) generateContainerdConfig() map[string]any {
 					},
 				},
 				"cni": map[string]any{
-					"bin_dir":  s.containerdCNIPluginsDir,
+					"bin_dirs": []string{s.containerdCNIPluginsDir},
 					"conf_dir": types.DefaultStandardCNIConfDir,
 				},
 			},

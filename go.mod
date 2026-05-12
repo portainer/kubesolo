@@ -4,9 +4,10 @@ go 1.26.2
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
-	github.com/containerd/containerd/v2 v2.2.0
+	github.com/containerd/containerd/v2 v2.2.3
 	github.com/k3s-io/kine v0.14.16
 	github.com/klauspost/compress v1.18.5
+	github.com/mattn/go-sqlite3 v1.14.40
 	github.com/pelletier/go-toml v1.9.5
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/cobra v1.9.1
@@ -127,7 +128,6 @@ require (
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-sqlite3 v1.14.40 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/mdlayher/vsock v1.2.1 // indirect
 	github.com/miekg/pkcs11 v1.1.1 // indirect
