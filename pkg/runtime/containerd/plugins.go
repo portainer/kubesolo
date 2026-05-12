@@ -13,6 +13,7 @@ import (
 	_ "github.com/containerd/containerd/v2/plugins/imageverifier"
 	_ "github.com/containerd/containerd/v2/plugins/leases"
 	_ "github.com/containerd/containerd/v2/plugins/metadata"
+	_ "github.com/containerd/containerd/v2/plugins/mount"
 	_ "github.com/containerd/containerd/v2/plugins/sandbox"
 	_ "github.com/containerd/containerd/v2/plugins/services/containers"
 	_ "github.com/containerd/containerd/v2/plugins/services/content"
@@ -27,6 +28,7 @@ import (
 	_ "github.com/containerd/containerd/v2/plugins/services/snapshots"
 	_ "github.com/containerd/containerd/v2/plugins/services/tasks"
 	_ "github.com/containerd/containerd/v2/plugins/services/version"
+	_ "github.com/containerd/containerd/v2/plugins/services/warning"
 	_ "github.com/containerd/containerd/v2/plugins/snapshots/overlay/plugin"
 	_ "github.com/containerd/containerd/v2/plugins/transfer"
 )
