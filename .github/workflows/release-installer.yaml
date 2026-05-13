@@ -1,11 +1,11 @@
-name: release-installer
-run-name: "installer ${{ github.event.inputs.version }} release 🚀"
+name: release-kubesoloctl
+run-name: "kubesoloctl ${{ github.event.inputs.version }} release 🚀"
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version tag, e.g. v1.1.2"
+        description: "Release version tag, e.g. v1.1.5"
         required: true
 
 permissions:
@@ -26,11 +26,11 @@ jobs:
       with:
         go-version-file: go.mod
         cache-dependency-path: go.sum
-    - name: "[execution] run installer tests"
-      run: make test-installer
+    - name: "[execution] run kubesoloctl tests"
+      run: make test-kubesoloctl
 
   build:
-    name: build installer-linux-${{ matrix.goarch }}
+    name: build kubesoloctl-linux-${{ matrix.goarch }}
     runs-on: ubuntu-latest
     needs: [test]
     strategy:
@@ -39,9 +39,6 @@ jobs:
         include:
         - goarch: amd64
         - goarch: arm64
-        - goarch: arm
-          goarm: "7"
-        - goarch: riscv64
     steps:
     - name: "[preparation] checkout the current branch"
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -53,20 +50,20 @@ jobs:
       with:
         go-version-file: go.mod
         cache-dependency-path: go.sum
-    - name: "[execution] build installer for linux/${{ matrix.goarch }}"
+    - name: "[execution] build kubesoloctl for linux/${{ matrix.goarch }}"
       env:
         GOARM: ${{ matrix.goarm }}
       run: |
-        make build-installer \
+        make build-kubesoloctl \
           GOOS=linux \
           GOARCH=${{ matrix.goarch }} \
           VERSION="${{ github.event.inputs.version }}" \
-          INSTALLER_OUTPUT=./dist/installer-linux-${{ matrix.goarch }}
-    - name: "[post] upload installer to github release"
+          KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-${{ matrix.goarch }}
+    - name: "[post] upload kubesoloctl to github release"
       run: |
         gh release upload --clobber \
           --repo portainer/kubesolo \
           "${{ github.event.inputs.version }}" \
-          "./dist/installer-linux-${{ matrix.goarch }}"
+          "./dist/kubesoloctl-linux-${{ matrix.goarch }}"
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
