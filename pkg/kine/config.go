@@ -22,6 +22,8 @@ func (s *service) generateKineConfig() endpoint.Config {
 			MaxLifetime: 60 * time.Second,
 		},
 		NotifyInterval:   15 * time.Second,
+		CompactInterval:  5 * time.Minute,
+		CompactTimeout:   60 * time.Second,
 		CompactBatchSize: 1000,
 	}
 }

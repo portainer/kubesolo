@@ -33,7 +33,7 @@ const (
 	DefaultLocalPathStorageDir       = "local-path-storage"
 	DefaultWebhookReadWriteTimeout   = 10 * time.Second
 	DefaultWebhookIdleTimeout        = 30 * time.Second
-	DefaultContextTimeout            = 15 * time.Second
+	DefaultContextTimeout            = 60 * time.Second
 	DefaultComponentSleep            = 5 * time.Second
 	DefaultStartupTimeout            = 600 // seconds
 	DefaultNftMasqTable              = "kubesolo-masq"
