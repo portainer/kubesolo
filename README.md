@@ -1,69 +1,58 @@
-# kubesolo 
+# KubeSolo
 
-Ultra-lightweight, OCI-compliant, single-node Kubernetes built for constrained environments. No clustering. No etcd. Just what you need to run real workloads on real hardware.
+Anywhere you'd run Docker or Podman, you can now run Kubernetes. Ultra-lightweight, OCI-compliant, single-node Kubernetes, under 200 MB RAM. No etcd. No clustering overhead.
 
 ## Overview
 
-KubeSolo is designed for devices at the farthest layer of the network, such as IoT, IIoT, and embedded systems. The image illustrates the three main layers of modern distributed infrastructure:
-1. Cloud (Data Centers)
-Scale: Thousands of nodes
-Examples: Amazon EKS, Google Kubernetes Engine, VMware Tanzu, Sidero
-Purpose: Centralized, large-scale compute and storage
-2. FOG (Distributed Nodes)
-Scale: Millions of nodes
-Examples: K3s, MicroK8s, Sidero, K0S
-Purpose: Distributed compute closer to the edge, often for latency-sensitive or regional workloads
-3. Edge (Devices)
-Scale: Billions of devices
-Example: KubeSolo
-Purpose: Ultra-lightweight Kubernetes for resource-constrained environments (IoT gateways, industrial controllers, smart devices, etc.)
-KubeSolo sits at the very bottom of this stack, providing a simple, single-node Kubernetes experience for the edge, where minimal resources and offline operation are critical.
+Standard Kubernetes is built for multi-node clusters, and a lot of the real world runs on single nodes. Edge devices. Factory gateways. Developer laptops. Remote site hardware. IoT controllers. The millions of machines that have been running Docker or Podman because standing up a full cluster was overhead that couldn't be justified for a single workload host.
+
+That creates a gap. You either run Docker and give up the Kubernetes ecosystem entirely, or you run K3s or MicroK8s and accept that you're carrying clustering machinery you'll never use. KubeSolo closes the gap by taking a different starting position: remove the clustering code rather than disable it.
+
+The result is full Kubernetes, complete API, full control loop, full ecosystem compatibility, with a RAM footprint under 200 MB, optimized for flash storage, and an install that takes under 60 seconds on hardware from a Raspberry Pi to an industrial gateway.
 
 ![KubeSolo Overview](assets/kubesolo-overview.png)
 
 ## What is this?
 
-KubeSolo is a production-ready single-node Kubernetes distribution with the following changes:
+KubeSolo takes Kubernetes and removes everything that only makes sense when there's more than one node: etcd quorum logic, leader election, multi-node networking overlays, control plane distribution. None of it is present, not disabled, removed.
 
-* It is packaged as a single binary
-* It uses SQLite (via Kine) as the default storage backend
-* It wraps Kubernetes and other components in a single, simple launcher
-* It is secure by default with reasonable defaults for lightweight environments
-* It has minimal OS dependencies (just a sane kernel and cgroup mounts needed)
-* It eliminates the need for complex multi-node setup by providing a single-node solution
+What remains is a full Kubernetes control loop running in a single process. The API server, controller manager, and kubelet all run together. Your existing manifests, Helm charts, and CRDs work without modification.
+
+The design target is anywhere you would have previously reached for Docker or Podman: edge devices, factory hardware, developer laptops, remote sites, IoT gateways, kiosk machines. Same OCI images, better runtime, full ecosystem.
 
 KubeSolo bundles the following technologies together into a single cohesive distribution:
 
-* containerd & runc for container runtime
+* containerd & crun for container runtime
 * CoreDNS for DNS resolution
-* Kine for SQLite-based storage
+* Kine for SQLite-based storage (replacing etcd)
 
-## What's with the name?
+It is packaged as a single binary with minimal OS dependencies (a sane kernel and cgroup mounts), secure defaults tuned for lightweight environments, and all required components bundled for offline operation.
 
-KubeSolo is designed to be a single-node Kubernetes distribution, hence the "Solo" in the name. It's meant to be simple, lightweight, and perfect for development, testing, or small production workloads that don't require the complexity of a multi-node cluster.
-
-## Is this a fork?
-
-No, it's a distribution. A fork implies continued divergence from the original. This is not KubeSolo's goal or practice. KubeSolo explicitly intends not to change any core Kubernetes functionality. We seek to remain as close to upstream Kubernetes as possible by leveraging the k3s forked Kubernetes. However, we maintain a small set of patches important to KubeSolo's use case and deployment model.
 
 ## How is this lightweight or smaller than upstream Kubernetes?
 
-There are three major ways that KubeSolo is lighter weight than upstream Kubernetes:
+KubeSolo's footprint sits under 200 MB RAM because clustering machinery is absent, not dormant. Most lightweight Kubernetes distributions slim down a full distribution; the multi-node code is still there, just inactive. KubeSolo starts from the other end: everything that requires more than one node has been removed.
 
-* The memory footprint to run is smaller
-* The binary, which contains all the non-containerized components needed to run a cluster, is smaller
-* The Kubernetes Scheduler does not exist, instead, it is replaced by a custom Webhook called `NodeSetter`
+Three specific design decisions contribute to the smaller footprint:
 
-The memory footprint is reduced primarily by:
+* No etcd; SQLite (via Kine) replaces it as the state store
+* No Kubernetes Scheduler; replaced by a lightweight custom webhook called `NodeSetter` that handles single-node scheduling without the full scheduling machinery
+* All components run inside a single process rather than as separate binaries
 
-* Running many components inside of a single process
-* Using SQLite instead of `etcd`
-* Optimizing resource limits for single-node usage
-* Replacing the Kubernetes Scheduler with `NodeSetter` 
+The practical result is a full Kubernetes control loop that runs comfortably on devices with 512 MB of RAM, on flash storage, and in air-gapped environments.
 
 ## Why is the binary size big compared to other distributions?
 
-KubeSolo is designed specifically for IoT or IIoT devices, such as embedded systems, which typically lack internet connectivity. To address this limitation, KubeSolo is equipped with all the necessary components to ensure it is offline ready.
+KubeSolo ships in two variants to suit different deployment environments:
+
+| Variant | Binary size | Internet required | Use when |
+|---------|-------------|-------------------|----------|
+| **Online** (default) | Smaller | Yes | Devices with reliable internet access where binary size matters more than offline capability |
+| **Offline** | Larger | No | Air-gapped environments, factory floors, edge devices with intermittent or no connectivity |
+
+The offline variant bundles all required container images, CNI plugins, and runtime dependencies directly in the binary. Nothing needs to be fetched from the internet at install or runtime. The online variant pulls container images from public registries at startup, keeping the binary smaller at the cost of requiring internet access.
+
+The default installer downloads the online variant. If your devices are air-gapped or have unreliable internet access, use the offline variant.
 
 ## Getting Started
 
@@ -72,18 +61,54 @@ KubeSolo is designed specifically for IoT or IIoT devices, such as embedded syst
 > [!WARNING]
 > Ensure that no container engine (e.g., Docker, Podman, containerd) is installed or active on the target system prior to proceeding. This includes any background services or residual installations that could interfere with KubeSolo networking.
 
+**Supported platforms:** ARM · ARM64 · x86\_64 · RISC-V 64
+
+**Step 1, Install:** Run the install script with sudo. KubeSolo starts as a systemd service.
+
+The installer detects your architecture and libc automatically. Choose the variant that matches your environment:
+
+**Online** (default, smaller binary, pulls container images from registries at startup):
+
 ```bash
-# Download and install KubeSolo
 curl -sfL https://get.kubesolo.io | sudo sh -
 ```
 
-The installer automatically detects your system and downloads the appropriate binary:
+**Offline** (larger binary with all images bundled, no internet required at runtime):
+
+```bash
+curl -sfL https://get.kubesolo.io | KUBESOLO_OFFLINE=true sudo -E sh -
+```
+
+**Air-gapped** (no internet on the target machine at all):
+
+```bash
+# On a connected machine, download the bundle
+curl -sfL https://get.kubesolo.io | KUBESOLO_OFFLINE=true sh - --download-only=/tmp/kubesolo-bundle
+
+# Transfer the files to the target machine, then install
+sudo sh install.sh --offline-install=<archive.tar.gz>
+```
+
+The installer also detects your libc variant:
 - **glibc systems** (Ubuntu, CentOS, Debian, etc.): Downloads standard binary
 - **musl systems** (Alpine Linux): Downloads musl-compatible binary
 
-A kubeconfig file is written to `/var/lib/kubesolo/pki/admin/admin.kubeconfig` and the service is automatically started.
+**Step 2, Set up kubectl:** Copy the admin kubeconfig from `/var/lib/kubesolo/pki/admin/admin.kubeconfig` to the machine where kubectl is installed, then set the context:
 
-**Note:** If you're running KubeSolo on a device with less than 512MB of RAM, it's strongly advised to interact with KubeSolo using the `kubectl` command-line tool installed externally.
+```bash
+kubectl config use-context kubernetes-admin@kubesolo
+kubectl get nodes
+# You should see a single node in Ready state
+```
+
+**Step 3, Deploy your first workload:**
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/portainer/kubesolo/develop/examples/mosquitto.yaml
+kubectl get all -n mosquitto
+```
+
+**Note:** If you're running KubeSolo on a device with less than 512 MB of RAM, interact with the cluster using an externally installed `kubectl`.
 
 ### Advanced Installation
 
@@ -114,7 +139,9 @@ KubeSolo supports the following command-line flags:
 | `--local-storage-shared-path` | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | Path to the shared file system for the local storage | `""` |
 | `--debug` | `KUBESOLO_DEBUG` | Enable debug logging | `false` |
 | `--pprof-server` | `KUBESOLO_PPROF_SERVER` | Enable pprof server for profiling | `false` |
-| `--proxy` | `KUBESOLO_PROXY` | Corporate proxy for HTTP/HTTPS requests (installer only) | `""` |
+| `--full` | `KUBESOLO_FULL` | Disable memory-saving overrides and use upstream Kubernetes defaults (recommended for CI and development) | `false` |
+| `--db-wal-repair` | `KUBESOLO_DB_WAL_REPAIR` | Run SQLite integrity checks on startup and repair WAL/SHM artifacts if corruption is detected | `false` |
+| `--disable-ipv6` | `KUBESOLO_DISABLE_IPV6` | Disable IPv6 support for CoreDNS reverse zones and kubelet node address registration | `false` |
 
 Example:
 
@@ -241,16 +268,14 @@ make dev
 
 ### Getting involved
 
-GitHub Issues - Submit your issues and feature requests via GitHub.
+[GitHub Issues](https://github.com/portainer/kubesolo/issues), submit issues and feature requests.
 
-## Release cadence
-
-KubeSolo maintains pace with upstream Kubernetes releases but rely on the forked version from `k3s`. Our goal is to release patch releases within one week, and new minors within 30 days.
+[GitHub](https://github.com/portainer/kubesolo), browse source, open pull requests, and contribute.
 
 ## Security
 
 Security issues in KubeSolo can be reported by sending an email to security@portainer.io.
 
-## TradeMark
+## Trademark
 
-KubeSolo and the KubeSolo logo are registered trademarks of Portaner.io Limited
+KubeSolo and the KubeSolo logo are trademarks of [Portainer.io Limited](https://portainer.io). Released under the [MIT license](https://opensource.org/licenses/MIT).
