@@ -27,14 +27,14 @@ const (
 	DefaultKineSocket                = "kine.sock"
 	DefaultControllerManagerDir      = "controller-manager"
 	DefaultSandboxImage              = "docker.io/portainer/pause:latest"
-	DefaultPortainerAgentImage       = "docker.io/portainer/agent:2.39.1"
-	DefaultCoreDNSImage              = "docker.io/coredns/coredns:1.14.1"
-	DefaultLocalPathProvisionerImage = "docker.io/rancher/local-path-provisioner:v0.0.34"
+	DefaultPortainerAgentImage       = "docker.io/portainer/agent:2.39.2"
+	DefaultCoreDNSImage              = "docker.io/coredns/coredns:1.14.3"
+	DefaultLocalPathProvisionerImage = "docker.io/rancher/local-path-provisioner:v0.0.36"
 	DefaultLocalPathStorageDir       = "local-path-storage"
 	DefaultWebhookReadWriteTimeout   = 10 * time.Second
 	DefaultWebhookIdleTimeout        = 30 * time.Second
 	DefaultContextTimeout            = 15 * time.Second
 	DefaultComponentSleep            = 5 * time.Second
-	DefaultRetryCount                = 5
+	DefaultStartupTimeout            = 600 // seconds
 	DefaultNftMasqTable              = "kubesolo-masq"
 )

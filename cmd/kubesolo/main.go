@@ -96,6 +96,10 @@ func main() {
 		os.Exit(0)
 	}
 
+	if *flags.StartupTimeout > 0 {
+		types.DefaultRetryCount = *flags.StartupTimeout / int(types.DefaultComponentSleep.Seconds())
+	}
+
 	service, err := service()
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create service. check the logs for more information. exiting...")
