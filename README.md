@@ -47,12 +47,12 @@ KubeSolo ships in two variants to suit different deployment environments:
 
 | Variant | Binary size | Internet required | Use when |
 |---------|-------------|-------------------|----------|
-| **Offline** (default) | Larger | No | Air-gapped environments, factory floors, edge devices with intermittent or no connectivity |
-| **Online** | Smaller | Yes | Devices with reliable internet access where binary size matters more than offline capability |
+| **Online** (default) | Smaller | Yes | Devices with reliable internet access where binary size matters more than offline capability |
+| **Offline** | Larger | No | Air-gapped environments, factory floors, edge devices with intermittent or no connectivity |
 
 The offline variant bundles all required container images, CNI plugins, and runtime dependencies directly in the binary. Nothing needs to be fetched from the internet at install or runtime. The online variant pulls container images from public registries at startup, keeping the binary smaller at the cost of requiring internet access.
 
-The default installer downloads the offline variant. If your devices have reliable internet access and binary size is a concern, the online variant is available as an alternative.
+The default installer downloads the online variant. If your devices are air-gapped or have unreliable internet access, use the offline variant.
 
 ## Getting Started
 
