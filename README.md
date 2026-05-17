@@ -142,6 +142,7 @@ KubeSolo supports the following command-line flags:
 | `--full` | `KUBESOLO_FULL` | Disable memory-saving overrides and use upstream Kubernetes defaults (recommended for CI and development) | `false` |
 | `--db-wal-repair` | `KUBESOLO_DB_WAL_REPAIR` | Run SQLite integrity checks on startup and repair WAL/SHM artifacts if corruption is detected | `false` |
 | `--disable-ipv6` | `KUBESOLO_DISABLE_IPV6` | Disable IPv6 support for CoreDNS reverse zones and kubelet node address registration | `false` |
+| `--startup-timeout` | `KUBESOLO_STARTUP_TIMEOUT` | Maximum time in seconds to wait for each component to pass its health check during startup. Increase on slow storage such as SD cards | `600` |
 
 Example:
 
