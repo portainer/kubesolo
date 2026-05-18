@@ -41,4 +41,7 @@ const (
 	DefaultStartupTimeout            = 600 // seconds
 	DefaultNftMasqTable              = "kubesolo-masq"
 	DefaultMTU                       = 1500 // fallback when MTU detection fails
+	DefaultMetricsBindAddress        = "127.0.0.1:9105"
+	DefaultMetricsProbeInterval      = 15 * time.Second
+	DefaultKineDBFile                = "state.db"
 )

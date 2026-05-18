@@ -24,6 +24,7 @@ import (
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/d2k"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
+	"github.com/portainer/kubesolo/pkg/components/metrics"
 	"github.com/portainer/kubesolo/pkg/components/portainer"
 	"github.com/portainer/kubesolo/pkg/kine"
 	"github.com/portainer/kubesolo/pkg/kubernetes/apiserver"
@@ -60,6 +61,8 @@ type kubesolo struct {
 	d2k                    bool
 	d2kNamespace           string
 	runtimeEndpoint        cri.Endpoint
+	metricsServer          bool
+	metricsBindAddress     string
 	embedded               types.Embedded
 }
 
@@ -71,6 +74,7 @@ var (
 	kubeletReadyCh    = make(chan struct{})
 	controllerReadyCh = make(chan struct{})
 	kubeproxyReadyCh  = make(chan struct{})
+	metricsReadyCh    = make(chan struct{})
 )
 
 // service creates a new kubesolo application
@@ -111,6 +115,8 @@ func service() (*kubesolo, error) {
 		d2k:                    d2kEnabled,
 		d2kNamespace:           *flags.D2KNamespace,
 		runtimeEndpoint:        runtimeEndpoint,
+		metricsServer:          *flags.MetricsServer,
+		metricsBindAddress:     *flags.MetricsBindAddress,
 	}, nil
 }
 
@@ -274,6 +280,13 @@ func (s *kubesolo) run() {
 		if !waitForService(ctx, svc.name, svc.readyCh) {
 			return
 		}
+
+		// Start the optional metrics endpoint as soon as kine is ready, so the
+		// kine_db_size_bytes collector has a real path to stat. The metrics
+		// service does not block any other component on its own readiness.
+		if svc.name == "kine" && s.embedded.Metrics.Enabled {
+			s.startMetricsService(ctx, cancel)
+		}
 	}
 
 	// Ensure pod→external masquerade (SNAT) is in place before kubelet starts.
@@ -391,6 +404,41 @@ func cleanStaleState(basePath string, runtimeExternal bool) {
 			log.Info().Str("component", "kubesolo").Msgf("cleaned stale containerd artifact: %s", target)
 		}
 	}
+}
+
+// startMetricsService starts the optional kubesolo metrics endpoint and
+// passes in every component readiness channel so per-component up gauges
+// can flip in real time as services come online. It does not block on its
+// own readiness — the metrics endpoint failing must not stop kubesolo.
+func (s *kubesolo) startMetricsService(ctx context.Context, cancel context.CancelFunc) {
+	log.Info().
+		Str("component", "kubesolo").
+		Str("bind-address", s.embedded.Metrics.BindAddress).
+		Msg("starting metrics endpoint...")
+
+	metricsService := metrics.NewService(
+		ctx,
+		cancel,
+		metricsReadyCh,
+		s.embedded,
+		metrics.BuildInfo{Version: Version, Commit: Commit, BuildDate: BuildDate},
+		map[string]<-chan struct{}{
+			metrics.ComponentRuntime:    runtimeReadyCh,
+			metrics.ComponentKine:       kineReadyCh,
+			metrics.ComponentAPIServer:  apiServerReadyCh,
+			metrics.ComponentController: controllerReadyCh,
+			metrics.ComponentKubelet:    kubeletReadyCh,
+			metrics.ComponentKubeProxy:  kubeproxyReadyCh,
+		},
+	)
+	s.wg.Go(func() {
+		if err := metricsService.Run(); err != nil {
+			log.Error().
+				Str("component", "kubesolo").
+				Err(err).
+				Msg("metrics endpoint exited with error")
+		}
+	})
 }
 
 // waitForService waits for a service to be ready
@@ -635,5 +683,11 @@ func (s *kubesolo) bootstrap() {
 			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
 		},
 		D2KImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
+
+		// Metrics endpoint
+		Metrics: types.MetricsConfig{
+			Enabled:     s.metricsServer,
+			BindAddress: s.metricsBindAddress,
+		},
 	}
 }
