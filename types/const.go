@@ -31,6 +31,9 @@ const (
 	DefaultCoreDNSImage              = "docker.io/coredns/coredns:1.14.3"
 	DefaultLocalPathProvisionerImage = "docker.io/rancher/local-path-provisioner:v0.0.36"
 	DefaultLocalPathStorageDir       = "local-path-storage"
+	DefaultD2KImage                  = "docker.io/portainer/d2k:1.2.2"
+	DefaultD2KPort                   = int32(2376)
+	DefaultD2KDir                    = "d2k"
 	DefaultWebhookReadWriteTimeout   = 10 * time.Second
 	DefaultWebhookIdleTimeout        = 30 * time.Second
 	DefaultContextTimeout            = 60 * time.Second

@@ -143,6 +143,8 @@ KubeSolo supports the following command-line flags:
 | `--db-wal-repair` | `KUBESOLO_DB_WAL_REPAIR` | Run SQLite integrity checks on startup and repair WAL/SHM artifacts if corruption is detected | `false` |
 | `--disable-ipv6` | `KUBESOLO_DISABLE_IPV6` | Disable IPv6 support for CoreDNS reverse zones and kubelet node address registration | `false` |
 | `--startup-timeout` | `KUBESOLO_STARTUP_TIMEOUT` | Maximum time in seconds to wait for each component to pass its health check during startup. Increase on slow storage such as SD cards | `600` |
+| `--d2k` | `KUBESOLO_D2K` | Embed [d2k](https://github.com/portainer/d2k) and expose a Docker-compatible API endpoint over mTLS on port 2376. See [docs/configuration/d2k.md](docs/configuration/d2k.md) | `false` |
+| `--d2k-namespace` | `KUBESOLO_D2K_NAMESPACE` | Namespace into which d2k is deployed and against which it translates Docker API calls. Only honoured when `--d2k` is set | `default` |
 
 Example:
 

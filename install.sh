@@ -1067,6 +1067,8 @@ PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
 PORTAINER_EDGE_KEY="${KUBESOLO_PORTAINER_EDGE_KEY:-}"
 PORTAINER_EDGE_ASYNC="${KUBESOLO_PORTAINER_EDGE_ASYNC:-false}"
 LOCAL_STORAGE="${KUBESOLO_LOCAL_STORAGE:-false}"
+D2K="${KUBESOLO_D2K:-false}"
+D2K_NAMESPACE="${KUBESOLO_D2K_NAMESPACE:-default}"
 DEBUG="${KUBESOLO_DEBUG:-false}"
 PPROF_SERVER="${KUBESOLO_PPROF_SERVER:-false}"
 RUN_MODE="${KUBESOLO_RUN_MODE:-service}"  # service, foreground, or daemon
@@ -1099,6 +1101,12 @@ for arg in "$@"; do
       ;;
     --local-storage=*)
       LOCAL_STORAGE="${arg#*=}"
+      ;;
+    --d2k=*)
+      D2K="${arg#*=}"
+      ;;
+    --d2k-namespace=*)
+      D2K_NAMESPACE="${arg#*=}"
       ;;
     --debug=*)
       DEBUG="${arg#*=}"
@@ -1137,6 +1145,8 @@ for arg in "$@"; do
       echo "  --portainer-edge-key=KEY     Set Portainer Edge Key"
       echo "  --portainer-edge-async=true|false   Enable Portainer Edge Async (default: $PORTAINER_EDGE_ASYNC)"
       echo "  --local-storage=true|false   Enable local storage (default: $LOCAL_STORAGE)"
+      echo "  --d2k=true|false             Embed d2k Docker-to-Kubernetes API translator (default: $D2K)"
+      echo "  --d2k-namespace=NAMESPACE    Namespace into which d2k is deployed (default: $D2K_NAMESPACE)"
       echo "  --debug=true|false           Enable debug logging (default: $DEBUG)"
       echo "  --pprof-server=true|false    Enable pprof server (default: $PPROF_SERVER)"
       echo "  --run-mode=MODE              Run mode: service, foreground, or daemon (default: $RUN_MODE)"
@@ -1271,6 +1281,10 @@ fi
 
 if [ "$LOCAL_STORAGE" = "true" ]; then
   CMD_ARGS="$CMD_ARGS --local-storage=true"
+fi
+
+if [ "$D2K" = "true" ]; then
+  CMD_ARGS="$CMD_ARGS --d2k=true --d2k-namespace=$D2K_NAMESPACE"
 fi
 
 if [ "$DEBUG" = "true" ]; then

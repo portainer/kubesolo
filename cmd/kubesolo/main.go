@@ -17,6 +17,7 @@ import (
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
+	"github.com/portainer/kubesolo/pkg/components/d2k"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
 	"github.com/portainer/kubesolo/pkg/components/portainer"
 	"github.com/portainer/kubesolo/pkg/kine"
@@ -51,6 +52,8 @@ type kubesolo struct {
 	fullMode               bool
 	disableIPv6            bool
 	dbWALRepair            bool
+	d2k                    bool
+	d2kNamespace           string
 	embedded               types.Embedded
 }
 
@@ -80,6 +83,8 @@ func service() (*kubesolo, error) {
 		fullMode:               *flags.Full,
 		disableIPv6:            *flags.DisableIPv6,
 		dbWALRepair:            *flags.DBWALRepair,
+		d2k:                    *flags.D2K,
+		d2kNamespace:           *flags.D2KNamespace,
 	}, nil
 }
 
@@ -267,6 +272,26 @@ func (s *kubesolo) run() {
 		}); err != nil {
 			log.Fatal().Err(err).Msg("failed to deploy portainer edge agent...")
 		}
+	}
+
+	if s.d2k {
+		log.Info().Str("component", "kubesolo").Str("namespace", s.d2kNamespace).Msg("deploying d2k...")
+		if err := d2k.Deploy(s.embedded.AdminKubeconfigFile, d2k.Config{
+			Namespace: s.d2kNamespace,
+			Image:     types.DefaultD2KImage,
+			Certs:     s.embedded.D2KCerts,
+		}); err != nil {
+			log.Fatal().Err(err).Msg("failed to deploy d2k")
+		}
+
+		// WaitAndPersistEndpoint blocks until the LoadBalancer ingress IP is
+		// populated and writes connection.env / connection.txt to disk so
+		// operators don't need to scrape the startup log later.
+		s.wg.Go(func() {
+			if err := d2k.WaitAndPersistEndpoint(ctx, s.embedded.AdminKubeconfigFile, s.d2kNamespace, s.embedded.D2KCerts, s.embedded.D2KConnectionDir); err != nil {
+				log.Warn().Err(err).Msg("d2k deployed but endpoint did not become available in time")
+			}
+		})
 	}
 
 	<-sigCh
@@ -508,5 +533,19 @@ func (s *kubesolo) bootstrap() {
 
 		// IPv6
 		DisableIPv6: s.disableIPv6,
+
+		// d2k integration
+		D2K:          s.d2k,
+		D2KNamespace: s.d2kNamespace,
+		PKID2KDir:    filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir),
+		D2KCerts: types.D2KCertificatePaths{
+			CACert:     filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
+			ServerCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.crt"),
+			ServerKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.key"),
+			ClientCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.crt"),
+			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
+		},
+		D2KConnectionDir: filepath.Join(basePath, types.DefaultD2KDir),
+		D2KImageFile:     filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
 	}
 }

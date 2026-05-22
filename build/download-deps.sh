@@ -12,6 +12,7 @@ PORTAINER_AGENT_VERSION="2.39.2"
 COREDNS_VERSION="1.14.3"
 LOCAL_PATH_PROVISIONER_VERSION="v0.0.36"
 PAUSE_IMAGE_VERSION="3.10"
+D2K_VERSION="1.2.2"
 
 # Offline mode embeds all OCI images; online mode (default) skips optional images
 OFFLINE=false
@@ -211,6 +212,23 @@ if [ "${OFFLINE}" = "true" ]; then
         exit 1
     fi
     echo "Local Path Provisioner image saved successfully."
+
+    # Download d2k (only published for amd64 and arm64)
+    if [ "${ARCH}" = "amd64" ] || [ "${ARCH}" = "arm64" ]; then
+        echo "Downloading d2k ${D2K_VERSION}..."
+        D2K_IMAGE="portainer/d2k:${D2K_VERSION}"
+        if ! crane pull --platform ${OS}/${ARCH} ${D2K_IMAGE} internal/core/embedded/bin/images/d2k.tar; then
+            echo "Error pulling d2k image."
+            exit 1
+        fi
+        if ! gzip -f internal/core/embedded/bin/images/d2k.tar; then
+            echo "Error compressing d2k image."
+            exit 1
+        fi
+        echo "d2k image saved and compressed successfully."
+    else
+        echo "Skipping d2k download for ${ARCH} (not supported)"
+    fi
 else
     echo "Skipping optional image downloads (online build). Images will be pulled at runtime."
 fi

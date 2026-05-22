@@ -130,6 +130,38 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --local-storage=true
 
 ---
 
+### --d2k
+
+Embed [d2k](https://github.com/portainer/d2k), the Portainer Docker-to-Kubernetes API translator, into the KubeSolo node. With `--d2k` set, KubeSolo deploys d2k into the namespace given by [`--d2k-namespace`](#--d2k-namespace), generates mTLS material under `/var/lib/kubesolo/pki/d2k/`, and exposes a Docker-compatible API endpoint on port `2376` via a LoadBalancer Service so existing Docker tooling can target the node without a separate translator deployment.
+
+Connection details (Docker host URL, plus paths to the CA cert, client cert, and client key) are written to `/var/lib/kubesolo/d2k/connection.env` and `connection.txt` after startup. See [docs/configuration/d2k.md](../configuration/d2k.md) for the full integration guide.
+
+| Flag | Env var | Default |
+|---|---|---|
+| `--d2k=true\|false` | `KUBESOLO_D2K` | `false` |
+
+```bash
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true
+```
+
+> **Note:** The d2k container image is published only for `linux/amd64` and `linux/arm64`. `--d2k` is a no-op on `arm` and `riscv64` builds.
+
+---
+
+### --d2k-namespace
+
+Set the single Kubernetes namespace into which d2k is deployed and against which it translates Docker API calls. Only honoured when [`--d2k`](#--d2k) is set.
+
+| Flag | Env var | Default |
+|---|---|---|
+| `--d2k-namespace=NAMESPACE` | `KUBESOLO_D2K_NAMESPACE` | `default` |
+
+```bash
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true --d2k-namespace=workloads
+```
+
+---
+
 ### --debug
 
 Enable verbose debug logging in the KubeSolo process.

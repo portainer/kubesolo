@@ -46,6 +46,20 @@ type RequestHeaderCertificatePaths struct {
 	ClientKey  string
 }
 
+// D2KCertificatePaths defines paths for the d2k TLS material.
+// CACert is the kubesolo CA certificate that signs both server and client certs;
+// it is the existing /var/lib/kubesolo/pki/ca/ca.crt and is referenced by docker
+// CLI clients via --tlscacert. ServerCert/ServerKey are mounted into the d2k pod
+// as /etc/d2k/tls/tls.crt and tls.key. ClientCert/ClientKey are used by docker
+// CLI clients via --tlscert and --tlskey.
+type D2KCertificatePaths struct {
+	CACert     string
+	ServerCert string
+	ServerKey  string
+	ClientCert string
+	ClientKey  string
+}
+
 type Embedded struct {
 	// System Node IP
 	NodeIP string
@@ -120,6 +134,7 @@ type Embedded struct {
 	CorednsImageFile              string
 	SandboxImageFile              string
 	LocalPathProvisionerImageFile string
+	D2KImageFile                  string
 
 	// Load Balancer
 	LoadBalancer bool
@@ -135,6 +150,13 @@ type Embedded struct {
 
 	// IPv6
 	DisableIPv6 bool
+
+	// d2k integration
+	D2K              bool
+	D2KNamespace     string
+	PKID2KDir        string
+	D2KCerts         D2KCertificatePaths
+	D2KConnectionDir string
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent
