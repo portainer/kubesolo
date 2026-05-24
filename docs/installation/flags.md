@@ -154,7 +154,7 @@ Set the single Kubernetes namespace into which d2k is deployed and against which
 
 | Flag | Env var | Default |
 |---|---|---|
-| `--d2k-namespace=NAMESPACE` | `KUBESOLO_D2K_NAMESPACE` | `default` |
+| `--d2k-namespace=NAMESPACE` | `KUBESOLO_D2K_NAMESPACE` | `d2k` |
 
 ```bash
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true --d2k-namespace=workloads

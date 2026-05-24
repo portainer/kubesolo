@@ -154,7 +154,6 @@ type Embedded struct {
 	// d2k integration
 	D2K              bool
 	D2KNamespace     string
-	PKID2KDir        string
 	D2KCerts         D2KCertificatePaths
 	D2KConnectionDir string
 }

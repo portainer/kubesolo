@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -275,23 +276,27 @@ func (s *kubesolo) run() {
 	}
 
 	if s.d2k {
-		log.Info().Str("component", "kubesolo").Str("namespace", s.d2kNamespace).Msg("deploying d2k...")
-		if err := d2k.Deploy(s.embedded.AdminKubeconfigFile, d2k.Config{
-			Namespace: s.d2kNamespace,
-			Image:     types.DefaultD2KImage,
-			Certs:     s.embedded.D2KCerts,
-		}); err != nil {
-			log.Fatal().Err(err).Msg("failed to deploy d2k")
-		}
-
-		// WaitAndPersistEndpoint blocks until the LoadBalancer ingress IP is
-		// populated and writes connection.env / connection.txt to disk so
-		// operators don't need to scrape the startup log later.
-		s.wg.Go(func() {
-			if err := d2k.WaitAndPersistEndpoint(ctx, s.embedded.AdminKubeconfigFile, s.d2kNamespace, s.embedded.D2KCerts, s.embedded.D2KConnectionDir); err != nil {
-				log.Warn().Err(err).Msg("d2k deployed but endpoint did not become available in time")
+		if runtime.GOARCH == "arm" || runtime.GOARCH == "riscv64" {
+			log.Warn().Str("component", "kubesolo").Str("arch", runtime.GOARCH).Msg("d2k is not supported on this architecture, skipping")
+		} else {
+			log.Info().Str("component", "kubesolo").Str("namespace", s.d2kNamespace).Msg("deploying d2k...")
+			if err := d2k.Deploy(s.embedded.AdminKubeconfigFile, d2k.Config{
+				Namespace: s.d2kNamespace,
+				Image:     types.DefaultD2KImage,
+				Certs:     s.embedded.D2KCerts,
+			}); err != nil {
+				log.Fatal().Err(err).Msg("failed to deploy d2k")
 			}
-		})
+
+			// WaitAndPersistEndpoint blocks until the LoadBalancer ingress IP is
+			// populated and writes connection.env / connection.txt to disk so
+			// operators don't need to scrape the startup log later.
+			s.wg.Go(func() {
+				if err := d2k.WaitAndPersistEndpoint(ctx, s.embedded.AdminKubeconfigFile, s.d2kNamespace, s.embedded.D2KCerts, s.embedded.D2KConnectionDir); err != nil {
+					log.Warn().Err(err).Msg("d2k deployed but endpoint did not become available in time")
+				}
+			})
+		}
 	}
 
 	<-sigCh
@@ -537,7 +542,6 @@ func (s *kubesolo) bootstrap() {
 		// d2k integration
 		D2K:          s.d2k,
 		D2KNamespace: s.d2kNamespace,
-		PKID2KDir:    filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir),
 		D2KCerts: types.D2KCertificatePaths{
 			CACert:     filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
 			ServerCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.crt"),

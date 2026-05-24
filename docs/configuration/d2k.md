@@ -13,7 +13,7 @@ Two flags drive the integration:
 | Flag | Env var | Default |
 |---|---|---|
 | `--d2k` | `KUBESOLO_D2K` | `false` |
-| `--d2k-namespace` | `KUBESOLO_D2K_NAMESPACE` | `default` |
+| `--d2k-namespace` | `KUBESOLO_D2K_NAMESPACE` | `d2k` |
 
 When `--d2k` is set, KubeSolo:
 
