@@ -25,7 +25,7 @@ When `--d2k` is set, KubeSolo:
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true --d2k-namespace=workloads
 ```
 
-> **Architecture support:** the `portainer/d2k` container image is currently published only for `linux/amd64` and `linux/arm64`. `--d2k` is a no-op on `arm` and `riscv64` builds.
+> **Architecture support:** the `portainer/d2k` container image is currently published only for `linux/amd64` and `linux/arm64`. On `arm` and `riscv64` builds, passing `--d2k` logs a warning and skips the deployment — no resources are created and no error is returned.
 
 ---
 

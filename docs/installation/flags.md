@@ -144,7 +144,7 @@ Connection details (Docker host URL, plus paths to the CA cert, client cert, and
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true
 ```
 
-> **Note:** The d2k container image is published only for `linux/amd64` and `linux/arm64`. `--d2k` is a no-op on `arm` and `riscv64` builds.
+> **Note:** The d2k container image is published only for `linux/amd64` and `linux/arm64`. On `arm` and `riscv64` builds, passing `--d2k` logs a warning and skips the deployment — no resources are created and no error is returned.
 
 ---
 
