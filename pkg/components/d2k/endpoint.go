@@ -196,8 +196,15 @@ func writeDockerCertPathSymlinks(dir string, certs types.D2KCertificatePaths) er
 
 	for _, link := range links {
 		path := filepath.Join(dir, link.name)
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to remove existing symlink %s: %v", path, err)
+		if info, err := os.Lstat(path); err == nil {
+			if info.Mode()&os.ModeSymlink == 0 {
+				return fmt.Errorf("refusing to remove %s: exists but is not a symlink", path)
+			}
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("failed to remove existing symlink %s: %v", path, err)
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to stat %s: %v", path, err)
 		}
 		if err := os.Symlink(link.target, path); err != nil {
 			return fmt.Errorf("failed to symlink %s -> %s: %v", path, link.target, err)

@@ -50,6 +50,7 @@ func createService(ctx context.Context, clientset *kubernetes.Clientset, namespa
 			return getErr
 		}
 		svc.Spec.ClusterIP = existing.Spec.ClusterIP
+		svc.Spec.ClusterIPs = existing.Spec.ClusterIPs
 		svc.ResourceVersion = existing.ResourceVersion
 		_, err = clientset.CoreV1().Services(namespace).Update(ctx, svc, metav1.UpdateOptions{})
 		if err != nil {

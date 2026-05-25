@@ -2,6 +2,7 @@ package d2k
 
 import (
 	"context"
+	"strconv"
 
 	kubesolokubernetes "github.com/portainer/kubesolo/internal/kubernetes"
 	"github.com/portainer/kubesolo/types"
@@ -30,7 +31,7 @@ func createDeployment(ctx context.Context, clientset *kubernetes.Clientset, name
 		},
 		{
 			Name:  "D2K_PORT",
-			Value: "2376",
+			Value: strconv.Itoa(int(types.DefaultD2KPort)),
 		},
 		{
 			Name:  "D2K_SWARM_MODE",
