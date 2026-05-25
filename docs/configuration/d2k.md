@@ -19,7 +19,7 @@ When `--d2k` is set, KubeSolo:
 
 1. Reuses the existing kubesolo CA at `/var/lib/kubesolo/pki/ca/` to mint a d2k server certificate and a d2k client certificate. Both are persisted under `/var/lib/kubesolo/pki/d2k/` and reused on subsequent starts.
 2. Reconciles all required Kubernetes resources programmatically (Namespace, ServiceAccount, Role/RoleBinding, ClusterRole/ClusterRoleBinding, `d2k-tls` Secret of type `kubernetes.io/tls`, Deployment, and a LoadBalancer Service on port `2376`).
-3. Waits for the LoadBalancer Service to receive an external IP, then writes connection details to `/var/lib/kubesolo/d2k/connection.env` and `/var/lib/kubesolo/d2k/connection.txt`.
+3. Waits for the LoadBalancer Service to receive an external IP.
 
 ```bash
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true --d2k-namespace=workloads
@@ -31,37 +31,74 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true --d2k-namespace=wor
 
 ## Connecting
 
-The on-disk layout is **static across machines and restarts**. The only value that changes between hosts is the node IP encoded in `DOCKER_HOST`.
+The client certificates are generated on the KubeSolo node under `/var/lib/kubesolo/pki/d2k/`. KubeSolo also writes `ca.pem`, `cert.pem`, and `key.pem` symlinks in `/var/lib/kubesolo/d2k/` pointing at the CA and client material, using the naming convention expected by the Docker CLI.
 
 | Path | Purpose |
 |---|---|
-| `/var/lib/kubesolo/pki/ca/ca.crt` | CA certificate (`docker --tlscacert`) |
-| `/var/lib/kubesolo/pki/d2k/server.crt` | d2k server certificate (mounted into the pod) |
-| `/var/lib/kubesolo/pki/d2k/server.key` | d2k server key (mounted into the pod) |
-| `/var/lib/kubesolo/pki/d2k/client.crt` | Client certificate (`docker --tlscert`) |
-| `/var/lib/kubesolo/pki/d2k/client.key` | Client key (`docker --tlskey`) |
-| `/var/lib/kubesolo/d2k/connection.env` | Shell-sourceable env vars (regenerated on every start) |
-| `/var/lib/kubesolo/d2k/connection.txt` | Human-readable copy/paste block |
+| `/var/lib/kubesolo/pki/ca/ca.crt` | CA certificate |
+| `/var/lib/kubesolo/pki/d2k/client.crt` | Client certificate |
+| `/var/lib/kubesolo/pki/d2k/client.key` | Client key |
+| `/var/lib/kubesolo/d2k/ca.pem` | Symlink → CA certificate |
+| `/var/lib/kubesolo/d2k/cert.pem` | Symlink → client certificate |
+| `/var/lib/kubesolo/d2k/key.pem` | Symlink → client key |
 
-KubeSolo also creates `ca.pem`, `cert.pem`, and `key.pem` symlinks alongside the client material so `DOCKER_CERT_PATH=/var/lib/kubesolo/pki/d2k` works directly with the docker CLI.
-
-### Quick start
-
-Source the env file and run docker against the node:
+To find the node IP:
 
 ```bash
-source /var/lib/kubesolo/d2k/connection.env
+export KUBECONFIG=/var/lib/kubesolo/pki/admin/admin.kubeconfig
+kubectl get nodes -o wide
+```
+
+### Copying certificates to your local machine
+
+**Via SCP:**
+
+```bash
+CERT_DIR="${HOME}/.config/d2k"
+mkdir -p "${CERT_DIR}"
+scp user@<NODE_IP>:/var/lib/kubesolo/d2k/ca.pem   "${CERT_DIR}/ca.pem"
+scp user@<NODE_IP>:/var/lib/kubesolo/d2k/cert.pem "${CERT_DIR}/cert.pem"
+scp user@<NODE_IP>:/var/lib/kubesolo/d2k/key.pem  "${CERT_DIR}/key.pem"
+```
+
+Or in a single command if your shell supports brace expansion over SSH:
+
+```bash
+CERT_DIR="${HOME}/.config/d2k"
+mkdir -p "${CERT_DIR}"
+scp "user@<NODE_IP>:/var/lib/kubesolo/d2k/{ca.pem,cert.pem,key.pem}" "${CERT_DIR}/"
+```
+
+**On the node directly** (e.g., running Docker on the same host as KubeSolo):
+
+Use the paths under `/var/lib/kubesolo/d2k/` directly — no copy needed.
+
+### Creating a Docker context
+
+Once the certificates are available locally, create a named Docker context:
+
+```bash
+CERT_DIR="${HOME}/.config/d2k"
+docker context create d2k \
+  --docker "host=tcp://<NODE_IP>:2376,ca=${CERT_DIR}/ca.pem,cert=${CERT_DIR}/cert.pem,key=${CERT_DIR}/key.pem"
+```
+
+Switch to it and start issuing Docker commands:
+
+```bash
+docker context use d2k
 docker ps
 ```
 
-### Explicit form (no env vars)
+### Explicit flags (without a context)
 
 ```bash
+CERT_DIR="${HOME}/.config/d2k"
 docker -H tcp://<NODE_IP>:2376 \
   --tlsverify \
-  --tlscacert /var/lib/kubesolo/pki/ca/ca.crt \
-  --tlscert /var/lib/kubesolo/pki/d2k/client.crt \
-  --tlskey /var/lib/kubesolo/pki/d2k/client.key \
+  --tlscacert "${CERT_DIR}/ca.pem" \
+  --tlscert   "${CERT_DIR}/cert.pem" \
+  --tlskey    "${CERT_DIR}/key.pem" \
   ps
 ```
 
@@ -77,12 +114,6 @@ After starting KubeSolo with `--d2k=true`, confirm the resources have been recon
 export KUBECONFIG=/var/lib/kubesolo/pki/admin/admin.kubeconfig
 kubectl -n <namespace> get deploy,svc,sa,role,rolebinding,secret/d2k-tls
 kubectl get clusterrole,clusterrolebinding | grep d2k-node-reader
-```
-
-Then inspect the persisted connection file:
-
-```bash
-cat /var/lib/kubesolo/d2k/connection.txt
 ```
 
 ---
