@@ -25,11 +25,11 @@ func EnsureDirectoryExists(path string) error {
 // it returns an error if it fails
 func EnsureSymbolicLink(source, target string) error {
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove existing target CNI config %s: %v", target, err)
+		return fmt.Errorf("failed to remove existing symlink %s: %v", target, err)
 	}
 
 	if err := os.Symlink(source, target); err != nil {
-		return fmt.Errorf("failed to create symlink for CNI config %s: %v", target, err)
+		return fmt.Errorf("failed to create symlink %s: %v", target, err)
 	}
 	return nil
 }

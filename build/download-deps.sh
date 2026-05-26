@@ -13,6 +13,7 @@ COREDNS_VERSION="1.14.3"
 LOCAL_PATH_PROVISIONER_VERSION="v0.0.36"
 PAUSE_IMAGE_VERSION="3.10"
 D2K_VERSION="1.2.2"
+CRANE_VERSION="v0.21.5"
 
 # Offline mode embeds all OCI images; online mode (default) skips optional images
 OFFLINE=false
@@ -162,8 +163,7 @@ done
 # Download container images
 echo "Checking if Crane is available..."
 if ! command -v crane &> /dev/null; then
-    VERSION=$(curl -s "https://api.github.com/repos/google/go-containerregistry/releases/latest" | jq -r '.tag_name')
-    curl -sL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" > go-containerregistry.tar.gz
+    curl -sL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" > go-containerregistry.tar.gz
     tar -zxvf go-containerregistry.tar.gz -C /usr/local/bin/ crane
     rm -f go-containerregistry.tar.gz
 fi

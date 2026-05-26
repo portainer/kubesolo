@@ -74,7 +74,6 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"runtimes": map[string]any{
 						"crun": map[string]any{
 							"runtime_type": "io.containerd.runc.v2",
-							"runtime_path": s.containerdShimBinaryFile,
 							"options": map[string]any{
 								"BinaryName":    s.crunBinaryFile,
 								"SystemdCgroup": useSystemdCgroup(),
