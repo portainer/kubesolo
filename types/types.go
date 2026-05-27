@@ -152,10 +152,9 @@ type Embedded struct {
 	DisableIPv6 bool
 
 	// d2k integration
-	D2K              bool
-	D2KNamespace     string
-	D2KCerts         D2KCertificatePaths
-	D2KConnectionDir string
+	D2K          bool
+	D2KNamespace string
+	D2KCerts     D2KCertificatePaths
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent

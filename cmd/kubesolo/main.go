@@ -70,6 +70,15 @@ var (
 
 // service creates a new kubesolo application
 func service() (*kubesolo, error) {
+	d2kEnabled := *flags.D2K
+	if d2kEnabled && (runtime.GOARCH == "arm" || runtime.GOARCH == "riscv64") {
+		log.Warn().Str("component", "kubesolo").Str("arch", runtime.GOARCH).Msg("d2k is not supported on this architecture, disabling")
+		d2kEnabled = false
+	}
+	if d2kEnabled && !*flags.LoadBalancer {
+		log.Fatal().Str("component", "kubesolo").Msg("--d2k requires --load-balancer: the d2k Service endpoint is populated by the LoadBalancer webhook")
+	}
+
 	return &kubesolo{
 		hostName:               system.GetHostname(),
 		extraSANs:              *flags.APIServerExtraSANs,
@@ -84,7 +93,7 @@ func service() (*kubesolo, error) {
 		fullMode:               *flags.Full,
 		disableIPv6:            *flags.DisableIPv6,
 		dbWALRepair:            *flags.DBWALRepair,
-		d2k:                    *flags.D2K,
+		d2k:                    d2kEnabled,
 		d2kNamespace:           *flags.D2KNamespace,
 	}, nil
 }
@@ -276,27 +285,15 @@ func (s *kubesolo) run() {
 	}
 
 	if s.d2k {
-		if runtime.GOARCH == "arm" || runtime.GOARCH == "riscv64" {
-			log.Warn().Str("component", "kubesolo").Str("arch", runtime.GOARCH).Msg("d2k is not supported on this architecture, skipping")
-		} else {
-			log.Info().Str("component", "kubesolo").Str("namespace", s.d2kNamespace).Msg("deploying d2k...")
-			if err := d2k.Deploy(s.embedded.AdminKubeconfigFile, d2k.Config{
-				Namespace: s.d2kNamespace,
-				Image:     types.DefaultD2KImage,
-				Certs:     s.embedded.D2KCerts,
-			}); err != nil {
-				log.Fatal().Err(err).Msg("failed to deploy d2k")
-			}
-
-			// WaitAndPersistEndpoint blocks until the LoadBalancer ingress IP is
-			// populated and writes connection.env / connection.txt to disk so
-			// operators don't need to scrape the startup log later.
-			s.wg.Go(func() {
-				if err := d2k.WaitAndPersistEndpoint(ctx, s.embedded.AdminKubeconfigFile, s.d2kNamespace, s.embedded.D2KCerts, s.embedded.D2KConnectionDir); err != nil {
-					log.Warn().Err(err).Msg("d2k deployed but endpoint did not become available in time")
-				}
-			})
+		log.Info().Str("component", "kubesolo").Str("namespace", s.d2kNamespace).Msg("deploying d2k...")
+		if err := d2k.Deploy(s.embedded.AdminKubeconfigFile, d2k.Config{
+			Namespace: s.d2kNamespace,
+			Image:     types.DefaultD2KImage,
+			Certs:     s.embedded.D2KCerts,
+		}); err != nil {
+			log.Fatal().Err(err).Msg("failed to deploy d2k")
 		}
+
 	}
 
 	<-sigCh
@@ -549,7 +546,6 @@ func (s *kubesolo) bootstrap() {
 			ClientCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.crt"),
 			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
 		},
-		D2KConnectionDir: filepath.Join(basePath, types.DefaultD2KDir),
 		D2KImageFile:     filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
 	}
 }

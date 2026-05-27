@@ -134,7 +134,7 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --local-storage=true
 
 Embed [d2k](https://github.com/portainer/d2k), the Portainer Docker-to-Kubernetes API translator, into the KubeSolo node. With `--d2k` set, KubeSolo deploys d2k into the namespace given by [`--d2k-namespace`](#--d2k-namespace), generates mTLS material under `/var/lib/kubesolo/pki/d2k/`, and exposes a Docker-compatible API endpoint on port `2376` via a LoadBalancer Service so existing Docker tooling can target the node without a separate translator deployment.
 
-Connection details (Docker host URL, plus paths to the CA cert, client cert, and client key) are written to `/var/lib/kubesolo/d2k/connection.env` and `connection.txt` after startup. See [docs/configuration/d2k.md](../configuration/d2k.md) for the full integration guide.
+See [docs/configuration/d2k.md](../configuration/d2k.md) for the full integration guide.
 
 | Flag | Env var | Default |
 |---|---|---|
@@ -144,7 +144,11 @@ Connection details (Docker host URL, plus paths to the CA cert, client cert, and
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true
 ```
 
-> **Note:** The d2k container image is published only for `linux/amd64` and `linux/arm64`. On `arm` and `riscv64` builds, passing `--d2k` logs a warning and skips the deployment — no resources are created and no error is returned.
+> **Architecture support:** The d2k container image is published only for `linux/amd64` and `linux/arm64`. On `arm` and `riscv64` builds, passing `--d2k` logs a warning at startup and the flag is silently cleared — no PKI material is generated, no image is imported, and no Kubernetes resources are created.
+
+> **Load-balancer requirement:** `--d2k` requires `--load-balancer` (the default). KubeSolo will exit at startup if both flags conflict. See [`--load-balancer`](#--load-balancer).
+
+> **Namespace is fixed after first start:** the d2k server certificate SANs are generated for the namespace set at first start. Changing `--d2k-namespace` on a later restart reuses the existing certificate with mismatched SANs. Delete `/var/lib/kubesolo/pki/d2k/server.crt` and `server.key` before restarting to regenerate the certificate for the new namespace.
 
 ---
 
@@ -159,6 +163,8 @@ Set the single Kubernetes namespace into which d2k is deployed and against which
 ```bash
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true --d2k-namespace=workloads
 ```
+
+> **Namespace is fixed after first start:** changing this value on a later restart reuses the existing server certificate, whose SANs were generated for the original namespace. Delete `/var/lib/kubesolo/pki/d2k/server.crt` and `server.key` before restarting to regenerate the certificate for the new namespace.
 
 ---
 

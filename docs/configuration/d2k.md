@@ -25,22 +25,23 @@ When `--d2k` is set, KubeSolo:
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true --d2k-namespace=workloads
 ```
 
-> **Architecture support:** the `portainer/d2k` container image is currently published only for `linux/amd64` and `linux/arm64`. On `arm` and `riscv64` builds, passing `--d2k` logs a warning and skips the deployment — no resources are created and no error is returned.
+> **Architecture support:** the `portainer/d2k` container image is currently published only for `linux/amd64` and `linux/arm64`. On `arm` and `riscv64` builds, passing `--d2k` logs a warning at startup and the flag is silently cleared — no PKI material is generated, no image is imported, and no Kubernetes resources are created.
+
+> **Load-balancer requirement:** `--d2k` requires `--load-balancer` (the default). The d2k Service endpoint is populated by the KubeSolo LoadBalancer webhook; without it the endpoint address is never resolved. KubeSolo will exit at startup if `--d2k=true` is combined with `--load-balancer=false`.
+
+> **Namespace is fixed after first start:** the d2k server certificate embeds the in-cluster DNS names for the namespace chosen at first start (e.g. `d2k.workloads.svc.cluster.local`). Changing `--d2k-namespace` on a subsequent start reuses the existing certificate, whose SANs no longer match — clients that connect via in-cluster DNS will fail TLS verification. To change the namespace, delete `/var/lib/kubesolo/pki/d2k/server.crt` and `/var/lib/kubesolo/pki/d2k/server.key` before restarting so the certificate is regenerated for the new namespace.
 
 ---
 
 ## Connecting
 
-The client certificates are generated on the KubeSolo node under `/var/lib/kubesolo/pki/d2k/`. KubeSolo also writes `ca.pem`, `cert.pem`, and `key.pem` symlinks in `/var/lib/kubesolo/d2k/` pointing at the CA and client material, using the naming convention expected by the Docker CLI.
+The client certificates are generated on the KubeSolo node under `/var/lib/kubesolo/pki/d2k/`.
 
 | Path | Purpose |
 |---|---|
 | `/var/lib/kubesolo/pki/ca/ca.crt` | CA certificate |
 | `/var/lib/kubesolo/pki/d2k/client.crt` | Client certificate |
 | `/var/lib/kubesolo/pki/d2k/client.key` | Client key |
-| `/var/lib/kubesolo/d2k/ca.pem` | Symlink → CA certificate |
-| `/var/lib/kubesolo/d2k/cert.pem` | Symlink → client certificate |
-| `/var/lib/kubesolo/d2k/key.pem` | Symlink → client key |
 
 To find the node IP:
 
@@ -51,27 +52,13 @@ kubectl get nodes -o wide
 
 ### Copying certificates to your local machine
 
-**Via SCP:**
-
 ```bash
 CERT_DIR="${HOME}/.config/d2k"
 mkdir -p "${CERT_DIR}"
-scp user@<NODE_IP>:/var/lib/kubesolo/d2k/ca.pem   "${CERT_DIR}/ca.pem"
-scp user@<NODE_IP>:/var/lib/kubesolo/d2k/cert.pem "${CERT_DIR}/cert.pem"
-scp user@<NODE_IP>:/var/lib/kubesolo/d2k/key.pem  "${CERT_DIR}/key.pem"
+scp user@<NODE_IP>:/var/lib/kubesolo/pki/ca/ca.crt          "${CERT_DIR}/ca.crt"
+scp user@<NODE_IP>:/var/lib/kubesolo/pki/d2k/client.crt     "${CERT_DIR}/client.crt"
+scp user@<NODE_IP>:/var/lib/kubesolo/pki/d2k/client.key     "${CERT_DIR}/client.key"
 ```
-
-Or in a single command if your shell supports brace expansion over SSH:
-
-```bash
-CERT_DIR="${HOME}/.config/d2k"
-mkdir -p "${CERT_DIR}"
-scp "user@<NODE_IP>:/var/lib/kubesolo/d2k/{ca.pem,cert.pem,key.pem}" "${CERT_DIR}/"
-```
-
-**On the node directly** (e.g., running Docker on the same host as KubeSolo):
-
-Use the paths under `/var/lib/kubesolo/d2k/` directly — no copy needed.
 
 ### Creating a Docker context
 
@@ -80,7 +67,7 @@ Once the certificates are available locally, create a named Docker context:
 ```bash
 CERT_DIR="${HOME}/.config/d2k"
 docker context create d2k \
-  --docker "host=tcp://<NODE_IP>:2376,ca=${CERT_DIR}/ca.pem,cert=${CERT_DIR}/cert.pem,key=${CERT_DIR}/key.pem"
+  --docker "host=tcp://<NODE_IP>:2376,ca=${CERT_DIR}/ca.crt,cert=${CERT_DIR}/client.crt,key=${CERT_DIR}/client.key"
 ```
 
 Switch to it and start issuing Docker commands:
@@ -96,9 +83,9 @@ docker ps
 CERT_DIR="${HOME}/.config/d2k"
 docker -H tcp://<NODE_IP>:2376 \
   --tlsverify \
-  --tlscacert "${CERT_DIR}/ca.pem" \
-  --tlscert   "${CERT_DIR}/cert.pem" \
-  --tlskey    "${CERT_DIR}/key.pem" \
+  --tlscacert "${CERT_DIR}/ca.crt" \
+  --tlscert   "${CERT_DIR}/client.crt" \
+  --tlskey    "${CERT_DIR}/client.key" \
   ps
 ```
 
