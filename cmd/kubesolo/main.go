@@ -141,6 +141,11 @@ func (s *kubesolo) run() {
 		log.Fatal().Err(err).Msg("failed to ensure embedded dependencies")
 	}
 
+	log.Info().Str("component", "kubesolo").Msg("checking PKI validity against current node IPs...")
+	if err := pki.InvalidateIfIPChanged(s.embedded); err != nil {
+		log.Fatal().Err(err).Msg("failed to invalidate PKI directory")
+	}
+
 	log.Info().Str("component", "kubesolo").Msg("generating relevant certificates...")
 	if err := pki.GenerateAllCertificates(s.embedded); err != nil {
 		log.Fatal().Err(err).Msg("failed to generate full certificates")
