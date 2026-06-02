@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
+	"github.com/portainer/kubesolo/pkg/components/d2k"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
 	"github.com/portainer/kubesolo/pkg/components/portainer"
 	"github.com/portainer/kubesolo/pkg/kine"
@@ -51,6 +53,8 @@ type kubesolo struct {
 	fullMode               bool
 	disableIPv6            bool
 	dbWALRepair            bool
+	d2k                    bool
+	d2kNamespace           string
 	embedded               types.Embedded
 }
 
@@ -66,6 +70,15 @@ var (
 
 // service creates a new kubesolo application
 func service() (*kubesolo, error) {
+	d2kEnabled := *flags.D2K
+	if d2kEnabled && (runtime.GOARCH == "arm" || runtime.GOARCH == "riscv64") {
+		log.Warn().Str("component", "kubesolo").Str("arch", runtime.GOARCH).Msg("d2k is not supported on this architecture, disabling")
+		d2kEnabled = false
+	}
+	if d2kEnabled && !*flags.LoadBalancer {
+		log.Fatal().Str("component", "kubesolo").Msg("--d2k requires --load-balancer: the d2k Service endpoint is populated by the LoadBalancer webhook")
+	}
+
 	return &kubesolo{
 		hostName:               system.GetHostname(),
 		extraSANs:              *flags.APIServerExtraSANs,
@@ -80,6 +93,8 @@ func service() (*kubesolo, error) {
 		fullMode:               *flags.Full,
 		disableIPv6:            *flags.DisableIPv6,
 		dbWALRepair:            *flags.DBWALRepair,
+		d2k:                    d2kEnabled,
+		d2kNamespace:           *flags.D2KNamespace,
 	}, nil
 }
 
@@ -267,6 +282,18 @@ func (s *kubesolo) run() {
 		}); err != nil {
 			log.Fatal().Err(err).Msg("failed to deploy portainer edge agent...")
 		}
+	}
+
+	if s.d2k {
+		log.Info().Str("component", "kubesolo").Str("namespace", s.d2kNamespace).Msg("deploying d2k...")
+		if err := d2k.Deploy(s.embedded.AdminKubeconfigFile, d2k.Config{
+			Namespace: s.d2kNamespace,
+			Image:     types.DefaultD2KImage,
+			Certs:     s.embedded.D2KCerts,
+		}); err != nil {
+			log.Fatal().Err(err).Msg("failed to deploy d2k")
+		}
+
 	}
 
 	<-sigCh
@@ -508,5 +535,17 @@ func (s *kubesolo) bootstrap() {
 
 		// IPv6
 		DisableIPv6: s.disableIPv6,
+
+		// d2k integration
+		D2K:          s.d2k,
+		D2KNamespace: s.d2kNamespace,
+		D2KCerts: types.D2KCertificatePaths{
+			CACert:     filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
+			ServerCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.crt"),
+			ServerKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.key"),
+			ClientCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.crt"),
+			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
+		},
+		D2KImageFile:     filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
 	}
 }

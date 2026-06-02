@@ -97,7 +97,7 @@ func (s *service) postSetup() error {
 		return err
 	}
 
-	if err := s.importImages(ctx, client, s.isPortainerEdge); err != nil {
+	if err := s.importImages(ctx, client, s.isPortainerEdge, s.isD2K); err != nil {
 		log.Error().Str("component", "containerd").Msgf("failed to import images: %v...", err)
 		s.cancelShutdown()
 		return err

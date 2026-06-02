@@ -12,6 +12,20 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// d2kServerDNSNames returns the DNS SANs to embed in the d2k server certificate.
+// Includes the in-cluster Service hostnames and localhost so the same cert
+// works whether the docker client connects via the LoadBalancer external IP,
+// in-cluster DNS, or over a port-forward.
+func d2kServerDNSNames(namespace string) []string {
+	return []string{
+		"d2k",
+		fmt.Sprintf("d2k.%s", namespace),
+		fmt.Sprintf("d2k.%s.svc", namespace),
+		fmt.Sprintf("d2k.%s.svc.cluster.local", namespace),
+		"localhost",
+	}
+}
+
 // defaultCertOptions returns default options for the specified certificate type
 // it sets the relevant fields for the certificate type, including the local IPv4 addresses
 // the supported certificate types are CACert, KubeletCert, APIServerCert, ControllerManagerCert, AdminCert, WebhookCert, RequestHeaderCACert, and RequestHeaderClientCert
@@ -113,6 +127,24 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 		opts.SignerKeyDir = embedded.RequestHeaderCerts.CAKey
 		opts.CertDir = embedded.RequestHeaderCerts.ClientCert
 		opts.KeyDir = embedded.RequestHeaderCerts.ClientKey
+
+	case D2KServerCert:
+		opts.CommonName = "d2k"
+		opts.Organization = []string{"kubesolo"}
+		opts.DNSNames = d2kServerDNSNames(embedded.D2KNamespace)
+		opts.IPAddresses = append([]net.IP{net.ParseIP("127.0.0.1")}, ipAddresses...)
+		opts.SignerCertDir = embedded.CACerts.Cert
+		opts.SignerKeyDir = embedded.CACerts.Key
+		opts.CertDir = embedded.D2KCerts.ServerCert
+		opts.KeyDir = embedded.D2KCerts.ServerKey
+
+	case D2KClientCert:
+		opts.CommonName = "d2k-client"
+		opts.Organization = []string{"kubesolo"}
+		opts.SignerCertDir = embedded.CACerts.Cert
+		opts.SignerKeyDir = embedded.CACerts.Key
+		opts.CertDir = embedded.D2KCerts.ClientCert
+		opts.KeyDir = embedded.D2KCerts.ClientKey
 	}
 
 	return opts

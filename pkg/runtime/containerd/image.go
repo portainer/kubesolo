@@ -13,7 +13,7 @@ import (
 )
 
 // importImages imports the images into the containerd registry
-func (s *service) importImages(ctx context.Context, c *client.Client, isPortainerAgent bool) error {
+func (s *service) importImages(ctx context.Context, c *client.Client, isPortainerAgent, isD2K bool) error {
 	nsCtx := namespaces.WithNamespace(ctx, types.DefaultK8sNamespace)
 	if err := s.importImage(nsCtx, c, s.corednsImageFile, types.DefaultCoreDNSImage); err != nil {
 		return err
@@ -29,6 +29,12 @@ func (s *service) importImages(ctx context.Context, c *client.Client, isPortaine
 
 	if isPortainerAgent {
 		if err := s.importImage(nsCtx, c, s.portainerAgentImageFile, types.DefaultPortainerAgentImage); err != nil {
+			return err
+		}
+	}
+
+	if isD2K {
+		if err := s.importImage(nsCtx, c, s.d2kImageFile, types.DefaultD2KImage); err != nil {
 			return err
 		}
 	}
