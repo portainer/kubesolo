@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
+	"github.com/portainer/kubesolo/pkg/components/d2k"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
 	"github.com/portainer/kubesolo/pkg/components/portainer"
 	"github.com/portainer/kubesolo/pkg/kine"
@@ -48,6 +50,11 @@ type kubesolo struct {
 	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
+	fullMode               bool
+	disableIPv6            bool
+	dbWALRepair            bool
+	d2k                    bool
+	d2kNamespace           string
 	embedded               types.Embedded
 }
 
@@ -63,6 +70,15 @@ var (
 
 // service creates a new kubesolo application
 func service() (*kubesolo, error) {
+	d2kEnabled := *flags.D2K
+	if d2kEnabled && (runtime.GOARCH == "arm" || runtime.GOARCH == "riscv64") {
+		log.Warn().Str("component", "kubesolo").Str("arch", runtime.GOARCH).Msg("d2k is not supported on this architecture, disabling")
+		d2kEnabled = false
+	}
+	if d2kEnabled && !*flags.LoadBalancer {
+		log.Fatal().Str("component", "kubesolo").Msg("--d2k requires --load-balancer: the d2k Service endpoint is populated by the LoadBalancer webhook")
+	}
+
 	return &kubesolo{
 		hostName:               system.GetHostname(),
 		extraSANs:              *flags.APIServerExtraSANs,
@@ -74,6 +90,11 @@ func service() (*kubesolo, error) {
 		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
+		fullMode:               *flags.Full,
+		disableIPv6:            *flags.DisableIPv6,
+		dbWALRepair:            *flags.DBWALRepair,
+		d2k:                    d2kEnabled,
+		d2kNamespace:           *flags.D2KNamespace,
 	}, nil
 }
 
@@ -88,6 +109,10 @@ func main() {
 	if *flags.Version {
 		log.Info().Str("version", Version).Msg("kubesolo version")
 		os.Exit(0)
+	}
+
+	if *flags.StartupTimeout > 0 {
+		types.DefaultRetryCount = *flags.StartupTimeout / int(types.DefaultComponentSleep.Seconds())
 	}
 
 	service, err := service()
@@ -114,10 +139,16 @@ func (s *kubesolo) run() {
 		cancel()
 	}()
 
+	profile := "edge"
+	if s.fullMode {
+		profile = "full"
+	}
+
 	log.Info().
 		Str("version", Version).
 		Str("build-date", BuildDate).
 		Str("commit", Commit).
+		Str("profile", profile).
 		Msg("starting kubesolo...")
 
 	log.Info().Str("component", "kubesolo").Msg("ensuring all embedded dependencies are available...")
@@ -131,11 +162,14 @@ func (s *kubesolo) run() {
 	}
 	log.Info().Str("component", "kubesolo").Msg("starting kubesolo services... this may take a few minutes...")
 
-	services := []struct {
+	type service struct {
 		name    string
 		start   func()
 		readyCh chan struct{}
-	}{
+	}
+
+	// infraServices must be fully ready before pod masquerade is set up.
+	infraServices := []service{
 		{
 			name: "containerd",
 			start: func() {
@@ -149,7 +183,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kine",
 			start: func() {
-				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh)
+				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.dbWALRepair)
 				s.wg.Go(func() {
 					kineService.Run()
 				})
@@ -176,6 +210,10 @@ func (s *kubesolo) run() {
 			},
 			readyCh: controllerReadyCh,
 		},
+	}
+
+	// nodeServices start after masquerade is guaranteed to be in place.
+	nodeServices := []service{
 		{
 			name: "kubelet",
 			start: func() {
@@ -189,7 +227,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kubeproxy",
 			start: func() {
-				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode)
+				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.FullMode)
 				s.wg.Go(func() {
 					kubeproxyService.Run(kubeletReadyCh)
 				})
@@ -198,7 +236,23 @@ func (s *kubesolo) run() {
 		},
 	}
 
-	for _, svc := range services {
+	for _, svc := range infraServices {
+		log.Info().Str("component", "kubesolo").Msgf("starting %s...", svc.name)
+		svc.start()
+		if !waitForService(ctx, svc.name, svc.readyCh) {
+			return
+		}
+	}
+
+	// Ensure pod→external masquerade (SNAT) is in place before kubelet starts.
+	// kine persists cluster state across reboots, so kubelet will immediately
+	// reconcile existing pods — they must not start into a network with no SNAT.
+	log.Info().Str("component", "kubesolo").Msg("setting up pod masquerade rules...")
+	if err := network.EnsurePodMasquerade(types.DefaultPodCIDR); err != nil {
+		log.Fatal().Err(err).Msg("failed to set up pod masquerade")
+	}
+
+	for _, svc := range nodeServices {
 		log.Info().Str("component", "kubesolo").Msgf("starting %s...", svc.name)
 		svc.start()
 		if !waitForService(ctx, svc.name, svc.readyCh) {
@@ -207,7 +261,7 @@ func (s *kubesolo) run() {
 	}
 
 	log.Info().Str("component", "kubesolo").Msg("deploying coredns...")
-	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode); err != nil {
+	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.DisableIPv6); err != nil {
 		log.Fatal().Err(err).Msg("failed to deploy coredns")
 	}
 
@@ -230,6 +284,18 @@ func (s *kubesolo) run() {
 		}
 	}
 
+	if s.d2k {
+		log.Info().Str("component", "kubesolo").Str("namespace", s.d2kNamespace).Msg("deploying d2k...")
+		if err := d2k.Deploy(s.embedded.AdminKubeconfigFile, d2k.Config{
+			Namespace: s.d2kNamespace,
+			Image:     types.DefaultD2KImage,
+			Certs:     s.embedded.D2KCerts,
+		}); err != nil {
+			log.Fatal().Err(err).Msg("failed to deploy d2k")
+		}
+
+	}
+
 	<-sigCh
 	log.Info().Str("component", "kubesolo").Msg("shutting down...")
 
@@ -237,6 +303,51 @@ func (s *kubesolo) run() {
 	log.Info().Str("component", "kubesolo").Msg("waiting for all services to shutdown...")
 	s.wg.Wait()
 	log.Info().Str("component", "kubesolo").Msg("all services have shutdown gracefully")
+}
+
+// cleanStaleState removes stale runtime artifacts from a previous run.
+// After a reboot, the old container is gone but stale containerd metadata,
+// sockets, and runtime state remain on the persistent volume. The containerd
+// metadata DB (meta.db) retains references to EXITED containers, causing
+// kubelet to fail pod synchronization on restart.
+//
+// Strategy: remove everything in the containerd directory except the embedded
+// image archives (images/). These are re-imported by importImages() on every
+// startup, so no data is lost. This gives containerd a clean slate while
+// preserving the kine database (Kubernetes state) and PKI certificates.
+func cleanStaleState(basePath string) {
+	// Stale system containerd socket symlink
+	if err := os.Remove(types.DefaultSystemContainerdSock); err == nil {
+		log.Info().Str("component", "kubesolo").Msgf("removed stale system containerd socket: %s", types.DefaultSystemContainerdSock)
+	}
+
+	// Clean all containerd subdirectories except images/ (embedded tar archives)
+	containerdDir := filepath.Join(basePath, types.DefaultContainerdDir)
+	entries, err := os.ReadDir(containerdDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		// Preserve embedded image archives — they are re-imported on startup
+		if name == "images" {
+			continue
+		}
+		// Preserve embedded binaries and config template
+		if name == "containerd" || name == "containerd-shim-runc-v2" || name == "crun" {
+			continue
+		}
+		// Preserve registry
+		if name == "registry" {
+			continue
+		}
+
+		target := filepath.Join(containerdDir, name)
+		if err := os.RemoveAll(target); err == nil {
+			log.Info().Str("component", "kubesolo").Msgf("cleaned stale containerd artifact: %s", target)
+		}
+	}
 }
 
 // waitForService waits for a service to be ready
@@ -272,6 +383,15 @@ func (s *kubesolo) bootstrap() {
 	logging.SetLoggingLevel("INFO")
 	logging.ConfigureK8sDefaultLogging()
 
+	// Load required kernel modules before any networking setup
+	system.LoadRequiredModules()
+
+	if s.disableIPv6 {
+		if err := network.DisableIPv6Sysctls(); err != nil {
+			log.Warn().Err(err).Msg("failed to disable ipv6 sysctls")
+		}
+	}
+
 	// System Node IP
 	nodeIP, err := network.GetNodeIP()
 	if err != nil {
@@ -295,6 +415,11 @@ func (s *kubesolo) bootstrap() {
 			log.Fatal().Err(err).Msg("failed to setup container cgroups")
 		}
 	}
+
+	// Clean stale runtime state from previous runs (e.g., after reboot)
+	// This removes stale sockets and containerd runtime state that reference
+	// dead processes, while preserving images, kine database, and PKI certs.
+	cleanStaleState(basePath)
 
 	s.embedded = types.Embedded{
 		// System Node IP
@@ -361,14 +486,15 @@ func (s *kubesolo) bootstrap() {
 		},
 
 		// Containerd paths
-		ContainerdDir:            filepath.Join(basePath, types.DefaultContainerdDir),
-		ContainerdSocketFile:     filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket),
-		ContainerdBinaryFile:     filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
-		ContainerdImagesDir:      filepath.Join(basePath, types.DefaultContainerdDir, "images"),
-		ContainerdShimBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
-		ContainerdConfigFile:     filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
-		ContainerdRootDir:        filepath.Join(basePath, types.DefaultContainerdDir, "root"),
-		ContainerdStateDir:       filepath.Join(basePath, types.DefaultContainerdDir, "state"),
+		ContainerdDir:               filepath.Join(basePath, types.DefaultContainerdDir),
+		ContainerdSocketFile:        filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket),
+		ContainerdBinaryFile:        filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
+		ContainerdImagesDir:         filepath.Join(basePath, types.DefaultContainerdDir, "images"),
+		ContainerdShimBinaryFile:    filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
+		ContainerdConfigFile:        filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
+		ContainerdRootDir:           filepath.Join(basePath, types.DefaultContainerdDir, "root"),
+		ContainerdStateDir:          filepath.Join(basePath, types.DefaultContainerdDir, "state"),
+		ContainerdRegistryConfigDir: filepath.Join(basePath, types.DefaultContainerdDir, "registry"),
 
 		// CNI paths
 		ContainerdCNIDir:        filepath.Join(basePath, types.DefaultContainerdDir, "cni"),
@@ -376,8 +502,8 @@ func (s *kubesolo) bootstrap() {
 		ContainerdCNIConfigDir:  filepath.Join(basePath, types.DefaultContainerdDir, "cni", "conf"),
 		ContainerdCNIConfigFile: filepath.Join(basePath, types.DefaultContainerdDir, "cni", "conf", types.DefaultCNIConfigName),
 
-		// Runc binary
-		RuncBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "runc"),
+		// Crun binary
+		CrunBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "crun"),
 
 		// Kubelet paths
 		KubeletDir:            filepath.Join(basePath, types.DefaultKubeletDir),
@@ -419,5 +545,23 @@ func (s *kubesolo) bootstrap() {
 
 		// Container Mode
 		ContainerMode: containerMode,
+
+		// Full mode
+		FullMode: s.fullMode,
+
+		// IPv6
+		DisableIPv6: s.disableIPv6,
+
+		// d2k integration
+		D2K:          s.d2k,
+		D2KNamespace: s.d2kNamespace,
+		D2KCerts: types.D2KCertificatePaths{
+			CACert:     filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
+			ServerCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.crt"),
+			ServerKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.key"),
+			ClientCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.crt"),
+			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
+		},
+		D2KImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
 	}
 }

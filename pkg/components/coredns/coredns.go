@@ -22,7 +22,7 @@ const (
 )
 
 // Deploy deploys all the necessary Kubernetes resources for CoreDNS
-func Deploy(adminKubeconfig string, containerMode bool) error {
+func Deploy(adminKubeconfig string, containerMode bool, disableIPv6 bool) error {
 	time.Sleep(types.DefaultComponentSleep)
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.DefaultContextTimeout)
@@ -33,7 +33,7 @@ func Deploy(adminKubeconfig string, containerMode bool) error {
 		return fmt.Errorf("failed to create kubernetes client: %v", err)
 	}
 
-	if err := createConfigMap(ctx, clientset, containerMode); err != nil {
+	if err := createConfigMap(ctx, clientset, containerMode, disableIPv6); err != nil {
 		return fmt.Errorf("failed to create CoreDNS ConfigMap: %v", err)
 	}
 

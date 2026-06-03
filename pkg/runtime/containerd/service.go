@@ -20,13 +20,17 @@ type service struct {
 	containerdStateDir            string
 	containerdSocketFile          string
 	containerdCNIPluginsDir       string
-	runcBinaryFile                string
+	containerdRegistryConfigDir   string
+	crunBinaryFile                string
 	containerdShimBinaryFile      string
 	portainerAgentImageFile       string
 	corednsImageFile              string
 	sandboxImageFile              string
 	localPathProvisionerImageFile string
+	d2kImageFile                  string
 	isPortainerEdge               bool
+	isD2K                         bool
+	fullMode                      bool
 }
 
 // NewService creates a new containerd service
@@ -42,12 +46,16 @@ func NewService(ctx context.Context, cancel context.CancelFunc, containerdReady 
 		containerdStateDir:            embedded.ContainerdStateDir,
 		containerdSocketFile:          embedded.ContainerdSocketFile,
 		containerdCNIPluginsDir:       embedded.ContainerdCNIPluginsDir,
-		runcBinaryFile:                embedded.RuncBinaryFile,
+		containerdRegistryConfigDir:   embedded.ContainerdRegistryConfigDir,
+		crunBinaryFile:                embedded.CrunBinaryFile,
 		containerdShimBinaryFile:      embedded.ContainerdShimBinaryFile,
 		portainerAgentImageFile:       embedded.PortainerAgentImageFile,
 		corednsImageFile:              embedded.CorednsImageFile,
 		sandboxImageFile:              embedded.SandboxImageFile,
 		localPathProvisionerImageFile: embedded.LocalPathProvisionerImageFile,
+		d2kImageFile:                  embedded.D2KImageFile,
 		isPortainerEdge:               embedded.IsPortainerEdge,
+		isD2K:                         embedded.D2K,
+		fullMode:                      embedded.FullMode,
 	}
 }

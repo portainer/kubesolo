@@ -19,76 +19,56 @@ jobs:
     - name: "[execution] create a pre-release"
       run: |
         gh release create \
-          ${{ github.event.inputs.kubesolo_version }} \
+          "${{ github.event.inputs.kubesolo_version }}" \
           --repo portainer/kubesolo \
-          --title ${{ github.event.inputs.kubesolo_version }} \
+          --title "${{ github.event.inputs.kubesolo_version }}" \
           --target develop \
           --prerelease \
           --generate-notes
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build:
-    name: release for kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
+    name: release for kubesolo-linux-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}${{ matrix.variant == 'offline' && '-offline' || '' }}
     runs-on: ubuntu-latest
     needs: [release]
     strategy:
       matrix:
-        include:
-        # glibc builds
-        - goos: linux
-          goarch: amd64
-          libc: glibc
-          build_target: build
-        - goos: linux
-          goarch: arm64
-          libc: glibc
-          build_target: build
-        - goos: linux
-          goarch: arm
-          libc: glibc
-          build_target: build
-        - goos: linux
-          goarch: riscv64
-          libc: glibc
-          build_target: build
-        # musl builds
-        - goos: linux
-          goarch: amd64
-          libc: musl
-          build_target: build-musl
-        - goos: linux
-          goarch: arm64
-          libc: musl
-          build_target: build-musl
-        - goos: linux
-          goarch: arm
-          libc: musl
-          build_target: build-musl
-        - goos: linux
-          goarch: riscv64
-          libc: musl
-          build_target: build-musl
+        goarch: [amd64, arm64, arm, riscv64]
+        libc: [glibc, musl]
+        variant: [online, offline]
     steps:
     - name: "[preparation] checkout the current branch"
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         fetch-depth: 0
         tags: true
     - name: "[preparation] set build time"
       run: echo BUILD_TIME=$(date) >> ${GITHUB_ENV}
+    - name: "[preparation] set up QEMU for cross-platform Docker builds"
+      if: matrix.goarch == 'arm'
+      uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+      with:
+        platforms: arm
     - name: "[preparation] set up golang"
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
       with:
         go-version-file: go.mod
         cache-dependency-path: go.sum
     - name: "[preparation] release-workflow-deps"
       run: sudo make release-workflow-deps
-    - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
-      run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION=${{ github.event.inputs.kubesolo_version }} OUTPUT=kubesolo
+    - name: "[preparation] resolve build target"
+      id: target
+      run: |
+        TARGET="build"
+        if [[ "${{ matrix.libc }}" == "musl" ]]; then TARGET="build-musl"; fi
+        if [[ "${{ matrix.variant }}" == "offline" ]]; then TARGET="${TARGET}-offline"; fi
+        echo "build_target=${TARGET}" >> "$GITHUB_OUTPUT"
+    - name: "[execution] build the binary for linux/${{ matrix.goarch }}"
+      run: make ${{ steps.target.outputs.build_target }} GOOS=linux GOARCH=${{ matrix.goarch }} VERSION="${{ github.event.inputs.kubesolo_version }}" OUTPUT=kubesolo
     - name: "[post] upload artifacts to github release"
       run: |
-        dist=kubesolo-${{ github.event.inputs.kubesolo_version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}        
-        tar -czf $dist.tar.gz kubesolo
-        gh release upload --clobber --repo portainer/kubesolo ${{ github.event.inputs.kubesolo_version }} $dist.tar.gz
+        dist=kubesolo-${{ github.event.inputs.kubesolo_version }}-linux-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}${{ matrix.variant == 'offline' && '-offline' || '' }}
+        tar -czf "$dist.tar.gz" kubesolo
+        gh release upload --clobber --repo portainer/kubesolo "${{ github.event.inputs.kubesolo_version }}" "$dist.tar.gz"
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

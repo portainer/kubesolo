@@ -24,7 +24,7 @@ func loadContainerdComponents(embedded types.Embedded) error {
 		name        string
 	}{
 		{containerdShimBinary, embedded.ContainerdShimBinaryFile, "containerd-shim-runc-v2"},
-		{runcBinary, embedded.RuncBinaryFile, "runc"},
+		{crunBinary, embedded.CrunBinaryFile, "crun"},
 	}
 
 	for _, binary := range binaries {
@@ -32,6 +32,19 @@ func loadContainerdComponents(embedded types.Embedded) error {
 			return fmt.Errorf("failed to extract %s binary: %v", binary.name, err)
 		}
 	}
+
+	// Symlink containerd-shim-runc-v2 alongside the kubesolo binary.
+	// containerd's resolveRuntimePath falls back to checking filepath.Dir(os.Executable())
+	// for shim binaries, so placing the shim there lets it be found without PATH manipulation.
+	selfPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubesolo executable path: %w", err)
+	}
+	shimLink := filepath.Join(filepath.Dir(selfPath), "containerd-shim-runc-v2")
+	if err := filesystem.EnsureSymbolicLink(embedded.ContainerdShimBinaryFile, shimLink); err != nil {
+		return fmt.Errorf("failed to create containerd-shim-runc-v2 symlink: %w", err)
+	}
+
 	return nil
 }
 
@@ -99,15 +112,13 @@ func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string) error
 	return nil
 }
 
-// loadKernelModules loads the necessary kernel modules
-// "overlay", "br_netfilter", "ip_tables", "iptable_filter", "iptable_nat", "nf_conntrack"
+// loadKernelModules loads the necessary kernel modules.
+// Legacy ip_tables modules are attempted but failures are non-fatal since
+// nova8OS uses nf_tables natively — iptables-nft works via nft_compat.
 func loadKernelModules() error {
 	essentialModules := []string{
 		"overlay",
 		"br_netfilter",
-		"ip_tables",
-		"iptable_filter",
-		"iptable_nat",
 		"nf_conntrack",
 	}
 
@@ -118,13 +129,26 @@ func loadKernelModules() error {
 		}
 	}
 
+	// Legacy iptables modules — soft-fail since nova8OS uses nf_tables backend
+	optionalModules := []string{
+		"ip_tables",
+		"iptable_filter",
+		"iptable_nat",
+	}
+	for _, module := range optionalModules {
+		command := exec.Command("modprobe", module)
+		if err := command.Run(); err != nil {
+			log.Debug().Str("component", "embedded").Msgf("optional module %s not available (nf_tables backend used) — skipping", module)
+		}
+	}
+
 	if err := os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644); err != nil {
 		log.Debug().Str("component", "embedded").Msgf("Failed to enable IP forwarding... %v", err)
 	}
 	return nil
 }
 
-// loadImages loads the images; "portainer-agent", "coredns", "local-path-provisioner" and "pause" into the containerd images directory
+// loadImages loads the images; "portainer-agent", "coredns", "local-path-provisioner", "d2k" and "pause" into the containerd images directory
 func loadImages(containerdImagesDir string) error {
 	if err := filesystem.EnsureDirectoryExists(containerdImagesDir); err != nil {
 		return fmt.Errorf("failed to create directory %s... %w", containerdImagesDir, err)
@@ -138,6 +162,7 @@ func loadImages(containerdImagesDir string) error {
 		{portainerAgentImageFile, filepath.Join(containerdImagesDir, "portainer-agent.tar.gz"), "portainer-agent"},
 		{corednsImageFile, filepath.Join(containerdImagesDir, "coredns.tar.gz"), "coredns"},
 		{localPathProvisionerImageFile, filepath.Join(containerdImagesDir, "local-path-provisioner.tar.gz"), "local-path-provisioner"},
+		{d2kImageFile, filepath.Join(containerdImagesDir, "d2k.tar.gz"), "d2k"},
 		{sandboxImageFile, filepath.Join(containerdImagesDir, "pause.tar.gz"), "pause"},
 	}
 

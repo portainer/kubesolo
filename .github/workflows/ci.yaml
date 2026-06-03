@@ -13,23 +13,40 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux]
-        goarch: [amd64, arm64, arm, riscv64]
+        include:
+        # glibc builds
+        - goos: linux
+          goarch: amd64
+          libc: glibc
+          build_target: build
+        - goos: linux
+          goarch: arm64
+          libc: glibc
+          build_target: build
+        # musl builds (required for Alpine and other musl-based distros)
+        - goos: linux
+          goarch: amd64
+          libc: musl
+          build_target: build-musl
+        - goos: linux
+          goarch: arm64
+          libc: musl
+          build_target: build-musl
     steps:
       - name: "[preparation] checkout the current branch"
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: "[preparation] set up golang"
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
       - name: "[preparation] install cross-compilation toolchains"
-        run: sudo make install-cross-compilers
-      - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }}"
-        run: make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+        run: sudo make install-cross-compilers${{ matrix.libc == 'musl' && ' install-musl-cross-compilers' || '' }}
+      - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }} (${{ matrix.libc }})"
+        run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
       - name: "[execution] upload artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
           path: ./dist/kubesolo
           retention-days: 30

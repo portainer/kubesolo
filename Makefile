@@ -53,6 +53,10 @@ release-workflow-deps: install-cross-compilers install-musl-cross-compilers
 deps:
 	./build/download-deps.sh --os=$(GOOS) --arch=$(GOARCH)
 
+.PHONY: deps-offline
+deps-offline:
+	./build/download-deps.sh --os=$(GOOS) --arch=$(GOARCH) --offline
+
 # Generic build function that uses the correct cross-compiler based on GOARCH
 .PHONY: build
 build: lint deps
@@ -75,6 +79,56 @@ else ifeq ($(GOARCH),arm)
 		-o $(OUTPUT) ./cmd/kubesolo/main.go
 else
 	@echo "Unsupported architecture: $(GOARCH)"
+	@exit 1
+endif
+
+# Build offline variant with all OCI images embedded (air-gapped deployments)
+.PHONY: build-offline
+build-offline: lint deps-offline
+	@mkdir -p $(dir $(OUTPUT))
+ifeq ($(GOARCH),arm64)
+	CC=$(CC_arm64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),amd64)
+	CC=$(CC_amd64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),arm)
+	CC=$(CC_arm) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),riscv64)
+	CC=$(CC_riscv64) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING}" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else
+	@echo "Unsupported architecture: $(GOARCH)"
+	@exit 1
+endif
+
+# Build offline variant with musl for Alpine Linux compatibility (air-gapped deployments)
+.PHONY: build-musl-offline
+build-musl-offline: lint deps-offline
+	@mkdir -p $(dir $(OUTPUT))
+ifeq ($(GOARCH),arm64)
+	CC=$(CC_arm64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),amd64)
+	CC=$(CC_amd64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),arm)
+	CC=$(CC_arm_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=7 go build \
+		-tags offline -ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else ifeq ($(GOARCH),riscv64)
+	CC=$(CC_riscv64_musl) CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+		-tags offline -ldflags="${LDFLAGS_STRING} -linkmode external -extldflags '-static'" -a \
+		-o $(OUTPUT) ./cmd/kubesolo/main.go
+else
+	@echo "Unsupported architecture for musl offline build: $(GOARCH)"
 	@exit 1
 endif
 
@@ -113,7 +167,7 @@ build-using-image:
 		-e GOCACHE=/root/.cache/go-build \
 		-e GOMODCACHE=/go/pkg/mod \
 		-e CGO_ENABLED=1 -e CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) -e VERSION=$(VERSION) \
-		registry.k8s.io/build-image/kube-cross:v1.36.0-go1.25.7-bullseye.0 \
+		registry.k8s.io/build-image/kube-cross:v1.36.0-go1.26.2-bullseye.0 \
 		make build
 
 .PHONY: build-using-alpine
@@ -124,11 +178,12 @@ build-using-alpine:
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
 		-e CGO_ENABLED=1 -e CGO_CFLAGS="$(CGO_CFLAGS_EXTRA)" -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) \
-		golang:1.25-alpine \
+		golang:1.26-alpine \
 		sh -c "apk add --no-cache gcc musl-dev && go build -ldflags='${LDFLAGS_STRING} -linkmode external -extldflags \"-static\"' -a -o dist/kubesolo ./cmd/kubesolo/main.go"
 
 .PHONY: lint
 lint:
+	go mod tidy
 	go fmt ./...
 
 .PHONY: run

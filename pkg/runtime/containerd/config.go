@@ -9,6 +9,27 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// isCgroupV2 returns true if the host uses the cgroupv2 unified hierarchy.
+// When true, crun must use the systemd cgroup driver (SystemdCgroup=true)
+// instead of the cgroupfs driver which generates cgroupv1-style paths.
+func isCgroupV2() bool {
+	_, err := os.Stat("/sys/fs/cgroup/cgroup.controllers")
+	return err == nil
+}
+
+// isSystemdRunning returns true if systemd is the active init system.
+// On non-systemd hosts (e.g. Alpine with OpenRC), the systemd cgroup driver
+// must not be used even when cgroupv2 is available.
+func isSystemdRunning() bool {
+	_, err := os.Stat("/run/systemd/private")
+	return err == nil
+}
+
+// useSystemdCgroup returns true only when both cgroupv2 and systemd are present.
+func useSystemdCgroup() bool {
+	return isCgroupV2() && isSystemdRunning()
+}
+
 // writeConfigFile writes the containerd config to a file
 func (s *service) writeContainerdConfigFile() error {
 	tree, err := toml.TreeFromMap(s.generateContainerdConfig())
@@ -36,135 +57,80 @@ func (s *service) writeContainerdConfigFile() error {
 // generateConfig generates the containerd config
 func (s *service) generateContainerdConfig() map[string]any {
 	return map[string]any{
-		"version":          3,
-		"root":             s.containerdRootDir,
-		"state":            s.containerdStateDir,
-		"temp":             "",
-		"plugin_dir":       "",
-		"disabled_plugins": []string{},
-		"required_plugins": []string{},
-		"oom_score":        0,
-		"imports":          []string{types.DefaultContainerdConfigDir + "/*.toml"},
+		"version": 3,
+		"root":    s.containerdRootDir,
+		"state":   s.containerdStateDir,
+		"imports": []string{types.DefaultContainerdConfigDir + "/*.toml"},
 		"grpc": map[string]any{
 			"address": s.containerdSocketFile,
-			"uid":     0,
-			"gid":     0,
 		},
 
 		"plugins": map[string]any{
-			"io.containerd.cri.v1.images": map[string]any{
-				"snapshotter":                  "overlayfs",
-				"disable_snapshot_annotations": true,
-				"discard_unpacked_layers":      false,
-				"max_concurrent_downloads":     1,
-				"image_pull_progress_timeout":  "2m0s",
-				"image_pull_with_sync_fs":      false,
-				"stats_collect_period":         120,
-				"pinned_images": map[string]any{
-					"sandbox": types.DefaultSandboxImage,
-				},
-				"registry": map[string]any{
-					"config_path": "",
-				},
-				"image_decryption": map[string]any{
-					"key_model": "node",
-				},
-			},
+			"io.containerd.cri.v1.images": s.generateCRIImagesConfig(),
 
 			"io.containerd.cri.v1.runtime": map[string]any{
-				"enable_selinux":                         false,
-				"selinux_category_range":                 1024,
-				"max_container_log_line_size":            16384,
-				"disable_apparmor":                       false,
-				"restrict_oom_score_adj":                 false,
-				"disable_proc_mount":                     false,
-				"unset_seccomp_profile":                  "",
-				"tolerate_missing_hugetlb_controller":    true,
-				"disable_hugetlb_controller":             true,
-				"device_ownership_from_security_context": false,
-				"ignore_image_defined_volumes":           false,
-				"netns_mounts_under_state_dir":           false,
-				"enable_unprivileged_ports":              true,
-				"enable_unprivileged_icmp":               true,
-				"enable_cdi":                             true,
-				"drain_exec_sync_io_timeout":             "0s",
-				"ignore_deprecation_warnings":            []string{},
 				"containerd": map[string]any{
-					"default_runtime_name":              "runc",
-					"ignore_blockio_not_enabled_errors": false,
-					"ignore_rdt_not_enabled_errors":     false,
+					"default_runtime_name": "crun",
 					"runtimes": map[string]any{
-						"runc": map[string]any{
-							"runtime_type":                    "io.containerd.runc.v2",
-							"runtime_path":                    s.containerdShimBinaryFile,
-							"pod_annotations":                 []string{},
-							"container_annotations":           []string{},
-							"privileged_without_host_devices": false,
-							"privileged_without_host_devices_all_devices_allowed": false,
-							"base_runtime_spec": "",
-							"cni_conf_dir":      "",
-							"cni_max_conf_num":  0,
-							"snapshotter":       "",
-							"sandboxer":         "podsandbox",
-							"io_type":           "",
+						"crun": map[string]any{
+							"runtime_type": "io.containerd.runc.v2",
 							"options": map[string]any{
-								"BinaryName": s.runcBinaryFile,
+								"BinaryName":    s.crunBinaryFile,
+								"SystemdCgroup": useSystemdCgroup(),
 							},
 						},
 					},
 				},
 				"cni": map[string]any{
-					"bin_dir":               s.containerdCNIPluginsDir,
-					"conf_dir":              types.DefaultStandardCNIConfDir,
-					"max_conf_num":          1,
-					"setup_serially":        false,
-					"conf_template":         "",
-					"ip_pref":               "",
-					"use_internal_loopback": false,
+					"bin_dirs": []string{s.containerdCNIPluginsDir},
+					"conf_dir": types.DefaultStandardCNIConfDir,
 				},
 			},
 
-			"io.containerd.gc.v1.scheduler": map[string]any{
-				"pause_threshold":    0.01,
-				"deletion_threshold": 0,
-				"mutation_threshold": 50,
-				"schedule_delay":     "5s",
-				"startup_delay":      "200ms",
-			},
-
-			"io.containerd.grpc.v1.cri": map[string]any{
-				"disable_tcp_service":   true,
-				"stream_server_address": "127.0.0.1",
-				"stream_server_port":    "0",
-				"stream_idle_timeout":   "4h0m0s",
-				"enable_tls_streaming":  false,
-			},
-
-			"io.containerd.snapshotter.v1.overlayfs": map[string]any{
-				"root_path":      "",
-				"upperdir_label": false,
-				"sync_remove":    false,
-				"slow_chown":     false,
-				"mount_options":  []string{},
-			},
+			"io.containerd.gc.v1.scheduler": s.generateGCSchedulerConfig(),
 
 			"io.containerd.runtime.v2.task": map[string]any{
 				"platforms": []string{"linux/amd64", "linux/arm64", "linux/arm"},
 			},
 		},
+	}
+}
 
-		"cgroup": map[string]any{
-			"path": "",
+// generateCRIImagesConfig returns the CRI images plugin configuration.
+// Edge-specific overrides (max_concurrent_downloads, stats_collect_period) are
+// only applied when not in full mode.
+func (s *service) generateCRIImagesConfig() map[string]any {
+	cfg := map[string]any{
+		"image_pull_progress_timeout": "2m0s",
+		"pinned_images": map[string]any{
+			"sandbox": types.DefaultSandboxImage,
 		},
+		"registry": map[string]any{
+			"config_path": s.containerdRegistryConfigDir,
+		},
+	}
 
-		"timeouts": map[string]any{
-			"io.containerd.timeout.bolt.open":         "0s",
-			"io.containerd.timeout.metrics.shimstats": "2s",
-			"io.containerd.timeout.shim.cleanup":      "5s",
-			"io.containerd.timeout.shim.load":         "5s",
-			"io.containerd.timeout.shim.shutdown":     "3s",
-			"io.containerd.timeout.task.state":        "2s",
-		},
+	if !s.fullMode {
+		cfg["max_concurrent_downloads"] = 1
+		cfg["stats_collect_period"] = 120
+	}
+
+	return cfg
+}
+
+// generateGCSchedulerConfig returns the GC scheduler plugin configuration.
+// Edge-specific overrides are only applied when not in full mode.
+func (s *service) generateGCSchedulerConfig() map[string]any {
+	if s.fullMode {
+		return map[string]any{}
+	}
+
+	return map[string]any{
+		"pause_threshold":    0.01,
+		"deletion_threshold": 0,
+		"mutation_threshold": 50,
+		"schedule_delay":     "5s",
+		"startup_delay":      "200ms",
 	}
 }
 

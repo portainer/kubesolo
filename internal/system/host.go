@@ -111,5 +111,5 @@ func GetHostname() string {
 		log.Warn().Str("component", "kubesolo").Msg("failed to get hostname, using default value")
 		hostname = types.DefaultNodeName
 	}
-	return hostname
+	return strings.ToLower(hostname)
 }

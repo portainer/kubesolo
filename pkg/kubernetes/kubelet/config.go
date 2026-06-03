@@ -11,6 +11,16 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// cgroupDriver returns "systemd" only when systemd is the active init system,
+// otherwise "cgroupfs". Alpine Linux uses OpenRC and has no systemd even when
+// cgroupv2 is present, so the systemd cgroup manager must not be used there.
+func cgroupDriver() string {
+	if _, err := os.Stat("/run/systemd/private"); err == nil {
+		return "systemd"
+	}
+	return "cgroupfs"
+}
+
 func (s *service) writeKubeletConfigFile() error {
 	if err := filesystem.EnsureDirectoryExists(s.kubeletConfigDir); err != nil {
 		return fmt.Errorf("failed to create kubelet directory: %v", err)
@@ -41,45 +51,11 @@ func (s *service) writeKubeletConfigFile() error {
 }
 
 func (s *service) generateKubeletConfig() map[string]any {
-	cgroupDriver := "systemd"
-	if s.containerMode {
-		cgroupDriver = "cgroupfs"
-	}
-
-	evictionHard := map[string]string{
-		"memory.available": "75Mi",
-		"nodefs.available": "50Mi",
-	}
-	imageGCHigh := 95
-	systemReserved := map[string]string{"memory": "25Mi"}
-	kubeReserved := map[string]string{"memory": "25Mi"}
-	enforceNodeAllocatable := []string{"pods"}
-	cgroupsPerQOS := true
-	if s.containerMode {
-		evictionHard = map[string]string{
-			"memory.available":  "50Mi",
-			"nodefs.available":  "0%",
-			"nodefs.inodesFree": "0%",
-			"imagefs.available": "0%",
-		}
-		imageGCHigh = 100
-		// In a container, we cannot create the kubepods/system/kube cgroup hierarchies
-		// because cgroupv2 domain controllers block subtree creation.
-		// Disable QoS cgroup management and node allocatable enforcement entirely.
-		// Per-container cgroups are still managed by containerd/runc.
-		cgroupsPerQOS = false
-		enforceNodeAllocatable = []string{}
-		systemReserved = map[string]string{}
-		kubeReserved = map[string]string{}
-	}
-
-	return map[string]any{
-		"kind":         "KubeletConfiguration",
-		"apiVersion":   "kubelet.config.k8s.io/v1beta1",
-		"enableServer": true,
+	config := map[string]any{
+		"kind":       "KubeletConfiguration",
+		"apiVersion": "kubelet.config.k8s.io/v1beta1",
 
 		"containerRuntimeEndpoint": "unix://" + s.containerdSockFile,
-		"imageServiceEndpoint":     "unix://" + s.containerdSockFile,
 
 		"authentication": map[string]any{
 			"anonymous": map[string]any{
@@ -108,54 +84,63 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 
-		"cgroupDriver":  cgroupDriver,
-		"cgroupsPerQOS": cgroupsPerQOS,
+		"cgroupDriver": cgroupDriver(),
 
-		"enforceNodeAllocatable": enforceNodeAllocatable,
+		"readOnlyPort":       0,
+		"rotateCertificates": true,
 
-		"registerNode":                   true,
-		"readOnlyPort":                   0,
-		"port":                           10250,
-		"syncFrequency":                  "5m0s",
-		"fileCheckFrequency":             "2m0s",
-		"httpCheckFrequency":             "2m0s",
-		"nodeStatusUpdateFrequency":      "60s",
-		"nodeStatusReportFrequency":      "15m0s",
-		"volumeStatsAggPeriod":           "5m0s",
-		"imageMinimumGCAge":              "10m0s",
-		"imageMaximumGCAge":              "0s",
-		"imageGCHighThresholdPercent":    imageGCHigh,
-		"imageGCLowThresholdPercent":     80,
-		"runtimeRequestTimeout":          "60s",
-		"cpuManagerReconcilePeriod":      "60s",
-		"streamingConnectionIdleTimeout": "1h0m0s",
-		"rotateCertificates":             true,
-
-		"registerWithTaints": []map[string]any{},
-
-		"evictionHard":   evictionHard,
-		"systemReserved": systemReserved,
-		"kubeReserved":   kubeReserved,
-		"failSwapOn":     false,
-
-		"kubeAPIQPS":                10,
-		"kubeAPIBurst":              20,
-		"serializeImagePulls":       true,
-		"imagePullProgressDeadline": "1m",
-
-		"registryPullQPS": 5,
-		"registryBurst":   10,
-
-		"eventRecordQPS": 5,
-		"eventBurst":     10,
-
-		"containerLogMaxSize":     "512Ki",
-		"enableProfilingHandler":  false,
-		"enableDebugFlagsHandler": false,
-		"maxPods":                 20,
-
-		"featureGates": map[string]bool{
-			"RotateKubeletServerCertificate": true,
-		},
+		"failSwapOn": false,
 	}
+
+	if s.containerMode {
+		// In a container cgroupv2 domain controllers block creating the
+		// kubepods/system/kube cgroup hierarchies required for QoS management.
+		// Disable QoS cgroups and node-allocatable enforcement; containerd/runc
+		// still manage per-container cgroups normally.
+		config["cgroupsPerQOS"] = false
+		config["enforceNodeAllocatable"] = []string{}
+		config["imageGCHighThresholdPercent"] = 100
+		config["evictionHard"] = map[string]string{
+			"memory.available":  "50Mi",
+			"nodefs.available":  "0%",
+			"nodefs.inodesFree": "0%",
+			"imagefs.available": "0%",
+		}
+		config["systemReserved"] = map[string]string{}
+		config["kubeReserved"] = map[string]string{}
+		return config
+	}
+
+	// Edge-optimised overrides — only applied when not in full mode.
+	// When full mode is enabled, upstream Kubernetes defaults are used instead.
+	if !s.fullMode {
+		config["enableProfilingHandler"] = false
+		config["enableDebugFlagsHandler"] = false
+		config["streamingConnectionIdleTimeout"] = "1h0s"
+		config["syncFrequency"] = "5m0s"
+		config["fileCheckFrequency"] = "2m0s"
+		config["httpCheckFrequency"] = "2m0s"
+		config["nodeStatusUpdateFrequency"] = "60s"
+		config["nodeStatusReportFrequency"] = "15m0s"
+		config["volumeStatsAggPeriod"] = "5m0s"
+		config["imageMinimumGCAge"] = "10m0s"
+		config["imageMaximumGCAge"] = "0s"
+		config["imageGCHighThresholdPercent"] = 95
+		config["runtimeRequestTimeout"] = "60s"
+		config["cpuManagerReconcilePeriod"] = "60s"
+		config["kubeAPIQPS"] = 10
+		config["kubeAPIBurst"] = 20
+		config["eventRecordQPS"] = 5
+		config["eventBurst"] = 10
+		config["containerLogMaxSize"] = "512Ki"
+		config["maxPods"] = 20
+		config["evictionHard"] = map[string]string{
+			"memory.available": "75Mi",
+			"nodefs.available": "50Mi",
+		}
+		config["systemReserved"] = map[string]string{"memory": "25Mi"}
+		config["kubeReserved"] = map[string]string{"memory": "25Mi"}
+	}
+
+	return config
 }

@@ -57,7 +57,9 @@ func (s *service) Run(apiServerReady chan struct{}) error {
 	}
 
 	s.wg.Go(func() {
-		s.postSetup()
+		if err := s.postSetup(); err != nil {
+			return
+		}
 		log.Info().Str("component", "kubelet").Msg("kubelet started successfully...")
 		close(s.kubeletReady)
 	})
@@ -72,17 +74,26 @@ func (s *service) Run(apiServerReady chan struct{}) error {
 	return nil
 }
 
-func (s *service) postSetup() {
+func (s *service) postSetup() error {
 	if err := s.applyKubeletRBAC(); err != nil {
 		log.Error().Str("component", "kubelet").Msgf("failed to apply RBAC rules: %v...", err)
-		s.terminate()
-		return
+		s.cancelShutdown()
+		return err
 	}
 
 	if err := s.checkKubeletHealth(); err != nil {
 		log.Error().Str("component", "kubelet").Msgf("kubelet health check failed: %v...", err)
-		s.terminate()
+		s.cancelShutdown()
+		return err
 	}
+	return nil
+}
+
+// cancelShutdown cancels the service context. Use from goroutines started with s.wg.Go;
+// terminate() must not be called from those goroutines (it waits on s.wg and deadlocks).
+func (s *service) cancelShutdown() {
+	log.Info().Str("component", "kubelet").Msg("canceling kubelet...")
+	s.cancel()
 }
 
 func (s *service) terminate() {
