@@ -3,10 +3,12 @@ package pki
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
@@ -22,17 +24,12 @@ import (
 func InvalidateIfIPChanged(embedded types.Embedded) error {
 	certPath := filepath.Join(embedded.PKIAPIServerDir, "apiserver.crt")
 
-	if _, err := os.Stat(certPath); os.IsNotExist(err) {
-		return nil
-	}
-
-	// Cert file exists — any failure to read or parse it means the PKI is
-	// unusable. Fall through to removal rather than leaving a broken state.
 	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
-		log.Warn().Str("component", "pki").Str("cert", certPath).
-			Msg("existing certificate is unreadable — removing PKI directory for regeneration")
-		return removePKIDir(embedded.PKIDir)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
 	}
 
 	block, _ := pem.Decode(certPEM)
@@ -49,8 +46,19 @@ func InvalidateIfIPChanged(embedded types.Embedded) error {
 		return removePKIDir(embedded.PKIDir)
 	}
 
+	if time.Now().After(cert.NotAfter) {
+		log.Warn().Str("component", "pki").Time("expired_at", cert.NotAfter).
+			Msg("existing certificate has expired — removing PKI directory for regeneration")
+		return removePKIDir(embedded.PKIDir)
+	}
+
 	currentIPs, err := network.GetLocalIPs()
-	if err != nil || len(currentIPs) == 0 {
+	if err != nil {
+		log.Warn().Str("component", "pki").Err(err).
+			Msg("could not enumerate local IPs — skipping PKI invalidation check")
+		return nil
+	}
+	if len(currentIPs) == 0 {
 		return nil
 	}
 
@@ -63,20 +71,24 @@ func InvalidateIfIPChanged(embedded types.Embedded) error {
 	}
 
 	for _, current := range nodeIPs {
+		covered := false
 		for _, san := range cert.IPAddresses {
 			if current.Equal(san) {
-				return nil
+				covered = true
+				break
 			}
+		}
+		if !covered {
+			log.Warn().
+				Str("component", "pki").
+				Str("missing_ip", current.String()).
+				Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
+				Msg("node IP not found in existing certificate SANs — removing PKI directory for regeneration")
+			return removePKIDir(embedded.PKIDir)
 		}
 	}
 
-	log.Warn().
-		Str("component", "pki").
-		Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
-		Strs("node_ips", ipsToStrings(nodeIPs)).
-		Msg("node IP not found in existing certificate SANs — removing PKI directory for regeneration")
-
-	return removePKIDir(embedded.PKIDir)
+	return nil
 }
 
 func removePKIDir(pkiDir string) error {
