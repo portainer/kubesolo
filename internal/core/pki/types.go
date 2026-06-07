@@ -24,6 +24,12 @@ const (
 	RequestHeaderCACert CertificateType = "request-header-ca"
 	// RequestHeaderClientCert is the request header client certificate
 	RequestHeaderClientCert CertificateType = "request-header-client"
+	// D2KServerCert is the TLS server certificate for the d2k Docker-compatible
+	// API endpoint, signed by the kubesolo CA.
+	D2KServerCert CertificateType = "d2k-server"
+	// D2KClientCert is the TLS client certificate operators present to the d2k
+	// endpoint via `docker --tlscert/--tlskey`, signed by the kubesolo CA.
+	D2KClientCert CertificateType = "d2k-client"
 )
 
 // CertOptions holds configuration for certificate generation

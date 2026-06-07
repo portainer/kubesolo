@@ -62,6 +62,21 @@ func GenerateAllCertificates(embedded types.Embedded) error {
 		return fmt.Errorf("failed to generate request header client certificate: %v", err)
 	}
 
+	// d2k certs are only generated when the integration is enabled.
+	// Both certs are signed by the kubesolo CA so docker clients can verify
+	// the d2k server using the same CA bundle that already exists on disk.
+	if embedded.D2K {
+		d2kServerOpts := defaultCertOptions(D2KServerCert, embedded)
+		if err := generateCertificate(d2kServerOpts); err != nil {
+			return fmt.Errorf("failed to generate d2k server certificate: %v", err)
+		}
+
+		d2kClientOpts := defaultCertOptions(D2KClientCert, embedded)
+		if err := generateCertificate(d2kClientOpts); err != nil {
+			return fmt.Errorf("failed to generate d2k client certificate: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -205,6 +220,14 @@ func configureCertificateByType(template *x509.Certificate, certType Certificate
 		template.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature
 
 	case RequestHeaderClientCert:
+		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
+		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+
+	case D2KServerCert:
+		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
+		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+
+	case D2KClientCert:
 		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
 		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 	}

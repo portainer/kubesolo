@@ -27,7 +27,9 @@ type service struct {
 	corednsImageFile              string
 	sandboxImageFile              string
 	localPathProvisionerImageFile string
+	d2kImageFile                  string
 	isPortainerEdge               bool
+	isD2K                         bool
 	fullMode                      bool
 }
 
@@ -51,7 +53,9 @@ func NewService(ctx context.Context, cancel context.CancelFunc, containerdReady 
 		corednsImageFile:              embedded.CorednsImageFile,
 		sandboxImageFile:              embedded.SandboxImageFile,
 		localPathProvisionerImageFile: embedded.LocalPathProvisionerImageFile,
+		d2kImageFile:                  embedded.D2KImageFile,
 		isPortainerEdge:               embedded.IsPortainerEdge,
+		isD2K:                         embedded.D2K,
 		fullMode:                      embedded.FullMode,
 	}
 }
