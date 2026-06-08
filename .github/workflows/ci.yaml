@@ -50,3 +50,29 @@ jobs:
           name: kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
           path: ./dist/kubesolo
           retention-days: 30
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] install cross-compilation toolchains"
+        run: sudo make install-cross-compilers install-musl-cross-compilers
+      - name: "[execution] build linux/amd64 musl binary"
+        run: make build-musl GOOS=linux GOARCH=amd64
+      - name: "[preparation] set up docker buildx"
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+      - name: "[execution] build docker image (validate only, no push)"
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: portainer/kubesolo:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
