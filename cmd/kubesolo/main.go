@@ -232,7 +232,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kubeproxy",
 			start: func() {
-				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.FullMode)
+				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.FullMode)
 				s.wg.Go(func() {
 					kubeproxyService.Run(kubeletReadyCh)
 				})
@@ -266,7 +266,7 @@ func (s *kubesolo) run() {
 	}
 
 	log.Info().Str("component", "kubesolo").Msg("deploying coredns...")
-	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.DisableIPv6); err != nil {
+	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.DisableIPv6); err != nil {
 		log.Fatal().Err(err).Msg("failed to deploy coredns")
 	}
 
@@ -408,6 +408,19 @@ func (s *kubesolo) bootstrap() {
 
 	// Setup paths
 	basePath := *flags.Path
+	containerMode := *flags.ContainerMode || system.IsRunningInContainer()
+	if containerMode {
+		log.Info().Str("component", "kubesolo").Msg("container mode detected, using cgroupfs driver and relaxed eviction thresholds")
+
+		if err := system.SetupContainerMounts(); err != nil {
+			log.Fatal().Err(err).Msg("failed to setup container mount propagation")
+		}
+
+		if err := system.SetupContainerCgroups(); err != nil {
+			log.Fatal().Err(err).Msg("failed to setup container cgroups")
+		}
+	}
+
 	// Clean stale runtime state from previous runs (e.g., after reboot)
 	// This removes stale sockets and containerd runtime state that reference
 	// dead processes, while preserving images, kine database, and PKI certs.
@@ -535,6 +548,9 @@ func (s *kubesolo) bootstrap() {
 		// Portainer Edge
 		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
 
+		// Container Mode
+		ContainerMode: containerMode,
+
 		// Full mode
 		FullMode: s.fullMode,
 
@@ -551,6 +567,6 @@ func (s *kubesolo) bootstrap() {
 			ClientCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.crt"),
 			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
 		},
-		D2KImageFile:     filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
+		D2KImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
 	}
 }

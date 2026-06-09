@@ -80,7 +80,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"clusterDomain": "cluster.local",
 		"clusterDNS":    []string{types.DefaultCoreDNSIP},
 
-		"resolvConf":        network.GetHostResolvConf(s.kubeletDir),
+		"resolvConf":        network.GetHostResolvConf(s.kubeletDir, s.containerMode),
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 
@@ -90,6 +90,25 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"rotateCertificates": true,
 
 		"failSwapOn": false,
+	}
+
+	if s.containerMode {
+		// In a container cgroupv2 domain controllers block creating the
+		// kubepods/system/kube cgroup hierarchies required for QoS management.
+		// Disable QoS cgroups and node-allocatable enforcement; containerd/runc
+		// still manage per-container cgroups normally.
+		config["cgroupsPerQOS"] = false
+		config["enforceNodeAllocatable"] = []string{}
+		config["imageGCHighThresholdPercent"] = 100
+		config["evictionHard"] = map[string]string{
+			"memory.available":  "50Mi",
+			"nodefs.available":  "0%",
+			"nodefs.inodesFree": "0%",
+			"imagefs.available": "0%",
+		}
+		config["systemReserved"] = map[string]string{}
+		config["kubeReserved"] = map[string]string{}
+		return config
 	}
 
 	// Edge-optimised overrides — only applied when not in full mode.

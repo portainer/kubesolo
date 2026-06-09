@@ -34,7 +34,12 @@ func (s *service) configureKubeProxyFlags(command *cobra.Command) {
 
 	// proxy mode and conntrack settings
 	_ = flags.Set("proxy-mode", proxyMode)
-	if !s.fullMode {
+	if s.containerMode {
+		// In container mode, avoid writing to /proc/sys/net/netfilter/nf_conntrack_max
+		// which may be read-only depending on the container runtime.
+		_ = flags.Set("conntrack-max-per-core", "0")
+		_ = flags.Set("conntrack-min", "0")
+	} else if !s.fullMode {
 		_ = flags.Set("profiling", "false")
 		_ = flags.Set("conntrack-max-per-core", "1024")
 		_ = flags.Set("conntrack-min", "1024")

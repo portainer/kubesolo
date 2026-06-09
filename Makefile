@@ -217,3 +217,28 @@ archive-musl:
 
 # Include custom make targets
 -include $(wildcard .dev/*.make)
+
+# ---------- Container Image targets ----------
+
+IMAGE_NAME ?= portainer/kubesolo
+IMAGE_TAG ?= $(VERSION)
+
+# Build the container image (downloads arch-specific deps, builds static binary via Alpine, then packages it)
+.PHONY: image
+image: deps build-using-alpine
+	docker buildx build \
+		--platform $(GOOS)/$(GOARCH) \
+		-t $(IMAGE_NAME):$(IMAGE_TAG)-$(GOOS)-$(GOARCH) .
+
+# Build multi-arch container images using buildx
+.PHONY: image-buildx
+image-buildx:
+	docker buildx build --platform $(GOOS)/$(GOARCH) \
+		-t $(IMAGE_NAME):$(IMAGE_TAG) -t $(IMAGE_NAME):latest \
+		--push .
+
+# Push the container image
+.PHONY: image-push
+image-push:
+	docker push $(IMAGE_NAME):$(IMAGE_TAG)
+	docker push $(IMAGE_NAME):latest

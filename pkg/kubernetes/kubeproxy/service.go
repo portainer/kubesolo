@@ -12,16 +12,18 @@ type service struct {
 	cancel              context.CancelFunc
 	kubeproxyReady      chan<- struct{}
 	adminKubeconfigFile string
+	containerMode       bool
 	fullMode            bool
 }
 
 // NewService creates a new kube proxy service
-func NewService(ctx context.Context, cancel context.CancelFunc, kubeproxyReady chan<- struct{}, adminKubeconfigFile string, fullMode bool) *service {
+func NewService(ctx context.Context, cancel context.CancelFunc, kubeproxyReady chan<- struct{}, adminKubeconfigFile string, containerMode bool, fullMode bool) *service {
 	return &service{
 		ctx:                 ctx,
 		cancel:              cancel,
 		kubeproxyReady:      kubeproxyReady,
 		adminKubeconfigFile: adminKubeconfigFile,
+		containerMode:       containerMode,
 		fullMode:            fullMode,
 	}
 }

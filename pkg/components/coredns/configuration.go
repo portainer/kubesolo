@@ -11,7 +11,17 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const coreDNSConfigIPv4Only = `.:53 {
+// coreDNSConfig returns the CoreDNS Corefile for the requested IP-family and
+// resolver mode.  In container mode /etc/resolv.conf is empty (kubelet uses
+// resolvConf: /dev/null) so hardcoded public resolvers are used instead.
+func coreDNSConfig(containerMode bool, disableIPv6 bool) string {
+	forward := "forward . /etc/resolv.conf"
+	if containerMode {
+		forward = "forward . 1.1.1.1 8.8.8.8"
+	}
+
+	if disableIPv6 {
+		return `.:53 {
 	errors
 	loop
 	cache 30 {
@@ -22,14 +32,15 @@ const coreDNSConfigIPv4Only = `.:53 {
 		fallthrough in-addr.arpa
 		ttl 30
 	}
-	forward . /etc/resolv.conf
+	` + forward + `
 	minimal
 	reload
 	health :8080
 	ready :8181
 }`
+	}
 
-const coreDNSConfigDualStack = `.:53 {
+	return `.:53 {
 	errors
 	loop
 	cache 30 {
@@ -40,31 +51,25 @@ const coreDNSConfigDualStack = `.:53 {
 		fallthrough in-addr.arpa ip6.arpa
 		ttl 30
 	}
-	forward . /etc/resolv.conf
+	` + forward + `
 	minimal
 	reload
 	health :8080
 	ready :8181
 }`
-
-func coreDNSConfig(disableIPv6 bool) string {
-	if disableIPv6 {
-		return coreDNSConfigIPv4Only
-	}
-	return coreDNSConfigDualStack
 }
 
 // createConfigMap creates or patches the CoreDNS ConfigMap with the Corefile
 // for the selected IP family mode. On update it uses a merge patch so existing
 // metadata (labels, annotations) and unrelated data keys are preserved.
-func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, disableIPv6 bool) error {
+func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, containerMode bool, disableIPv6 bool) error {
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      coreDNSConfigMapName,
 			Namespace: coreDNSNamespace,
 		},
 		Data: map[string]string{
-			"Corefile": coreDNSConfig(disableIPv6),
+			"Corefile": coreDNSConfig(containerMode, disableIPv6),
 		},
 	}
 
@@ -77,7 +82,7 @@ func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, disab
 	}
 
 	patch, err := json.Marshal(map[string]any{
-		"data": map[string]string{"Corefile": coreDNSConfig(disableIPv6)},
+		"data": map[string]string{"Corefile": coreDNSConfig(containerMode, disableIPv6)},
 	})
 	if err != nil {
 		return err

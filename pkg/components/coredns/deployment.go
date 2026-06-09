@@ -13,9 +13,28 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createDeployment(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createDeployment(ctx context.Context, clientset *kubernetes.Clientset, containerMode bool) error {
 	replicas := int32(1)
 	priorityClassName := "system-cluster-critical"
+
+	resources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("64Mi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("20Mi"),
+			corev1.ResourceCPU:    kubesolokubernetes.ParseResourceQuantity("50m"),
+		},
+	}
+
+	if containerMode {
+		resources = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("20Mi"),
+				corev1.ResourceCPU:    kubesolokubernetes.ParseResourceQuantity("50m"),
+			},
+		}
+	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -57,16 +76,8 @@ func createDeployment(ctx context.Context, clientset *kubernetes.Clientset) erro
 							Name:            "coredns",
 							Image:           types.DefaultCoreDNSImage,
 							ImagePullPolicy: corev1.PullIfNotPresent,
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("64Mi"),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceMemory: kubesolokubernetes.ParseResourceQuantity("20Mi"),
-									corev1.ResourceCPU:    kubesolokubernetes.ParseResourceQuantity("50m"),
-								},
-							},
-							Args: []string{"-conf", "/etc/coredns/Corefile"},
+							Resources:       resources,
+							Args:            []string{"-conf", "/etc/coredns/Corefile"},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "config-volume",
