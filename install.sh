@@ -1164,6 +1164,29 @@ for arg in "$@"; do
   esac
 done
 
+# ── Recover env vars stripped by sudo env_reset ───────────────────────────────
+# Some systems configure sudo with env_reset, causing '-E' to be silently
+# ignored and stripping KUBESOLO_PORTAINER_* vars before the script runs.
+# Since we are invoked as root, we can read them back from the sudo process's
+# own environment via /proc/$PPID/environ, which still holds the vars that were
+# set in the shell before sudo was called.
+if [ -n "$SUDO_USER" ] && [ -z "$PORTAINER_EDGE_KEY" ] && [ -r "/proc/$PPID/environ" ]; then
+    _penv=$(cat "/proc/$PPID/environ" 2>/dev/null | tr '\0' '\n')
+
+    if [ -z "$PORTAINER_EDGE_ID" ]; then
+        _v=$(printf '%s\n' "$_penv" | grep "^KUBESOLO_PORTAINER_EDGE_ID=" | cut -d= -f2-)
+        [ -n "$_v" ] && PORTAINER_EDGE_ID="$_v"
+    fi
+
+    _v=$(printf '%s\n' "$_penv" | grep "^KUBESOLO_PORTAINER_EDGE_KEY=" | cut -d= -f2-)
+    [ -n "$_v" ] && PORTAINER_EDGE_KEY="$_v"
+
+    _v=$(printf '%s\n' "$_penv" | grep "^KUBESOLO_PORTAINER_EDGE_ASYNC=" | cut -d= -f2-)
+    [ -n "$_v" ] && PORTAINER_EDGE_ASYNC="$_v"
+
+    unset _penv _v
+fi
+
 # ── Download-only path ────────────────────────────────────────────────────────
 # Runs without root. No pre-flight checks, no installation.
 if [ -n "$DOWNLOAD_ONLY_DIR" ]; then
@@ -1277,6 +1300,10 @@ fi
 
 if [ -n "$PORTAINER_EDGE_KEY" ]; then
   CMD_ARGS="$CMD_ARGS --portainer-edge-key=$PORTAINER_EDGE_KEY"
+fi
+
+if [ "$PORTAINER_EDGE_ASYNC" = "true" ]; then
+  CMD_ARGS="$CMD_ARGS --portainer-edge-async=true"
 fi
 
 if [ "$LOCAL_STORAGE" = "true" ]; then
