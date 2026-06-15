@@ -5,7 +5,9 @@ import (
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
+	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
+	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -13,6 +15,7 @@ import (
 
 func uninstallCmd() *cobra.Command {
 	var purge bool
+	var removeKubeconfig bool
 
 	cmd := &cobra.Command{
 		Use:   "uninstall",
@@ -29,6 +32,7 @@ cluster state is preserved. Use --purge to also remove it.`,
 			if err != nil {
 				return err
 			}
+			process.StopAll(initControlBinary(info.InitSystem))
 			mgr, err := service.New(info, config.RunModeService)
 			if err != nil {
 				return err
@@ -46,6 +50,7 @@ cluster state is preserved. Use --purge to also remove it.`,
 
 			if purge {
 				log.Warn().Msgf("purging data directory: %s", config.DefaultPath)
+				unmountDataDir(config.DefaultPath)
 				if err := os.RemoveAll(config.DefaultPath); err != nil {
 					log.Warn().Err(err).Msgf("could not fully remove data directory %s", config.DefaultPath)
 				} else {
@@ -55,6 +60,10 @@ cluster state is preserved. Use --purge to also remove it.`,
 				log.Info().Msgf("data directory preserved: %s (use --purge to remove)", config.DefaultPath)
 			}
 
+			if removeKubeconfig {
+				kubeconfig.RemoveFromUserConfig()
+			}
+
 			log.Info().Msg("KubeSolo uninstalled successfully")
 			return nil
 		},
@@ -62,5 +71,8 @@ cluster state is preserved. Use --purge to also remove it.`,
 
 	cmd.Flags().BoolVar(&purge, "purge", false,
 		"Also remove the data directory ("+config.DefaultPath+") — this deletes all cluster state")
+	cmd.Flags().BoolVar(&removeKubeconfig, "remove-kubeconfig", false,
+		"Remove the KubeSolo context, cluster, and user entries from ~/.kube/config")
 	return cmd
 }
+

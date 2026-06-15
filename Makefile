@@ -220,7 +220,7 @@ archive-musl:
 # kubesoloctl is built with CGO_ENABLED=0 (pure Go). A single binary per
 # architecture runs on both glibc and musl systems, so there is no libc split.
 #
-# Supported targets: linux/amd64, linux/arm64, linux/arm (armhf), linux/riscv64
+# Supported targets: linux/amd64, linux/arm64
 
 KUBESOLOCTL_LDFLAGS = -s -w \
 	-X main.Version=$(VERSION) \

@@ -9,7 +9,7 @@ import (
 )
 
 func checkCmd(cfg *config.Config) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Run pre-flight checks without installing",
 		Long:  `Validates that this host meets all requirements for KubeSolo. Exits 0 on success.`,
@@ -27,4 +27,12 @@ func checkCmd(cfg *config.Config) *cobra.Command {
 			return preflight.RunSuite(preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer))
 		},
 	}
+	f := cmd.Flags()
+	f.BoolVar(&cfg.InstallPrereqs, "install-prereqs",
+		envBool("KUBESOLO_INSTALL_PREREQS", false),
+		"Automatically install missing OS prerequisites (e.g. nftables on Alpine)")
+	f.BoolVar(&cfg.PprofServer, "pprof-server",
+		envBool("KUBESOLO_PPROF_SERVER", false),
+		"Include pprof port 6060 in port conflict checks")
+	return cmd
 }

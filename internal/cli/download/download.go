@@ -84,7 +84,7 @@ func installOnline(archiveName, version string) error {
 	url := fmt.Sprintf("%s/%s/%s", releaseBaseURL, version, archiveName)
 	log.Info().Msgf("downloading KubeSolo %s from %s ...", version, url)
 
-	tmpDir, err := os.MkdirTemp("", "kubesolo-install-*")
+	tmpDir, err := os.MkdirTemp(installTempParent(), "kubesolo-install-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -105,7 +105,7 @@ func installOffline(src string) error {
 		return fmt.Errorf("offline source not found: %s", src)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "kubesolo-install-*")
+	tmpDir, err := os.MkdirTemp(installTempParent(), "kubesolo-install-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -250,6 +250,20 @@ func downloadFile(url, dest string) error {
 	}
 	log.Debug().Msgf("downloaded %d bytes from %s", written, url)
 	return nil
+}
+
+// installTempParent returns the best parent directory for a temporary install
+// workspace. On Alpine (and other distros) /tmp is a small tmpfs that cannot
+// hold the KubeSolo binary — using $HOME (typically /root during a root
+// install) puts the temp dir on the main filesystem, matching the bash
+// installer's `mktemp -d -p "$HOME"` behaviour.
+func installTempParent() string {
+	if home := os.Getenv("HOME"); home != "" {
+		if _, err := os.Stat(home); err == nil {
+			return home
+		}
+	}
+	return "" // falls back to os.TempDir()
 }
 
 // copyFile copies src to dst.

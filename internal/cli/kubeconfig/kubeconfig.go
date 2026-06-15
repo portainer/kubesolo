@@ -21,6 +21,68 @@ func KubeSoloKubeconfigPath(dataPath string) string {
 	return filepath.Join(dataPath, "pki", "admin", "admin.kubeconfig")
 }
 
+// RemoveFromUserConfig surgically removes the KubeSolo context, cluster, and
+// user entries from the real user's ~/.kube/config. It is a no-op if kubectl
+// is not installed or if no kubesolo entries are present.
+func RemoveFromUserConfig() {
+	kubectlPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		log.Info().Msg("kubectl not found — skipping kubeconfig cleanup")
+		log.Info().Msg("remove the 'kubesolo' context/cluster/user entries from ~/.kube/config manually if needed")
+		return
+	}
+
+	_, realHome, _, _ := resolveRealUser()
+	kubeconfigFile := filepath.Join(realHome, ".kube", "config")
+	if _, err := os.Stat(kubeconfigFile); err != nil {
+		log.Debug().Msgf("no kubeconfig at %s — nothing to clean up", kubeconfigFile)
+		return
+	}
+
+	env := append(os.Environ(), "KUBECONFIG="+kubeconfigFile)
+
+	// Check whether the kubesolo context actually exists before touching anything.
+	out, err := cmdOutput(kubectlPath, env, "config", "get-contexts", "-o", "name")
+	if err != nil || !strings.Contains(out, "kubesolo") {
+		log.Debug().Msg("no kubesolo context found in kubeconfig — nothing to remove")
+		return
+	}
+
+	log.Info().Msgf("removing KubeSolo entries from %s...", kubeconfigFile)
+
+	run := func(args ...string) {
+		if err := cmdRun(kubectlPath, env, args...); err != nil {
+			log.Debug().Err(err).Msgf("kubectl %s returned non-zero (may already be absent)", strings.Join(args, " "))
+		}
+	}
+	run("config", "delete-context", "kubesolo")
+	run("config", "unset", "clusters.kubesolo")
+	run("config", "unset", "users.kubesolo-admin")
+
+	log.Info().Msg("KubeSolo kubeconfig entries removed")
+
+	// Inform about any backup the install step created so the user can restore it.
+	backups, _ := filepath.Glob(filepath.Join(realHome, ".kube", "config.backup-*"))
+	if len(backups) > 0 {
+		log.Info().Msgf("backup kubeconfig available: %s", backups[len(backups)-1])
+	}
+}
+
+// cmdRun executes kubectl with the given env and args, discarding output.
+func cmdRun(kubectlPath string, env []string, args ...string) error {
+	cmd := exec.Command(kubectlPath, args...)
+	cmd.Env = env
+	return cmd.Run()
+}
+
+// cmdOutput executes kubectl and returns combined stdout as a string.
+func cmdOutput(kubectlPath string, env []string, args ...string) (string, error) {
+	cmd := exec.Command(kubectlPath, args...)
+	cmd.Env = env
+	out, err := cmd.Output()
+	return string(out), err
+}
+
 // MergeAfterStartup waits up to 30 seconds for KubeSolo to generate its admin
 // kubeconfig and then merges it into the real user's ~/.kube/config. It is a
 // no-op if kubectl is not installed.

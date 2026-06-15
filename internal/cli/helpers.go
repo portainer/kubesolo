@@ -117,8 +117,10 @@ func runServiceLogs(init detect.InitSystem) error {
 	switch init {
 	case detect.InitSystemd:
 		return runCmd("journalctl", "-u", config.AppName, "-f")
-	case detect.InitOpenRC, detect.InitSysV:
+	case detect.InitOpenRC:
 		return runCmd("tail", "-f", "/var/log/messages")
+	case detect.InitSysV:
+		return runCmd("tail", "-f", "/var/log/syslog")
 	case detect.InitUpstart:
 		return runCmd("tail", "-f", "/var/log/upstart/"+config.AppName+".log")
 	default:

@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
@@ -60,6 +61,12 @@ func (m *runitManager) Install(cfg *config.Config, cmdArgs []string) error {
 }
 
 func (m *runitManager) Uninstall() error {
+	// Ask runsv to stop the service gracefully before we remove its directory.
+	// Removing the symlink alone causes runit to kill the process immediately;
+	// `sv stop` sends SIGTERM and waits for a clean exit first.
+	if err := exec.Command("sv", "stop", config.AppName).Run(); err != nil {
+		log.Debug().Err(err).Msg("sv stop returned non-zero (may already be stopped)")
+	}
 	for _, svcDir := range []string{"/var/service", "/etc/runit/runsvdir/default"} {
 		_ = os.Remove(filepath.Join(svcDir, config.AppName))
 	}

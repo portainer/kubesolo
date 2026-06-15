@@ -10,7 +10,6 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
 	"github.com/portainer/kubesolo/internal/cli/process"
-	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -70,10 +69,6 @@ func runReset(dataPath string, force bool) error {
 
 	// Restart the service to initialize fresh state
 	log.Info().Msg("starting KubeSolo service (fresh cluster)...")
-	if _, err := service.New(info, config.RunModeService); err != nil {
-		log.Info().Msg("reset complete — start KubeSolo manually to initialize a fresh cluster")
-		return nil
-	}
 	if err := runServiceAction(info.InitSystem, "start"); err != nil {
 		log.Warn().Err(err).Msg("could not restart service — start it manually")
 	}
