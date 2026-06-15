@@ -74,6 +74,9 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "push=true" >> "$GITHUB_OUTPUT"
             echo "tags=portainerci/kubesolo:pr-${{ github.event.pull_request.number }}-linux-${{ matrix.goarch }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+            echo "tags=portainerci/kubesolo:develop-linux-${{ matrix.goarch }}" >> "$GITHUB_OUTPUT"
           else
             echo "push=false" >> "$GITHUB_OUTPUT"
             echo "tags=portainerci/kubesolo:ci-linux-${{ matrix.goarch }}" >> "$GITHUB_OUTPUT"
@@ -87,7 +90,7 @@ jobs:
       - name: "[preparation] set up docker buildx"
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       - name: "[preparation] log in to docker hub"
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/develop')
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
           registry: docker.io
@@ -104,7 +107,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   docker-manifest:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
     needs: [docker-build]
     steps:
@@ -116,9 +119,17 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
       - name: "[preparation] set up docker buildx"
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+      - name: "[preparation] resolve manifest tag"
+        id: manifest
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=develop" >> "$GITHUB_OUTPUT"
+          fi
       - name: "[execution] create and push multi-arch manifest"
         run: |
           docker buildx imagetools create \
-            -t portainerci/kubesolo:pr-${{ github.event.pull_request.number }} \
-            portainerci/kubesolo:pr-${{ github.event.pull_request.number }}-linux-amd64 \
-            portainerci/kubesolo:pr-${{ github.event.pull_request.number }}-linux-arm64
+            -t portainerci/kubesolo:${{ steps.manifest.outputs.tag }} \
+            portainerci/kubesolo:${{ steps.manifest.outputs.tag }}-linux-amd64 \
+            portainerci/kubesolo:${{ steps.manifest.outputs.tag }}-linux-arm64
