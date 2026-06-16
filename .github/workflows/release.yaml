@@ -123,6 +123,47 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+  build-kubesoloctl:
+    name: build kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    needs: [release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: arm64
+    steps:
+    - name: "[preparation] checkout the current branch"
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        fetch-depth: 0
+        tags: true
+    - name: "[preparation] set up golang"
+      uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+      with:
+        go-version-file: go.mod
+        cache-dependency-path: go.sum
+    - name: "[execution] build kubesoloctl for ${{ matrix.goos }}/${{ matrix.goarch }}"
+      run: |
+        make build-kubesoloctl \
+          GOOS=${{ matrix.goos }} \
+          GOARCH=${{ matrix.goarch }} \
+          VERSION="${{ github.event.inputs.kubesolo_version }}" \
+          KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
+    - name: "[post] upload kubesoloctl to github release"
+      run: |
+        gh release upload --clobber \
+          --repo portainer/kubesolo \
+          "${{ github.event.inputs.kubesolo_version }}" \
+          "./dist/kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   docker-manifest:
     name: create multi-arch docker manifest
     runs-on: ubuntu-latest

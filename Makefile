@@ -247,11 +247,6 @@ build-kubesoloctl-all:
 	GOOS=darwin GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-darwin-amd64 make build-kubesoloctl
 	GOOS=darwin GOARCH=arm64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-darwin-arm64 make build-kubesoloctl
 
-# Run kubesoloctl tests (no CGO required, no cross-compiler needed)
-.PHONY: test-kubesoloctl
-test-kubesoloctl:
-	CGO_ENABLED=0 go test ./internal/cli/... -v -count=1
-
 # Clean kubesoloctl build artefacts
 .PHONY: clean-kubesoloctl
 clean-kubesoloctl:
