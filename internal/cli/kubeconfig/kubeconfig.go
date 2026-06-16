@@ -21,14 +21,18 @@ func KubeSoloKubeconfigPath(dataPath string) string {
 	return filepath.Join(dataPath, "pki", "admin", "admin.kubeconfig")
 }
 
-// RemoveFromUserConfig surgically removes the KubeSolo context, cluster, and
-// user entries from the real user's ~/.kube/config. It is a no-op if kubectl
-// is not installed or if no kubesolo entries are present.
-func RemoveFromUserConfig() {
+// RemoveFromUserConfig surgically removes the named KubeSolo context, cluster,
+// and user entries from the real user's ~/.kube/config. name is the instance
+// name used during install (default "kubesolo"). It is a no-op if kubectl is
+// not installed or if no matching entries are present.
+func RemoveFromUserConfig(name string) {
+	if name == "" {
+		name = "kubesolo"
+	}
 	kubectlPath, err := exec.LookPath("kubectl")
 	if err != nil {
 		log.Info().Msg("kubectl not found — skipping kubeconfig cleanup")
-		log.Info().Msg("remove the 'kubesolo' context/cluster/user entries from ~/.kube/config manually if needed")
+		log.Info().Msgf("remove the '%s' context/cluster/user entries from ~/.kube/config manually if needed", name)
 		return
 	}
 
@@ -41,25 +45,25 @@ func RemoveFromUserConfig() {
 
 	env := append(os.Environ(), "KUBECONFIG="+kubeconfigFile)
 
-	// Check whether the kubesolo context actually exists before touching anything.
+	// Check whether the named context actually exists before touching anything.
 	out, err := cmdOutput(kubectlPath, env, "config", "get-contexts", "-o", "name")
-	if err != nil || !strings.Contains(out, "kubesolo") {
-		log.Debug().Msg("no kubesolo context found in kubeconfig — nothing to remove")
+	if err != nil || !strings.Contains(out, name) {
+		log.Debug().Msgf("no %s context found in kubeconfig — nothing to remove", name)
 		return
 	}
 
-	log.Info().Msgf("removing KubeSolo entries from %s...", kubeconfigFile)
+	log.Info().Msgf("removing %s entries from %s...", name, kubeconfigFile)
 
 	run := func(args ...string) {
 		if err := cmdRun(kubectlPath, env, args...); err != nil {
 			log.Debug().Err(err).Msgf("kubectl %s returned non-zero (may already be absent)", strings.Join(args, " "))
 		}
 	}
-	run("config", "delete-context", "kubesolo")
-	run("config", "unset", "clusters.kubesolo")
-	run("config", "unset", "users.kubesolo-admin")
+	run("config", "delete-context", name)
+	run("config", "unset", "clusters."+name)
+	run("config", "unset", "users."+name+"-admin")
 
-	log.Info().Msg("KubeSolo kubeconfig entries removed")
+	log.Info().Msgf("%s kubeconfig entries removed", name)
 
 	// Inform about any backup the install step created so the user can restore it.
 	backups, _ := filepath.Glob(filepath.Join(realHome, ".kube", "config.backup-*"))
@@ -115,6 +119,15 @@ func MergeAfterStartup(dataPath string) {
 		}
 	}
 
+	mergeIntoUserConfig(kubectlPath, realUser, realHome, realUID, realGID, ksKubeconfig)
+	log.Info().Msgf("kubeconfig also accessible at: %s", ksKubeconfig)
+}
+
+// mergeIntoUserConfig merges newKubeconfigPath into the real user's
+// ~/.kube/config using `kubectl config view --flatten`. It creates the .kube
+// directory if needed, backs up any existing config, and corrects ownership of
+// the entire ~/.kube tree so the real user owns the result.
+func mergeIntoUserConfig(kubectlPath, realUser, realHome string, realUID, realGID int, newKubeconfigPath string) {
 	dotKube := filepath.Join(realHome, ".kube")
 	if err := os.MkdirAll(dotKube, 0o700); err != nil {
 		log.Warn().Err(err).Msgf("failed to create %s", dotKube)
@@ -123,10 +136,7 @@ func MergeAfterStartup(dataPath string) {
 
 	existingConfig := filepath.Join(dotKube, "config")
 	if _, err := os.Stat(existingConfig); err == nil {
-		// Copy (not rename) the backup so existingConfig stays in place.
-		// KUBECONFIG below points to existingConfig:ksKubeconfig — if we
-		// renamed it away, existingConfig would be missing and kubectl would
-		// silently skip it, discarding all prior contexts from the merge.
+		// Copy (not rename) so existingConfig stays in place for the merge step.
 		backup := existingConfig + ".backup-" + time.Now().Format("20060102150405")
 		if err := copyFile(existingConfig, backup); err != nil {
 			log.Warn().Err(err).Msgf("failed to back up existing kubeconfig to %s", backup)
@@ -135,22 +145,16 @@ func MergeAfterStartup(dataPath string) {
 		}
 	}
 
-	// Merge: KUBECONFIG="existing:new" kubectl config view --flatten > merged
-	// kubectl runs as root (current process), but both source files are already
-	// readable by root. The merged output is written to a temp file and ownership
-	// of the entire ~/.kube tree is corrected to the real user below.
 	mergedTemp := existingConfig + ".tmp"
-	mergeEnv := append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s:%s", existingConfig, ksKubeconfig))
+	// New config first so its CA cert / credentials win over any stale existing entry.
+	mergeEnv := append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s:%s", newKubeconfigPath, existingConfig))
 	cmd := exec.Command(kubectlPath, "config", "view", "--flatten")
 	cmd.Env = mergeEnv
 
 	out, err := cmd.Output()
 	if err != nil {
-		// Fall back to a standalone copy of the KubeSolo config.
-		// copyFile preserves the raw content; ownership was already fixed above
-		// so the real user can read it even via KUBECONFIG=<ksKubeconfig>.
 		log.Warn().Err(err).Msg("kubectl config view failed — copying KubeSolo config as default")
-		if err2 := copyFile(ksKubeconfig, existingConfig); err2 != nil {
+		if err2 := copyFile(newKubeconfigPath, existingConfig); err2 != nil {
 			log.Warn().Err(err2).Msg("failed to copy KubeSolo kubeconfig")
 			return
 		}
@@ -166,7 +170,6 @@ func MergeAfterStartup(dataPath string) {
 		}
 	}
 
-	// Fix ownership of ~/.kube/ so the real user owns everything under it
 	if realUID > 0 && realGID > 0 {
 		if err := chownRecursive(dotKube, realUID, realGID); err != nil {
 			log.Warn().Err(err).Msgf("could not fix kubeconfig ownership for %s", realUser)
@@ -174,7 +177,6 @@ func MergeAfterStartup(dataPath string) {
 	}
 
 	log.Info().Msgf("kubeconfig merged successfully: %s", existingConfig)
-	log.Info().Msgf("kubeconfig also accessible at: %s", ksKubeconfig)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

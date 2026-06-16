@@ -120,6 +120,24 @@ func ForTarget(arch string) (*SystemInfo, error) {
 // SystemInfo. It returns an error only for unsupported (untargetable) hosts,
 // e.g. a musl system on riscv64 where no musl binary exists.
 func Detect() (*SystemInfo, error) {
+	// On macOS, KubeSolo runs as a Docker container — no init system or libc
+	// detection is needed, only the host arch matters.
+	if runtime.GOOS == "darwin" {
+		arch, archSuffix, err := detectArch()
+		if err != nil {
+			return nil, err
+		}
+		return &SystemInfo{
+			OS:            "darwin",
+			Arch:          arch,
+			ArchiveSuffix: archSuffix,
+			LibC:          "",
+			LibCSuffix:    "",
+			InitSystem:    InitUnknown,
+			Environment:   EnvStandard,
+		}, nil
+	}
+
 	arch, archSuffix, err := detectArch()
 	if err != nil {
 		return nil, err

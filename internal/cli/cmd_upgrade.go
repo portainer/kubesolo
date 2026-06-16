@@ -2,13 +2,15 @@ package cli
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/download"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
 	"github.com/portainer/kubesolo/internal/cli/process"
-	"github.com/rs/zerolog/log"
+	"github.com/portainer/kubesolo/internal/cli/service"
+	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -32,38 +34,82 @@ Examples:
 	_ = cmd.MarkFlagRequired("version")
 	f.StringVar(&cfg.OfflineInstall, "offline-install", "",
 		"Path to a local tarball or binary to install instead of downloading")
+	f.StringVar(&cfg.Name, "name", envOr("KUBESOLO_NAME", config.AppName),
+		"Name of the KubeSolo instance to upgrade (default: kubesolo)")
 	return cmd
 }
 
 func runUpgrade(cfg *config.Config) error {
-	if err := preflight.CheckRoot(); err != nil {
-		return err
+	p := ui.New()
+	p.Header("upgrade")
+
+	if runtime.GOOS == "darwin" {
+		return runContainerUpgrade(p, cfg)
 	}
+
+	if err := preflight.CheckRoot(); err != nil {
+		return p.Fail("root check", err)
+	}
+
+	// ── Detect system ─────────────────────────────────────────────────────────
+	p.Step("Detecting system")
+	info, err := detect.Detect()
+	if err != nil {
+		return p.Fail("system detection", err)
+	}
+	p.OK("System detected", fmt.Sprintf("%s · %s · %s", info.Arch, info.LibC, info.InitSystem))
+
+	// ── Stop service ──────────────────────────────────────────────────────────
+	p.Step("Stopping KubeSolo")
+	process.StopAll(initControlBinary(info.InitSystem))
+	p.OK("KubeSolo stopped", "")
+
+	// ── Replace binary ────────────────────────────────────────────────────────
+	p.Step(fmt.Sprintf("Installing KubeSolo %s", cfg.Version))
+	if err := download.Install(cfg.OfflineInstall, info.ArchiveName(cfg.Version), cfg.Version); err != nil {
+		return p.Fail("binary installation", err)
+	}
+	restoreSELinux(config.DefaultInstallPath)
+	p.OK(fmt.Sprintf("KubeSolo %s installed", cfg.Version), config.DefaultInstallPath)
+
+	// ── Restart service ───────────────────────────────────────────────────────
+	p.Step(fmt.Sprintf("Restarting %s service", info.InitSystem))
+	if err := runServiceAction(info.InitSystem, "start"); err != nil {
+		return p.Fail("service restart", err)
+	}
+	p.OK("Service restarted", "")
+
+	p.Done(fmt.Sprintf("KubeSolo upgraded to %s", cfg.Version))
+	return nil
+}
+
+func runContainerUpgrade(p *ui.Printer, cfg *config.Config) error {
+	// ── Retrieve current container CMD before replacing it ────────────────────
+	p.Step("Inspecting running container")
+	oldArgs, err := service.ContainerArgs(cfg.Name)
+	if err != nil {
+		return p.Fail("container inspect", err)
+	}
+	p.OK("Current configuration retrieved", config.AppName)
+
+	// ── Pull new image, stop old container, start fresh ───────────────────────
+	p.Step(fmt.Sprintf("Upgrading KubeSolo container to %s", cfg.Version))
 
 	info, err := detect.Detect()
 	if err != nil {
-		return fmt.Errorf("system detection failed: %w", err)
+		return p.Fail("system detection", err)
+	}
+	mgr, err := service.New(info, config.RunModeContainer, cfg.Name)
+	if err != nil {
+		return p.Fail("container upgrade", err)
 	}
 
-	// Stop the running service
-	log.Info().Msg("stopping KubeSolo service...")
-	initBinary := initControlBinary(info.InitSystem)
-	process.StopAll(initBinary)
-
-	// Replace the binary
-	log.Info().Msgf("installing KubeSolo %s...", cfg.Version)
-	if err := download.Install(cfg.OfflineInstall, info.ArchiveName(cfg.Version), cfg.Version); err != nil {
-		return fmt.Errorf("binary installation failed: %w", err)
+	// Install with the new version but preserve the original runtime flags.
+	if err := mgr.Install(cfg, oldArgs); err != nil {
+		return p.Fail("container upgrade", err)
 	}
+	p.OK(fmt.Sprintf("KubeSolo %s container running", cfg.Version), cfg.Name)
 
-	restoreSELinux(config.DefaultInstallPath)
-
-	// Restart the service
-	log.Info().Msg("restarting KubeSolo service...")
-	if err := runServiceAction(info.InitSystem, "start"); err != nil {
-		return fmt.Errorf("failed to restart service: %w", err)
-	}
-
-	log.Info().Msgf("KubeSolo upgraded to %s successfully", cfg.Version)
+	p.Done(fmt.Sprintf("KubeSolo upgraded to %s", cfg.Version))
 	return nil
 }

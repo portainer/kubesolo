@@ -39,13 +39,14 @@ func Suite(installPrereqs, pprofServer bool) []Check {
 }
 
 // RunSuite executes every check in suite, stopping on the first failure.
+// Each passing check emits one detail line; the caller owns the enclosing
+// step/ok Printer calls.
 func RunSuite(checks []Check) error {
 	for _, c := range checks {
-		log.Info().Msgf("checking %s...", c.Name)
 		if err := c.Run(); err != nil {
 			return fmt.Errorf("%s: %w", c.Name, err)
 		}
-		log.Info().Msgf("%s: ok", c.Name)
+		log.Info().Msgf("%s", c.Name)
 	}
 	return nil
 }

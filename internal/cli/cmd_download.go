@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"fmt"
+	"runtime"
+
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/download"
@@ -28,6 +31,11 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dir == "" {
 				dir = "."
+			}
+			// KubeSolo has no macOS binaries — the target arch must be specified
+			// explicitly when downloading from a Mac for deployment to a Linux device.
+			if targetArch == "" && runtime.GOOS == "darwin" {
+				return fmt.Errorf("on macOS, KubeSolo has no native binaries — specify the target Linux arch with --arch (e.g. --arch=amd64 or --arch=arm64)")
 			}
 			var info *detect.SystemInfo
 			var err error

@@ -54,7 +54,8 @@ Examples:
 
   # Check pre-flight conditions without installing:
   kubesoloctl check`,
-		SilenceUsage: true,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			configureLogging(cfg.Debug)
 		},

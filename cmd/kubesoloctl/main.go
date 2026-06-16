@@ -6,6 +6,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/portainer/kubesolo/internal/cli"
@@ -20,6 +21,11 @@ var (
 func main() {
 	cli.SetVersionInfo(Version, Commit, BuildDate)
 	if err := cli.Execute(); err != nil {
+		// ui.Printer.Fail returns an error with an empty message (already
+		// displayed). Only print if there is an actual message to show.
+		if err.Error() != "" {
+			fmt.Fprintln(os.Stderr, "error:", err)
+		}
 		os.Exit(1)
 	}
 }

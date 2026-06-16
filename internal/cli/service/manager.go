@@ -24,18 +24,23 @@ type Manager interface {
 }
 
 // New returns the appropriate Manager for the detected init system and run mode.
-// For run mode "service" the init system is used; "daemon" and "foreground"
-// always return their respective runners regardless of init system.
-func New(info *detect.SystemInfo, runMode string) (Manager, error) {
+// name is the instance identifier used by the container manager as the Docker
+// container name; it is ignored for non-container run modes.
+func New(info *detect.SystemInfo, runMode, name string) (Manager, error) {
+	if name == "" {
+		name = config.AppName
+	}
 	switch runMode {
 	case config.RunModeDaemon:
 		return &daemonManager{}, nil
 	case config.RunModeForeground:
 		return &foregroundManager{}, nil
+	case config.RunModeContainer:
+		return &containerManager{name: name}, nil
 	case config.RunModeService, "":
 		return newServiceManager(info.InitSystem)
 	default:
-		return nil, fmt.Errorf("unknown run mode %q (valid: service, daemon, foreground)", runMode)
+		return nil, fmt.Errorf("unknown run mode %q (valid: service, daemon, foreground, container)", runMode)
 	}
 }
 

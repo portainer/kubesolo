@@ -12,11 +12,19 @@ const (
 	RunModeService    = "service"
 	RunModeDaemon     = "daemon"
 	RunModeForeground = "foreground"
+	RunModeContainer  = "container" // macOS: KubeSolo runs inside a Docker container
+
+	// DefaultContainerImage is the Docker image used in container run mode.
+	DefaultContainerImage = "portainer/kubesolo"
 )
 
 // Config holds all configuration for the installer, sourced from CLI flags
 // and environment variables. CLI flags take precedence over environment variables.
 type Config struct {
+	// Name identifies this KubeSolo instance. Used as the Docker container name
+	// and kubeconfig context name. Defaults to AppName ("kubesolo").
+	Name string
+
 	// Version of KubeSolo to install (e.g. "v1.1.5")
 	Version string
 
@@ -56,6 +64,17 @@ type Config struct {
 	// InstallPrereqs causes the installer to automatically install missing OS-level
 	// prerequisites (e.g. nftables on Alpine Linux) instead of hard-failing
 	InstallPrereqs bool
+
+	// D2K enables the d2k Docker-to-Kubernetes API translator
+	D2K bool
+
+	// D2KNamespace is the namespace d2k is deployed into and translates against
+	D2KNamespace string
+
+	// ContainerImage is the Docker image reference used in container run mode.
+	// If empty, defaults to DefaultContainerImage:Version.
+	// Specify a full reference (e.g. "myrepo/kubesolo:custom") to override entirely.
+	ContainerImage string
 }
 
 // CmdArgs builds the argument list that will be passed to the kubesolo binary
@@ -89,6 +108,14 @@ func (c *Config) CmdArgs() []string {
 
 	if c.PprofServer {
 		args = append(args, "--pprof-server")
+	}
+
+	if c.D2K {
+		args = append(args, "--d2k")
+	}
+
+	if c.D2KNamespace != "" {
+		args = append(args, "--d2k-namespace="+c.D2KNamespace)
 	}
 
 	// Proxy is intentionally omitted here: it is injected as HTTP_PROXY /

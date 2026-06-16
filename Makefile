@@ -220,7 +220,7 @@ archive-musl:
 # kubesoloctl is built with CGO_ENABLED=0 (pure Go). A single binary per
 # architecture runs on both glibc and musl systems, so there is no libc split.
 #
-# Supported targets: linux/amd64, linux/arm64
+# Supported targets: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64
 
 KUBESOLOCTL_LDFLAGS = -s -w \
 	-X main.Version=$(VERSION) \
@@ -242,8 +242,10 @@ build-kubesoloctl:
 # Build kubesoloctl for all supported architectures
 .PHONY: build-kubesoloctl-all
 build-kubesoloctl-all:
-	GOARCH=amd64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-amd64   make build-kubesoloctl
-	GOARCH=arm64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-arm64   make build-kubesoloctl
+	GOARCH=amd64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-amd64    make build-kubesoloctl
+	GOARCH=arm64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-arm64    make build-kubesoloctl
+	GOOS=darwin GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-darwin-amd64 make build-kubesoloctl
+	GOOS=darwin GOARCH=arm64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-darwin-arm64 make build-kubesoloctl
 
 # Run kubesoloctl tests (no CGO required, no cross-compiler needed)
 .PHONY: test-kubesoloctl

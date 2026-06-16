@@ -7,20 +7,112 @@ import (
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
+	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
+// configureLogging sets up zerolog for the given verbosity level.
+//
+// In normal (non-debug) mode the ConsoleWriter is configured to produce
+// indented detail lines that nest cleanly under the ui.Printer's step output:
+//
+//	INFO  →  "     message"          (5-space indent, dim-gray in colour mode)
+//	WARN  →  "  ⚠  message"         (yellow symbol at column 3)
+//	ERROR →  "  ✗  message"         (red symbol at column 3)
+//
+// In debug mode the classic timestamped ConsoleWriter format is used.
 func configureLogging(debug bool) {
-	log.Logger = log.Output(zerolog.ConsoleWriter{
-		Out:        os.Stderr,
-		TimeFormat: "2006/01/02 03:04PM",
-	})
+	color := ui.ColorEnabled()
+
 	if debug {
+		log.Logger = log.Output(zerolog.ConsoleWriter{
+			Out:        os.Stderr,
+			NoColor:    !color,
+			TimeFormat: "2006/01/02 03:04PM",
+		})
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		return
 	}
+
+	// currentLevel is set by FormatPrepare before FormatMessage is called so
+	// that INFO/DEBUG messages can be dimmed without touching WARN/ERROR text.
+	var currentLevel string
+
+	log.Logger = log.Output(zerolog.ConsoleWriter{
+		Out:          os.Stderr,
+		NoColor:      true, // we apply colour ourselves in the format functions
+		PartsExclude: []string{zerolog.TimestampFieldName},
+
+		FormatPrepare: func(m map[string]interface{}) error {
+			currentLevel = ""
+			if l, ok := m[zerolog.LevelFieldName].(string); ok {
+				currentLevel = l
+			}
+			return nil
+		},
+
+		FormatLevel: func(i interface{}) string {
+			level := ""
+			if l, ok := i.(string); ok {
+				level = l
+			}
+			switch level {
+			case "warn":
+				if color {
+					return "  \033[33m⚠\033[0m  "
+				}
+				return "  !  "
+			case "error":
+				if color {
+					return "  \033[31m✗\033[0m  "
+				}
+				return "  x  "
+			default: // info, debug, trace — plain indent, no symbol
+				return "     "
+			}
+		},
+
+		FormatMessage: func(i interface{}) string {
+			if i == nil {
+				return ""
+			}
+			isDetail := currentLevel != "warn" && currentLevel != "error"
+			if color && isDetail {
+				return fmt.Sprintf("\033[90m%v\033[0m", i)
+			}
+			return fmt.Sprintf("%v", i)
+		},
+
+		FormatFieldName: func(i interface{}) string {
+			if color {
+				return fmt.Sprintf(" \033[90m%v=\033[0m", i)
+			}
+			return fmt.Sprintf(" %v=", i)
+		},
+
+		FormatFieldValue: func(i interface{}) string {
+			if color {
+				return fmt.Sprintf("\033[90m%v\033[0m", i)
+			}
+			return fmt.Sprintf("%v", i)
+		},
+
+		FormatErrFieldName: func(i interface{}) string {
+			if color {
+				return " \033[90merror=\033[0m"
+			}
+			return " error="
+		},
+
+		FormatErrFieldValue: func(i interface{}) string {
+			if color {
+				return fmt.Sprintf("\033[31m%v\033[0m", i)
+			}
+			return fmt.Sprintf("%v", i)
+		},
+	})
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 }
 
 func envOr(key, fallback string) string {
@@ -174,23 +266,5 @@ func runUpstartAction(action string) error {
 		return runCmd("initctl", action, config.AppName)
 	default:
 		return fmt.Errorf("action %q is not supported for Upstart", action)
-	}
-}
-
-// printServiceHints logs management commands appropriate for the detected init system.
-func printServiceHints(init detect.InitSystem) {
-	app := config.AppName
-	switch init {
-	case detect.InitSystemd:
-		log.Info().Msgf("status: systemctl status %s", app)
-		log.Info().Msgf("logs:   journalctl -u %s -f", app)
-	case detect.InitOpenRC:
-		log.Info().Msgf("status: rc-service %s status", app)
-		log.Info().Msgf("logs:   tail -f /var/log/messages")
-	case detect.InitSysV:
-		log.Info().Msgf("status: service %s status", app)
-		log.Info().Msgf("logs:   tail -f /var/log/syslog")
-	default:
-		log.Info().Msgf("logs:   tail -f %s", config.LogFile)
 	}
 }

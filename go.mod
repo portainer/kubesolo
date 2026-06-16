@@ -9,6 +9,9 @@ require (
 	github.com/k3s-io/kine v0.15.0
 	github.com/klauspost/compress v1.18.6
 	github.com/mattn/go-sqlite3 v1.14.44
+	github.com/docker/docker v28.5.2+incompatible
+	github.com/docker/go-connections v0.5.0
+	github.com/klauspost/compress v1.18.5
 	github.com/pelletier/go-toml v1.9.5
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/cobra v1.10.2
@@ -135,9 +138,11 @@ require (
 	github.com/miekg/pkcs11 v1.1.1 // indirect
 	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/mistifyio/go-zfs v2.1.2-0.20190413222219-f784269be439+incompatible // indirect
+	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/ipvs v1.1.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/spdystream v0.5.1 // indirect
+	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/sys/capability v0.4.0 // indirect
 	github.com/moby/sys/mountinfo v0.7.2 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
