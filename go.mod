@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/containerd/containerd/v2 v2.2.3
+	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.7
 	github.com/k3s-io/kine v0.15.0
 	github.com/klauspost/compress v1.18.6
@@ -55,7 +56,6 @@ require (
 	github.com/containerd/console v1.0.5 // indirect
 	github.com/containerd/containerd/api v1.10.0 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
-	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
 	github.com/containerd/go-cni v1.1.13 // indirect
