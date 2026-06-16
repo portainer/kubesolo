@@ -106,15 +106,18 @@ func (m *daemonManager) Uninstall() error {
 
 	// SIGTERM first; give the process up to 5 s to exit cleanly.
 	_ = proc.Signal(syscall.SIGTERM)
-	for i := 0; i < 5; i++ {
+	exited := false
+	for range 5 {
 		time.Sleep(time.Second)
 		if err := proc.Signal(syscall.Signal(0)); err != nil {
 			// Process no longer exists
+			exited = true
 			break
 		}
 	}
-	// SIGKILL any survivor
-	_ = proc.Signal(syscall.SIGKILL)
+	if !exited {
+		_ = proc.Signal(syscall.SIGKILL)
+	}
 
 	_ = os.Remove(config.PIDFile)
 	log.Info().Msgf("KubeSolo daemon (PID %d) stopped", pid)

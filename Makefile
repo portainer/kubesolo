@@ -242,8 +242,8 @@ build-kubesoloctl:
 # Build kubesoloctl for all supported architectures
 .PHONY: build-kubesoloctl-all
 build-kubesoloctl-all:
-	GOARCH=amd64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-amd64    make build-kubesoloctl
-	GOARCH=arm64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-arm64    make build-kubesoloctl
+	GOOS=linux GOARCH=amd64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-amd64    make build-kubesoloctl
+	GOOS=linux GOARCH=arm64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-arm64    make build-kubesoloctl
 	GOOS=darwin GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-darwin-amd64 make build-kubesoloctl
 	GOOS=darwin GOARCH=arm64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-darwin-arm64 make build-kubesoloctl
 

@@ -114,7 +114,7 @@ func (c *Config) CmdArgs() []string {
 		args = append(args, "--d2k")
 	}
 
-	if c.D2KNamespace != "" {
+	if c.D2K && c.D2KNamespace != "" {
 		args = append(args, "--d2k-namespace="+c.D2KNamespace)
 	}
 

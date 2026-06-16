@@ -263,7 +263,12 @@ func CheckCgroups(installPrereqs bool) error {
 	}
 	var available []string
 	for _, c := range requiredControllers {
-		dir := filepath.Join("/sys/fs/cgroup", c)
+		dirName := c
+		if c == "io" {
+			// cgroup v1 mounts block I/O as "blkio", not "io"
+			dirName = "blkio"
+		}
+		dir := filepath.Join("/sys/fs/cgroup", dirName)
 		if _, err := os.Stat(dir); err == nil {
 			available = append(available, c)
 		}

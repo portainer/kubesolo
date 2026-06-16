@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,6 +68,14 @@ func FetchAndMergeFromContainer(containerName, socketPath string) error {
 	log.Info().Msgf("merging kubeconfig into %s/.kube/config...", realHome)
 
 	mergeIntoUserConfig(kubectlPath, realUser, realHome, realUID, realGID, tmpPath)
+
+	// Patch the server URL to the host-mapped ephemeral port.
+	clusterName := clusterNameFromContainer(containerName)
+	if port, err := containerAPIPort(cli, containerName); err == nil {
+		patchContainerServerURL(kubectlPath, realHome, clusterName, fmt.Sprintf("https://127.0.0.1:%d", port))
+	} else {
+		log.Debug().Err(err).Msg("could not discover container API port; server URL not patched")
+	}
 	return nil
 }
 
@@ -80,6 +89,38 @@ func newDockerClient(socketPath string) (*client.Client, error) {
 		opts = append(opts, client.FromEnv)
 	}
 	return client.NewClientWithOpts(opts...)
+}
+
+// clusterNameFromContainer derives the kubeconfig cluster name from a Docker
+// container name. The container name "kubesolo" maps to cluster "kubesolo";
+// "kubesolo-<name>" maps to cluster "<name>"; anything else is used as-is.
+func clusterNameFromContainer(containerName string) string {
+	if containerName == "" || containerName == "kubesolo" {
+		return "kubesolo"
+	}
+	const prefix = "kubesolo-"
+	if strings.HasPrefix(containerName, prefix) {
+		return strings.TrimPrefix(containerName, prefix)
+	}
+	return containerName
+}
+
+// containerAPIPort inspects the container and returns the host port mapped to
+// the Kubernetes API server port 6443/tcp.
+func containerAPIPort(cli *client.Client, containerName string) (int, error) {
+	info, err := cli.ContainerInspect(context.Background(), containerName)
+	if err != nil {
+		return 0, err
+	}
+	bindings, ok := info.NetworkSettings.Ports["6443/tcp"]
+	if !ok || len(bindings) == 0 {
+		return 0, fmt.Errorf("6443/tcp not exposed by container %s", containerName)
+	}
+	port, err := strconv.Atoi(bindings[0].HostPort)
+	if err != nil {
+		return 0, fmt.Errorf("invalid host port %q: %w", bindings[0].HostPort, err)
+	}
+	return port, nil
 }
 
 // extractFirstFile reads a tar stream and returns the content of the first

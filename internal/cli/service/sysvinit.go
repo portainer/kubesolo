@@ -28,7 +28,6 @@ export NO_PROXY='localhost,127.0.0.1'
 {{- end}}
 
 DAEMON="{{.InstallPath}}"
-DAEMON_ARGS="{{.CmdArgs | shellDoubleQuoteVal}}"
 PIDFILE="/var/run/{{.AppName}}.pid"
 USER="root"
 
@@ -37,7 +36,7 @@ USER="root"
 case "$1" in
     start)
         log_daemon_msg "Starting {{.AppName}}"
-        start-stop-daemon --start --quiet --pidfile $PIDFILE --make-pidfile --background --chuid $USER --exec $DAEMON -- $DAEMON_ARGS
+        start-stop-daemon --start --quiet --pidfile $PIDFILE --make-pidfile --background --chuid $USER --exec $DAEMON --{{range .CmdArgsList}} {{. | shellQuote}}{{end}}
         log_end_msg $?
         ;;
     stop)

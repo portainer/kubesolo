@@ -3,10 +3,12 @@ package cli
 import (
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/download"
+	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
 	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/cli/service"
@@ -109,6 +111,23 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config) error {
 		return p.Fail("container upgrade", err)
 	}
 	p.OK(fmt.Sprintf("KubeSolo %s container running", cfg.Version), cfg.Name)
+
+	// Update kubeconfig with the new container's ephemeral port.
+	p.Step("Updating kubeconfig")
+	cname := service.ContainerNameFor(cfg.Name)
+	if port, err := service.GetContainerAPIPort(cfg.Name); err == nil {
+		apiAddr := fmt.Sprintf("127.0.0.1:%d", port)
+		if data, err := kubeconfig.WaitForContainerKubeconfig(cname, ""); err == nil {
+			kubeconfig.MergeContainerKubeconfig(data, cfg.Name, "https://"+apiAddr)
+		}
+		if err := kubeconfig.WaitForAPIServer(apiAddr, 120*time.Second); err != nil {
+			p.Warn(fmt.Sprintf("API server not yet ready at https://%s", apiAddr))
+		} else {
+			p.OK("API server ready", "https://"+apiAddr)
+		}
+	} else {
+		p.Warn("could not discover container API port — run: kubesoloctl kubeconfig fetch")
+	}
 
 	p.Done(fmt.Sprintf("KubeSolo upgraded to %s", cfg.Version))
 	return nil

@@ -59,9 +59,11 @@ func RemoveFromUserConfig(name string) {
 			log.Debug().Err(err).Msgf("kubectl %s returned non-zero (may already be absent)", strings.Join(args, " "))
 		}
 	}
-	run("config", "delete-context", name)
+	run("config", "delete-context", "kubernetes-admin@"+name)
+	run("config", "delete-context", "admin-token@"+name)
 	run("config", "unset", "clusters."+name)
-	run("config", "unset", "users."+name+"-admin")
+	run("config", "unset", "users.kubernetes-admin")
+	run("config", "unset", "users.admin-token")
 
 	log.Info().Msgf("%s kubeconfig entries removed", name)
 
@@ -170,7 +172,7 @@ func mergeIntoUserConfig(kubectlPath, realUser, realHome string, realUID, realGI
 		}
 	}
 
-	if realUID > 0 && realGID > 0 {
+	if realUID > 0 {
 		if err := chownRecursive(dotKube, realUID, realGID); err != nil {
 			log.Warn().Err(err).Msgf("could not fix kubeconfig ownership for %s", realUser)
 		}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
+	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
 	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/cli/service"
@@ -96,6 +97,19 @@ func runContainerReset(p *ui.Printer, name string) error {
 		return p.Fail("container reset", err)
 	}
 	p.OK("Fresh container started", name)
+
+	// Update kubeconfig with the new container's ephemeral port.
+	p.Step("Updating kubeconfig")
+	cname := service.ContainerNameFor(name)
+	if port, err := service.GetContainerAPIPort(name); err == nil {
+		apiAddr := fmt.Sprintf("127.0.0.1:%d", port)
+		if data, err := kubeconfig.WaitForContainerKubeconfig(cname, ""); err == nil {
+			kubeconfig.MergeContainerKubeconfig(data, name, "https://"+apiAddr)
+		}
+		p.OK("Kubeconfig updated", "https://"+apiAddr)
+	} else {
+		p.Warn("could not discover container API port — run: kubesoloctl kubeconfig fetch")
+	}
 
 	p.Done("Reset complete — fresh cluster initializing.")
 	return nil
