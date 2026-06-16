@@ -313,7 +313,7 @@ func TestSystemdEnvVal(t *testing.T) {
 
 func TestNew_RunModeDaemon(t *testing.T) {
 	info := &detect.SystemInfo{InitSystem: detect.InitSystemd}
-	mgr, err := New(info, config.RunModeDaemon)
+	mgr, err := New(info, config.RunModeDaemon, "")
 	if err != nil {
 		t.Fatalf("New(daemon) error: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestNew_RunModeDaemon(t *testing.T) {
 
 func TestNew_RunModeForeground(t *testing.T) {
 	info := &detect.SystemInfo{InitSystem: detect.InitSystemd}
-	mgr, err := New(info, config.RunModeForeground)
+	mgr, err := New(info, config.RunModeForeground, "")
 	if err != nil {
 		t.Fatalf("New(foreground) error: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestNew_InitSystemRouting(t *testing.T) {
 	}
 	for _, c := range cases {
 		info := &detect.SystemInfo{InitSystem: c.init}
-		mgr, err := New(info, config.RunModeService)
+		mgr, err := New(info, config.RunModeService, "")
 		if err != nil {
 			t.Errorf("New(service, %q) unexpected error: %v", c.init, err)
 			continue
@@ -363,7 +363,7 @@ func TestNew_InitSystemRouting(t *testing.T) {
 
 func TestNew_InvalidRunMode(t *testing.T) {
 	info := &detect.SystemInfo{InitSystem: detect.InitSystemd}
-	_, err := New(info, "bananas")
+	_, err := New(info, "bananas", "")
 	if err == nil {
 		t.Fatal("expected error for invalid run mode, got nil")
 	}
