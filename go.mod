@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/containerd/containerd/v2 v2.2.3
+	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.7
 	github.com/k3s-io/kine v0.15.0
 	github.com/klauspost/compress v1.18.6
 	github.com/mattn/go-sqlite3 v1.14.44
@@ -12,6 +13,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/cobra v1.10.2
 	github.com/urfave/cli/v2 v2.27.7
+	golang.org/x/sys v0.43.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.35.4
 	k8s.io/apimachinery v0.35.4
@@ -219,7 +221,6 @@ require (
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
