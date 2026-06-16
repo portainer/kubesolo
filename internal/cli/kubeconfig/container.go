@@ -27,7 +27,7 @@ const containerKubeconfigPath = "/var/lib/kubesolo/pki/admin/admin.kubeconfig"
 func FetchAndMergeFromContainer(containerName, socketPath string) error {
 	kubectlPath, err := exec.LookPath("kubectl")
 	if err != nil {
-		return fmt.Errorf("kubectl not found — install kubectl to merge the kubeconfig, or copy it manually with:\n  docker cp %s:%s ./admin.kubeconfig", containerName, containerKubeconfigPath)
+		return fmt.Errorf("kubectl not found — install kubectl, then run: kubesoloctl kubeconfig fetch")
 	}
 
 	cli, err := newDockerClient(socketPath)
@@ -219,7 +219,7 @@ func MergeContainerKubeconfig(data []byte, name, serverURL string) {
 
 	kubectlPath, err := exec.LookPath("kubectl")
 	if err != nil {
-		log.Info().Msg("kubectl not found — fetch kubeconfig once KubeSolo is ready with: kubesoloctl kubeconfig fetch")
+		log.Info().Msg("kubectl not found — install kubectl, then run: kubesoloctl kubeconfig fetch")
 		return
 	}
 

@@ -238,6 +238,34 @@ func GetContainerAPIPort(name string) (int, error) {
 	return port, nil
 }
 
+// GetContainerD2KPort returns the host port Docker mapped to the container's
+// D2K endpoint (2376/tcp). Returns an error if D2K was not enabled on this
+// instance (port not published), guiding the user to reinstall with --d2k.
+func GetContainerD2KPort(name string) (int, error) {
+	cli, err := newContainerClient()
+	if err != nil {
+		return 0, err
+	}
+	defer cli.Close()
+
+	cname := ContainerNameFor(name)
+	resp, err := cli.ContainerInspect(context.Background(), cname)
+	if err != nil {
+		return 0, fmt.Errorf("container %q not found: %w", cname, err)
+	}
+
+	bindings := resp.NetworkSettings.Ports["2376/tcp"]
+	if len(bindings) == 0 {
+		return 0, fmt.Errorf("container %q has no host binding for 2376/tcp — was it installed with --d2k?", cname)
+	}
+
+	port, err := strconv.Atoi(bindings[0].HostPort)
+	if err != nil {
+		return 0, fmt.Errorf("invalid host port %q: %w", bindings[0].HostPort, err)
+	}
+	return port, nil
+}
+
 func newContainerClient() (*client.Client, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {

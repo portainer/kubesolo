@@ -7,6 +7,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/download"
+	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +30,9 @@ Examples:
   kubesoloctl download --version=v1.1.5 --path=./offline-bundle --arch=arm64
   kubesoloctl download --version=v1.1.5 --path=./offline-bundle --arch=amd64-musl`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			p := ui.New()
+			p.Header("download")
+
 			if dir == "" {
 				dir = "."
 			}
@@ -37,6 +41,8 @@ Examples:
 			if targetArch == "" && runtime.GOOS == "darwin" {
 				return fmt.Errorf("on macOS, KubeSolo has no native binaries — specify the target Linux arch with --arch (e.g. --arch=amd64 or --arch=arm64)")
 			}
+
+			p.Step("Resolving target architecture")
 			var info *detect.SystemInfo
 			var err error
 			if targetArch != "" {
@@ -45,9 +51,17 @@ Examples:
 				info, err = detect.Detect()
 			}
 			if err != nil {
-				return err
+				return p.Fail("architecture detection", err)
 			}
-			return download.DownloadBundle(dir, info.ArchiveName(cfg.Version), info.InstallerName(), cfg.Version)
+			p.OK("Target resolved", info.ArchiveName(cfg.Version))
+
+			p.Step(fmt.Sprintf("Downloading KubeSolo %s", cfg.Version))
+			if err := download.DownloadBundle(dir, info.ArchiveName(cfg.Version), info.InstallerName(), cfg.Version); err != nil {
+				return p.Fail("download", err)
+			}
+
+			p.Done(fmt.Sprintf("Bundle downloaded to %s", dir))
+			return nil
 		},
 	}
 

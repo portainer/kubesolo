@@ -129,9 +129,11 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		// output appears as detail lines under the step.
 		process.StopAll(initControlBinary(info.InitSystem))
 		process.CleanupFileConflicts(cfg.Path)
-		p.OK("System detected", fmt.Sprintf("%s · %s · %s", info.Arch, info.LibC, info.InitSystem))
+		p.OK("System detected", fmt.Sprintf("%s · %s", info.Arch, info.LibC))
+		p.Info(fmt.Sprintf("Init system:  %s", info.InitSystem))
 	} else {
-		p.OK("System detected", fmt.Sprintf("%s/%s · container mode", info.OS, info.Arch))
+		p.OK("System detected", fmt.Sprintf("%s/%s", info.OS, info.Arch))
+		p.Info("Run mode:  container")
 	}
 
 	// ── Pre-flight ────────────────────────────────────────────────────────────
@@ -216,13 +218,12 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	if cfg.RunMode != config.RunModeForeground {
 		p.Section("Next steps")
 
+		p.Info("kubectl get nodes --watch     # wait until STATUS: Ready")
+		p.Info("kubectl get pods -A")
+		p.Info("")
+
 		if containerMode {
-			cname := service.ContainerNameFor(cfg.Name)
-			p.Info(fmt.Sprintf("Manage:  docker ps --filter name=%s", cname))
-			p.Info(fmt.Sprintf("Logs:    docker logs -f %s", cname))
-			p.Info(fmt.Sprintf("Stop:    docker stop %s", cname))
-			p.Info("")
-			p.Info("Tip: kubesoloctl kubeconfig fetch  (to refresh kubeconfig)")
+			p.Info("Tip: kubesoloctl kubeconfig fetch  (refresh kubeconfig after upgrade/reset)")
 		} else {
 			app := config.AppName
 			switch info.InitSystem {
@@ -238,25 +239,21 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 			default:
 				p.Info(fmt.Sprintf("Logs:    tail -f %s", config.LogFile))
 			}
-
-			p.Info("")
-			p.Info("Tip: if running KubeSolo in a Docker container, fetch the kubeconfig with:")
-			p.Info("     kubesoloctl kubeconfig fetch")
 		}
 
-		// d2k context setup hint
 		if cfg.D2K {
-			pki := filepath.Join(cfg.Path, "pki")
-			kcPath := filepath.Join(pki, "admin", "admin.kubeconfig")
-			p.Hint("d2k: Docker-compatible API on port 2376 (mTLS). Once started:",
-				"CERT_DIR=~/.config/d2k && mkdir -p $CERT_DIR",
-				fmt.Sprintf("cp %s/ca/ca.crt $CERT_DIR/ca.crt", pki),
-				fmt.Sprintf("cp %s/d2k/client.crt $CERT_DIR/client.crt", pki),
-				fmt.Sprintf("cp %s/d2k/client.key $CERT_DIR/client.key", pki),
-				fmt.Sprintf("NODE=$(KUBECONFIG=%s kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}')", kcPath),
-				`docker context create d2k --docker "host=tcp://$NODE:2376,ca=$CERT_DIR/ca.crt,cert=$CERT_DIR/client.crt,key=$CERT_DIR/client.key"`,
-				"docker context use d2k",
-			)
+			if containerMode {
+				p.Hint("D2K (Docker-to-Kubernetes API, mTLS)",
+					"kubesoloctl d2k fetch     # set up Docker context once KubeSolo has started",
+				)
+			} else {
+				pki := filepath.Join(cfg.Path, "pki")
+				p.Hint("D2K (Docker-to-Kubernetes API on port 2376, mTLS)",
+					fmt.Sprintf("Cert dir:  %s/d2k/", pki),
+					"Create a Docker context once KubeSolo has started:",
+					fmt.Sprintf(`  docker context create kubesolo --docker "host=tcp://$(hostname -I | awk '{print $1}'):2376,ca=%s/ca/ca.crt,cert=%s/d2k/client.crt,key=%s/d2k/client.key"`, pki, pki, pki),
+				)
+			}
 		}
 	}
 

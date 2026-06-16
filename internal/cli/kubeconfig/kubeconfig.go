@@ -31,8 +31,7 @@ func RemoveFromUserConfig(name string) {
 	}
 	kubectlPath, err := exec.LookPath("kubectl")
 	if err != nil {
-		log.Info().Msg("kubectl not found — skipping kubeconfig cleanup")
-		log.Info().Msgf("remove the '%s' context/cluster/user entries from ~/.kube/config manually if needed", name)
+		log.Info().Msgf("kubectl not found — %q kubeconfig entries not removed; delete them from ~/.kube/config manually if needed", name)
 		return
 	}
 
@@ -95,8 +94,8 @@ func cmdOutput(kubectlPath string, env []string, args ...string) (string, error)
 func MergeAfterStartup(dataPath string) {
 	kubectlPath, err := exec.LookPath("kubectl")
 	if err != nil {
-		log.Info().Msg("kubectl not found — skipping kubeconfig merge")
-		log.Info().Msgf("kubeconfig location: %s", KubeSoloKubeconfigPath(dataPath))
+		log.Info().Msgf("kubectl not found — install kubectl, then run: kubesoloctl kubeconfig fetch")
+		log.Info().Msgf("kubeconfig available at: %s", KubeSoloKubeconfigPath(dataPath))
 		return
 	}
 	log.Info().Msgf("detected kubectl at %s", kubectlPath)

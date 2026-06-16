@@ -10,6 +10,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
 	"github.com/portainer/kubesolo/internal/cli/service"
+	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -63,7 +64,17 @@ Examples:
   # Use a non-default Docker socket:
   kubesoloctl kubeconfig fetch --socket /run/user/1000/docker.sock`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return kubeconfig.FetchAndMergeFromContainer(containerName, socketPath)
+			p := ui.New()
+			p.Header("kubeconfig fetch")
+
+			p.Step("Fetching and merging kubeconfig")
+			if err := kubeconfig.FetchAndMergeFromContainer(containerName, socketPath); err != nil {
+				return p.Fail("kubeconfig fetch", err)
+			}
+			p.OK("Kubeconfig merged", "~/.kube/config")
+
+			p.Done("Kubeconfig ready")
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&containerName, "container", service.ContainerNameFor(envOr("KUBESOLO_NAME", config.AppName)),
