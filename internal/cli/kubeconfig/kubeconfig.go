@@ -42,7 +42,7 @@ func RemoveFromUserConfig(name string) {
 		return
 	}
 
-	env := append(os.Environ(), "KUBECONFIG="+kubeconfigFile)
+	env := append(withoutEnv("KUBECONFIG"), "KUBECONFIG="+kubeconfigFile)
 
 	// Check whether the named context actually exists before touching anything.
 	out, err := cmdOutput(kubectlPath, env, "config", "get-contexts", "-o", "name")
@@ -121,6 +121,14 @@ func MergeAfterStartup(dataPath string) {
 	}
 
 	mergeIntoUserConfig(kubectlPath, realUser, realHome, realUID, realGID, ksKubeconfig)
+
+	// Force-patch the CA cert after the merge so a reinstall's new CA always
+	// overwrites any stale cert the merge may have preserved from a prior install.
+	caPath := filepath.Join(dataPath, "pki", "ca", "ca.crt")
+	if _, err := os.Stat(caPath); err == nil {
+		patchCACert(kubectlPath, filepath.Join(realHome, ".kube", "config"), "kubesolo", caPath)
+	}
+
 	log.Info().Msgf("kubeconfig also accessible at: %s", ksKubeconfig)
 }
 
@@ -148,7 +156,7 @@ func mergeIntoUserConfig(kubectlPath, realUser, realHome string, realUID, realGI
 
 	mergedTemp := existingConfig + ".tmp"
 	// New config first so its CA cert / credentials win over any stale existing entry.
-	mergeEnv := append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s:%s", newKubeconfigPath, existingConfig))
+	mergeEnv := append(withoutEnv("KUBECONFIG"), fmt.Sprintf("KUBECONFIG=%s:%s", newKubeconfigPath, existingConfig))
 	cmd := exec.Command(kubectlPath, "config", "view", "--flatten")
 	cmd.Env = mergeEnv
 
@@ -315,4 +323,43 @@ func chownRecursive(path string, uid, gid int) error {
 		}
 		return os.Lchown(p, uid, gid)
 	})
+}
+
+// withoutEnv returns a copy of os.Environ() with any entries whose key matches
+// one of the given names removed. Use it before appending overrides so that the
+// new value is the only occurrence — on Linux execve uses the first match, so a
+// duplicate appended at the end would silently be ignored.
+func withoutEnv(keys ...string) []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env))
+	for _, e := range env {
+		keep := true
+		for _, k := range keys {
+			if strings.HasPrefix(e, k+"=") {
+				keep = false
+				break
+			}
+		}
+		if keep {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// patchCACert embeds the CA cert at caPath into the named cluster entry of
+// kubeconfigFile. Called after mergeIntoUserConfig to ensure a fresh install's
+// CA cert always overwrites any stale cert that the merge may have preserved
+// from a previous installation.
+func patchCACert(kubectlPath, kubeconfigFile, clusterName, caPath string) {
+	cmd := exec.Command(kubectlPath, "config", "set-cluster", clusterName,
+		"--certificate-authority="+caPath,
+		"--embed-certs=true",
+		"--kubeconfig="+kubeconfigFile)
+	cmd.Env = append(withoutEnv("KUBECONFIG"), "KUBECONFIG="+kubeconfigFile)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Debug().Msgf("CA cert patch: %v: %s", err, strings.TrimSpace(string(out)))
+	} else {
+		log.Debug().Msg("CA cert refreshed in merged kubeconfig")
+	}
 }

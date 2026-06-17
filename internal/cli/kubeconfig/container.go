@@ -289,7 +289,7 @@ func patchContainerServerURL(kubectlPath, realHome, clusterName, serverURL strin
 	cmd := exec.Command(kubectlPath, "config", "set-cluster", clusterName,
 		"--server="+serverURL,
 		"--kubeconfig="+kubeConfig)
-	cmd.Env = append(os.Environ(), "HOME="+realHome, "KUBECONFIG="+kubeConfig)
+	cmd.Env = append(withoutEnv("HOME", "KUBECONFIG"), "HOME="+realHome, "KUBECONFIG="+kubeConfig)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		log.Debug().Msgf("set-cluster server: %v: %s", err, strings.TrimSpace(string(out)))
 	} else {
