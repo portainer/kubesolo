@@ -1059,6 +1059,22 @@ install_binary() {
 
 # ── Script entry point ────────────────────────────────────────────────────────
 
+# ── Recover env vars stripped by sudo env_reset ───────────────────────────────
+# Some systems configure sudo with env_reset, causing '-E' to be silently
+# ignored and stripping KUBESOLO_* vars before the script runs. Since we are
+# invoked as root, we can read them back from the sudo process's own
+# environment via /proc/$PPID/environ, which retains the pre-sudo shell env.
+# Only triggers when running under sudo with PORTAINER_EDGE_KEY missing, and
+# is a no-op on systems without procfs.
+if [ -n "$SUDO_USER" ] && [ -z "$KUBESOLO_PORTAINER_EDGE_KEY" ] && [ -r "/proc/$PPID/environ" ]; then
+    while IFS= read -r _kv; do
+        export "$_kv"
+    done << _PENV
+$(tr '\0' '\n' < "/proc/$PPID/environ" | grep '^KUBESOLO_[A-Z_]*=')
+_PENV
+    unset _kv
+fi
+
 # Default configuration from environment variables
 KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.1.6}"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
@@ -1066,7 +1082,13 @@ APISERVER_EXTRA_SANS="${KUBESOLO_APISERVER_EXTRA_SANS:-}"
 PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
 PORTAINER_EDGE_KEY="${KUBESOLO_PORTAINER_EDGE_KEY:-}"
 PORTAINER_EDGE_ASYNC="${KUBESOLO_PORTAINER_EDGE_ASYNC:-false}"
-LOCAL_STORAGE="${KUBESOLO_LOCAL_STORAGE:-false}"
+LOAD_BALANCER="${KUBESOLO_LOAD_BALANCER:-true}"
+LOCAL_STORAGE="${KUBESOLO_LOCAL_STORAGE:-true}"
+LOCAL_STORAGE_SHARED_PATH="${KUBESOLO_LOCAL_STORAGE_SHARED_PATH:-}"
+FULL="${KUBESOLO_FULL:-false}"
+DB_WAL_REPAIR="${KUBESOLO_DB_WAL_REPAIR:-false}"
+DISABLE_IPV6="${KUBESOLO_DISABLE_IPV6:-false}"
+STARTUP_TIMEOUT="${KUBESOLO_STARTUP_TIMEOUT:-600}"
 D2K="${KUBESOLO_D2K:-false}"
 D2K_NAMESPACE="${KUBESOLO_D2K_NAMESPACE:-d2k}"
 DEBUG="${KUBESOLO_DEBUG:-false}"
@@ -1279,8 +1301,36 @@ if [ -n "$PORTAINER_EDGE_KEY" ]; then
   CMD_ARGS="$CMD_ARGS --portainer-edge-key=$PORTAINER_EDGE_KEY"
 fi
 
-if [ "$LOCAL_STORAGE" = "true" ]; then
-  CMD_ARGS="$CMD_ARGS --local-storage=true"
+if [ "$PORTAINER_EDGE_ASYNC" = "true" ]; then
+  CMD_ARGS="$CMD_ARGS --portainer-edge-async=true"
+fi
+
+if [ "$LOAD_BALANCER" = "false" ]; then
+  CMD_ARGS="$CMD_ARGS --load-balancer=false"
+fi
+
+if [ "$LOCAL_STORAGE" = "false" ]; then
+  CMD_ARGS="$CMD_ARGS --local-storage=false"
+fi
+
+if [ -n "$LOCAL_STORAGE_SHARED_PATH" ]; then
+  CMD_ARGS="$CMD_ARGS --local-storage-shared-path=$LOCAL_STORAGE_SHARED_PATH"
+fi
+
+if [ "$FULL" = "true" ]; then
+  CMD_ARGS="$CMD_ARGS --full=true"
+fi
+
+if [ "$DB_WAL_REPAIR" = "true" ]; then
+  CMD_ARGS="$CMD_ARGS --db-wal-repair=true"
+fi
+
+if [ "$DISABLE_IPV6" = "true" ]; then
+  CMD_ARGS="$CMD_ARGS --disable-ipv6=true"
+fi
+
+if [ "$STARTUP_TIMEOUT" != "600" ]; then
+  CMD_ARGS="$CMD_ARGS --startup-timeout=$STARTUP_TIMEOUT"
 fi
 
 if [ "$D2K" = "true" ]; then
