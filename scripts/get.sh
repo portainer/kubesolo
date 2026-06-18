@@ -7,7 +7,7 @@
 #   curl -sfL https://get.kubesolo.io | sudo sh
 #
 # Pin a specific version:
-#   curl -sfL https://get.kubesolo.io | KUBESOLO_VERSION=v1.1.5 sudo sh
+#   curl -sfL https://get.kubesolo.io | KUBESOLO_VERSION=v1.1.7 sudo sh
 #
 # Pass flags to kubesoloctl (note the -s -- separator):
 #   curl -sfL https://get.kubesolo.io | sudo sh -s -- --install-prereqs
@@ -23,7 +23,7 @@
 #   flat (KUBESOLO_FLAT_URLS=1): <base>/kubesoloctl-linux-<arch>
 set -e
 
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.1.5}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.1.7}"
 DEFAULT_BASE_URL="https://github.com/portainer/kubesolo/releases/download"
 BASE_URL="${KUBESOLO_INSTALLER_BASE_URL:-$DEFAULT_BASE_URL}"
 FLAT_URLS="${KUBESOLO_FLAT_URLS:-0}"
@@ -63,5 +63,8 @@ else
 fi
 
 # run
+# Run as a child (not exec) so the EXIT trap still fires and removes the
+# downloaded binary afterwards — exec would replace this shell and skip cleanup.
+# set -e propagates a non-zero exit status from kubesoloctl.
 chmod +x "$TMP"
-exec "$TMP" "$@"
+"$TMP" "$@"

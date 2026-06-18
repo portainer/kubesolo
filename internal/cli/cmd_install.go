@@ -114,7 +114,6 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	p.Header("install")
 
 	// On macOS, KubeSolo must run as a container — the binary is Linux-only.
-	// Auto-add 127.0.0.1 to SANs so kubectl works via the published port 6443.
 	if runtime.GOOS == "darwin" {
 		if cmd.Flags().Changed("run-mode") && cfg.RunMode != config.RunModeContainer {
 			return fmt.Errorf("on macOS, only --run-mode=container is supported (KubeSolo is Linux-only and runs inside a container)")

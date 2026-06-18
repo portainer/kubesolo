@@ -17,15 +17,31 @@ func ContainerSuite() []Check {
 	}
 }
 
-// CheckContainerEngine verifies the container engine socket is reachable.
+// CheckContainerEngine verifies the container engine is reachable. It honours
+// DOCKER_HOST so it matches what the Docker client (client.FromEnv) actually
+// connects to: a unix socket by default, or a TCP endpoint when DOCKER_HOST is
+// set to tcp://. Schemes it cannot cheaply probe (ssh://, npipe://, …) are left
+// to the client at container-create time rather than failed here.
 func CheckContainerEngine() error {
-	socket := "/var/run/docker.sock"
-	if h := os.Getenv("DOCKER_HOST"); strings.HasPrefix(h, "unix://") {
-		socket = strings.TrimPrefix(h, "unix://")
+	host := os.Getenv("DOCKER_HOST")
+	switch {
+	case host == "":
+		return dialEngine("unix", "/var/run/docker.sock")
+	case strings.HasPrefix(host, "unix://"):
+		return dialEngine("unix", strings.TrimPrefix(host, "unix://"))
+	case strings.HasPrefix(host, "tcp://"):
+		return dialEngine("tcp", strings.TrimPrefix(host, "tcp://"))
+	default:
+		return nil
 	}
-	conn, err := net.DialTimeout("unix", socket, 2*time.Second)
+}
+
+// dialEngine attempts a short-lived connection to the engine endpoint, returning
+// a descriptive error if it is unreachable.
+func dialEngine(network, addr string) error {
+	conn, err := net.DialTimeout(network, addr, 2*time.Second)
 	if err != nil {
-		return fmt.Errorf("container engine not accessible at %s: %w (is the container engine running?)", socket, err)
+		return fmt.Errorf("container engine not accessible at %s://%s: %w (is the container engine running?)", network, addr, err)
 	}
 	conn.Close()
 	return nil

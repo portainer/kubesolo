@@ -21,7 +21,10 @@ export NO_PROXY='localhost,127.0.0.1'
 name="{{.AppName}}"
 description="KubeSolo single-node Kubernetes distribution"
 command="{{.InstallPath}}"
-command_args="{{range .CmdArgsList}}{{. | shellQuote}} {{end}}"
+# OpenRC word-splits $command_args on expansion without quote removal, so the
+# values must NOT be shell-quoted here (literal quotes would be passed to the
+# binary). KubeSolo's flags never contain spaces, so plain space-joining is safe.
+command_args="{{.CmdArgs}}"
 command_background=true
 pidfile="/var/run/${RC_SVCNAME}.pid"
 command_user="root"

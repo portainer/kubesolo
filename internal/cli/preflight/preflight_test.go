@@ -3,6 +3,7 @@ package preflight
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -20,8 +21,8 @@ func TestCheckHostname_ValidNames(t *testing.T) {
 		"kubesolo-prod-01",
 	}
 	for _, name := range valid {
-		if !hostnameRE.MatchString(name) {
-			t.Errorf("hostname %q should be valid but was rejected", name)
+		if err := validateHostname(name); err != nil {
+			t.Errorf("hostname %q should be valid but was rejected: %v", name, err)
 		}
 	}
 }
@@ -35,10 +36,13 @@ func TestCheckHostname_InvalidNames(t *testing.T) {
 		"ends-with-dash-",
 		".starts-with-dot",
 		"ends-with-dot.",
+		"a..b",                  // consecutive dots (empty label)
+		strings.Repeat("a", 64), // single label over 63 chars
+		"ok." + strings.Repeat("b", 64) + ".tail", // over-length label among valid ones
 		"",
 	}
 	for _, name := range invalid {
-		if hostnameRE.MatchString(name) {
+		if err := validateHostname(name); err == nil {
 			t.Errorf("hostname %q should be invalid but was accepted", name)
 		}
 	}

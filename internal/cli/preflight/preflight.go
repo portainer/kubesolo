@@ -59,9 +59,12 @@ func CheckRoot() error {
 	return nil
 }
 
-// hostnameRE is the RFC 1123 subdomain pattern: lowercase alphanumeric labels
-// separated by dots or hyphens, starting and ending with an alphanumeric rune.
-var hostnameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`)
+// hostnameLabelRE matches a single RFC 1123 label: lowercase alphanumerics and
+// hyphens, starting and ending with an alphanumeric rune. Labels are validated
+// individually so that empty labels (consecutive/leading/trailing dots) and
+// over-length labels are rejected — a whole-string regex cannot express the
+// per-label "non-empty, ≤63 chars" rules that Kubernetes node names require.
+var hostnameLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 // CheckHostname verifies that the machine's hostname is RFC 1123 compliant.
 // Kubernetes uses the hostname as the Node name, so a non-compliant hostname
@@ -84,13 +87,29 @@ func validateHostname(hostname string) error {
 	if len(hostname) > 253 {
 		return fmt.Errorf("hostname %q is %d characters long; maximum allowed by RFC 1123 is 253", hostname, len(hostname))
 	}
-	if !hostnameRE.MatchString(hostname) {
-		return fmt.Errorf(
-			"hostname %q is not RFC 1123 compliant: must contain only lowercase letters, numbers, "+
-				"hyphens and dots, and must start and end with an alphanumeric character. "+
-				"Please rename the host before installing KubeSolo",
-			hostname,
-		)
+	for _, label := range strings.Split(hostname, ".") {
+		if label == "" {
+			return fmt.Errorf(
+				"hostname %q is not RFC 1123 compliant: it contains an empty label "+
+					"(a leading, trailing, or consecutive dot). Please rename the host before installing KubeSolo",
+				hostname,
+			)
+		}
+		if len(label) > 63 {
+			return fmt.Errorf(
+				"hostname %q is not RFC 1123 compliant: label %q exceeds the 63-character maximum. "+
+					"Please rename the host before installing KubeSolo",
+				hostname, label,
+			)
+		}
+		if !hostnameLabelRE.MatchString(label) {
+			return fmt.Errorf(
+				"hostname %q is not RFC 1123 compliant: each dot-separated label must contain only "+
+					"lowercase letters, numbers and hyphens, and must start and end with an alphanumeric "+
+					"character. Please rename the host before installing KubeSolo",
+				hostname,
+			)
+		}
 	}
 	return nil
 }
