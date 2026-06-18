@@ -62,7 +62,7 @@ type SystemInfo struct {
 }
 
 // ArchiveName returns the fully-qualified tarball name for the given version,
-// e.g. "kubesolo-v1.1.5-linux-amd64.tar.gz"
+// e.g. "kubesolo-v1.1.7-linux-amd64.tar.gz"
 func (s *SystemInfo) ArchiveName(version string) string {
 	return fmt.Sprintf("kubesolo-%s-%s-%s%s.tar.gz", version, s.OS, s.ArchiveSuffix, s.LibCSuffix)
 }
@@ -120,7 +120,7 @@ func ForTarget(arch string) (*SystemInfo, error) {
 // SystemInfo. It returns an error only for unsupported (untargetable) hosts,
 // e.g. a musl system on riscv64 where no musl binary exists.
 func Detect() (*SystemInfo, error) {
-	// On macOS, KubeSolo runs as a Docker container — no init system or libc
+	// On macOS, KubeSolo runs as a container — no init system or libc
 	// detection is needed, only the host arch matters.
 	if runtime.GOOS == "darwin" {
 		arch, archSuffix, err := detectArch()

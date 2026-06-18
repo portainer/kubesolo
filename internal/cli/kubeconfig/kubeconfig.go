@@ -24,22 +24,23 @@ func KubeSoloKubeconfigPath(dataPath string) string {
 // RemoveFromUserConfig surgically removes the named KubeSolo context, cluster,
 // and user entries from the real user's ~/.kube/config. name is the instance
 // name used during install (default "kubesolo"). It is a no-op if kubectl is
-// not installed or if no matching entries are present.
-func RemoveFromUserConfig(name string) {
+// not installed or if no matching entries are present. It returns true if it
+// actually removed entries.
+func RemoveFromUserConfig(name string) bool {
 	if name == "" {
 		name = "kubesolo"
 	}
 	kubectlPath, err := exec.LookPath("kubectl")
 	if err != nil {
 		log.Info().Msgf("kubectl not found — %q kubeconfig entries not removed; delete them from ~/.kube/config manually if needed", name)
-		return
+		return false
 	}
 
 	_, realHome, _, _ := resolveRealUser()
 	kubeconfigFile := filepath.Join(realHome, ".kube", "config")
 	if _, err := os.Stat(kubeconfigFile); err != nil {
 		log.Debug().Msgf("no kubeconfig at %s — nothing to clean up", kubeconfigFile)
-		return
+		return false
 	}
 
 	env := append(withoutEnv("KUBECONFIG"), "KUBECONFIG="+kubeconfigFile)
@@ -48,7 +49,7 @@ func RemoveFromUserConfig(name string) {
 	out, err := cmdOutput(kubectlPath, env, "config", "get-contexts", "-o", "name")
 	if err != nil || !strings.Contains(out, name) {
 		log.Debug().Msgf("no %s context found in kubeconfig — nothing to remove", name)
-		return
+		return false
 	}
 
 	log.Info().Msgf("removing %s entries from %s...", name, kubeconfigFile)
@@ -71,6 +72,7 @@ func RemoveFromUserConfig(name string) {
 	if len(backups) > 0 {
 		log.Info().Msgf("backup kubeconfig available: %s", backups[len(backups)-1])
 	}
+	return true
 }
 
 // cmdRun executes kubectl with the given env and args, discarding output.
@@ -88,22 +90,27 @@ func cmdOutput(kubectlPath string, env []string, args ...string) (string, error)
 	return string(out), err
 }
 
-// MergeAfterStartup waits up to 30 seconds for KubeSolo to generate its admin
-// kubeconfig and then merges it into the real user's ~/.kube/config. It is a
-// no-op if kubectl is not installed.
-func MergeAfterStartup(dataPath string) {
+// kubeconfigWaitTimeout bounds how long MergeAfterStartup waits for KubeSolo to
+// generate its admin kubeconfig on first boot. A fresh cluster on a constrained
+// host has to start containerd + kine + apiserver and generate the PKI before
+// the kubeconfig appears, which can take well over 30s — hence the generous
+// ceiling. Callers that hit it surface a clear "run kubeconfig fetch" hint.
+const kubeconfigWaitTimeout = 120 * time.Second
+
+// MergeAfterStartup waits for KubeSolo to generate its admin kubeconfig and
+// then merges it into the real user's ~/.kube/config. It returns an error if
+// kubectl is missing or the kubeconfig never appears, so the caller can report
+// the true outcome instead of claiming success.
+func MergeAfterStartup(dataPath string) error {
 	kubectlPath, err := exec.LookPath("kubectl")
 	if err != nil {
-		log.Info().Msgf("kubectl not found — install kubectl, then run: kubesoloctl kubeconfig fetch")
-		log.Info().Msgf("kubeconfig available at: %s", KubeSoloKubeconfigPath(dataPath))
-		return
+		return fmt.Errorf("kubectl not found — install kubectl, then run: kubesoloctl kubeconfig fetch (kubeconfig at %s)", KubeSoloKubeconfigPath(dataPath))
 	}
 	log.Info().Msgf("detected kubectl at %s", kubectlPath)
 
 	ksKubeconfig := KubeSoloKubeconfigPath(dataPath)
-	if !waitForFile(ksKubeconfig, 30*time.Second) {
-		log.Warn().Msgf("timed out waiting for kubeconfig at %s", ksKubeconfig)
-		return
+	if !waitForFile(ksKubeconfig, kubeconfigWaitTimeout) {
+		return fmt.Errorf("timed out after %s waiting for %s — the cluster may still be starting", kubeconfigWaitTimeout.Round(time.Second), ksKubeconfig)
 	}
 
 	realUser, realHome, realUID, realGID := resolveRealUser()
@@ -130,6 +137,41 @@ func MergeAfterStartup(dataPath string) {
 	}
 
 	log.Info().Msgf("kubeconfig also accessible at: %s", ksKubeconfig)
+	return nil
+}
+
+// MergeFromDisk merges the admin kubeconfig from dataPath into the real user's
+// ~/.kube/config immediately (no wait loop). Returns an error if the kubeconfig
+// file does not exist or kubectl is not installed. Use this for on-demand
+// operations like `kubesoloctl kubeconfig fetch` on Linux where KubeSolo is
+// already running as a system service.
+func MergeFromDisk(dataPath string) error {
+	kubectlPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		return fmt.Errorf("kubectl not found — install kubectl, then run: kubesoloctl kubeconfig fetch")
+	}
+
+	ksKubeconfig := KubeSoloKubeconfigPath(dataPath)
+	if _, err := os.Stat(ksKubeconfig); err != nil {
+		return fmt.Errorf("kubeconfig not found at %s — is KubeSolo running?", ksKubeconfig)
+	}
+
+	realUser, realHome, realUID, realGID := resolveRealUser()
+	log.Info().Msgf("merging kubeconfig for user %s (home: %s)...", realUser, realHome)
+
+	if realUID > 0 {
+		if err := os.Chown(ksKubeconfig, realUID, realGID); err != nil {
+			log.Warn().Err(err).Msgf("could not chown source kubeconfig to %s", realUser)
+		}
+	}
+
+	mergeIntoUserConfig(kubectlPath, realUser, realHome, realUID, realGID, ksKubeconfig)
+
+	caPath := filepath.Join(dataPath, "pki", "ca", "ca.crt")
+	if _, err := os.Stat(caPath); err == nil {
+		patchCACert(kubectlPath, filepath.Join(realHome, ".kube", "config"), "kubesolo", caPath)
+	}
+	return nil
 }
 
 // mergeIntoUserConfig merges newKubeconfigPath into the real user's

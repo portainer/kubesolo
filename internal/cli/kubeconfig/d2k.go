@@ -118,3 +118,43 @@ func createOrUpdateDockerContext(dockerPath, name, endpoint string) error {
 	log.Debug().Msgf("docker context create output: %s", strings.TrimSpace(string(out)))
 	return fmt.Errorf("failed to create Docker context %q: %w", name, err)
 }
+
+// RemoveD2KContext removes the Docker context and credential directory created
+// by `kubesoloctl d2k fetch` for the named instance. It is best-effort and a
+// no-op when the docker CLI is absent or neither artifact exists. It returns
+// true if it removed the context or the credential directory.
+func RemoveD2KContext(name string) bool {
+	if name == "" {
+		name = "kubesolo"
+	}
+	removed := false
+
+	// Remove the credential directory (~/.docker/d2k/<name>/).
+	_, realHome, _, _ := resolveRealUser()
+	certDir := filepath.Join(realHome, ".docker", "d2k", name)
+	if _, err := os.Stat(certDir); err == nil {
+		if err := os.RemoveAll(certDir); err != nil {
+			log.Debug().Err(err).Msgf("could not remove d2k cert dir %s", certDir)
+		} else {
+			log.Info().Msgf("removed d2k cert dir %s", certDir)
+			removed = true
+		}
+	}
+
+	// Remove the Docker context. -f forces removal even if it is the current
+	// context (Docker then falls back to the default). "not found" is fine.
+	dockerPath, err := exec.LookPath("docker")
+	if err != nil {
+		return removed
+	}
+	out, err := exec.Command(dockerPath, "context", "rm", "-f", name).CombinedOutput()
+	if err != nil {
+		if !strings.Contains(string(out), "not found") {
+			log.Debug().Msgf("docker context rm %q: %s", name, strings.TrimSpace(string(out)))
+		}
+	} else {
+		log.Info().Msgf("removed Docker context %q", name)
+		removed = true
+	}
+	return removed
+}

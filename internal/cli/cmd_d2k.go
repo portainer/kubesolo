@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
@@ -18,13 +16,11 @@ func d2kCmd() *cobra.Command {
 		Short: "Manage the D2K Docker-to-Kubernetes API translator",
 		Long: `Commands for managing the D2K Docker-to-Kubernetes translator running inside
 a KubeSolo container. D2K exposes a Docker-compatible API on a random host port
-backed by mTLS — use 'fetch' to set up the Docker context and 'view' to inspect
-the current configuration.
+backed by mTLS — use 'fetch' to set up the Docker context.
 
 Requires the KubeSolo instance to have been installed with --d2k.`,
 	}
 	cmd.AddCommand(d2kFetchCmd())
-	cmd.AddCommand(d2kViewCmd())
 	return cmd
 }
 
@@ -82,43 +78,4 @@ Examples:
 	cmd.Flags().StringVar(&socketPath, "socket", "",
 		"Docker socket path (default: DOCKER_HOST env or /var/run/docker.sock)")
 	return cmd
-}
-
-func d2kViewCmd() *cobra.Command {
-	var name string
-	cmd := &cobra.Command{
-		Use:   "view",
-		Short: "Print the Docker context configuration for this KubeSolo instance",
-		Long: `Prints the Docker context entry for the named KubeSolo D2K instance,
-showing the mTLS endpoint and certificate paths.
-
-Examples:
-  kubesoloctl d2k view
-  kubesoloctl d2k view --name prod`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runD2KView(name)
-		},
-	}
-	cmd.Flags().StringVar(&name, "name", envOr("KUBESOLO_NAME", config.AppName),
-		"KubeSolo instance name (default: kubesolo)")
-	return cmd
-}
-
-func runD2KView(name string) error {
-	if name == "" {
-		name = config.AppName
-	}
-
-	dockerPath, err := exec.LookPath("docker")
-	if err != nil {
-		return fmt.Errorf("docker command line tool not found — install it, then run: kubesoloctl d2k fetch")
-	}
-
-	out, err := exec.Command(dockerPath, "context", "inspect", name).Output()
-	if err != nil {
-		return fmt.Errorf("Docker context %q not found — run: kubesoloctl d2k fetch --name %s", name, name)
-	}
-
-	_, err = os.Stdout.Write(out)
-	return err
 }

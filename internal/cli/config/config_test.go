@@ -66,6 +66,31 @@ func TestCmdArgs_FalseFieldsOmitted(t *testing.T) {
 	}
 }
 
+func TestCmdArgs_ContainerModeAddsFull(t *testing.T) {
+	cfg := &Config{Path: "/var/lib/kubesolo", RunMode: RunModeContainer}
+	if !hasArg(cfg.CmdArgs(), "--full") {
+		t.Errorf("container mode must always pass --full, got: %v", cfg.CmdArgs())
+	}
+}
+
+func TestCmdArgs_NonContainerModeOmitsFull(t *testing.T) {
+	for _, mode := range []string{"", RunModeService, RunModeDaemon, RunModeForeground} {
+		cfg := &Config{Path: "/var/lib/kubesolo", RunMode: mode}
+		if hasArg(cfg.CmdArgs(), "--full") {
+			t.Errorf("run mode %q must not pass --full, got: %v", mode, cfg.CmdArgs())
+		}
+	}
+}
+
+func hasArg(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestCmdArgs_EmptyStringsOmitted(t *testing.T) {
 	cfg := &Config{
 		Path:               "/var/lib/kubesolo",

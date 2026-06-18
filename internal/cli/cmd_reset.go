@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
@@ -56,8 +55,8 @@ func runReset(name, dataPath string, force bool) error {
 	p := ui.New()
 	p.Header("reset")
 
-	// Container mode on macOS — no root required.
-	if runtime.GOOS == "darwin" {
+	// Container mode (a KubeSolo container exists) — no root required.
+	if containerModeActive(name) {
 		return runContainerReset(p, name)
 	}
 
@@ -75,6 +74,7 @@ func runReset(name, dataPath string, force bool) error {
 	p.OK("KubeSolo stopped", "")
 
 	p.Step("Removing cluster state")
+	unmountDataDir(dataPath)
 	if err := os.RemoveAll(dataPath); err != nil {
 		return p.Fail("removing data directory", err)
 	}

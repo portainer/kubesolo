@@ -48,6 +48,20 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 
 	ctx := context.Background()
 
+	// Capture any workload ports the existing container published before we
+	// remove it, so an upgrade (which re-runs Install) preserves them when the
+	// caller did not pass --container-ports. 6443/2376 are excluded — those are
+	// re-bound fresh below with new random host ports.
+	prevWorkloadPorts := nat.PortMap{}
+	if insp, err := cli.ContainerInspect(ctx, m.cname()); err == nil {
+		for p, b := range insp.HostConfig.PortBindings {
+			if p == "6443/tcp" || p == "2376/tcp" {
+				continue
+			}
+			prevWorkloadPorts[p] = b
+		}
+	}
+
 	// Stop and remove any existing container so install is idempotent.
 	timeout := 10
 	_ = cli.ContainerStop(ctx, m.cname(), container.StopOptions{Timeout: &timeout})
@@ -67,14 +81,37 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	portBindings := nat.PortMap{
 		"6443/tcp": []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}},
 	}
+	exposedPorts := nat.PortSet{"6443/tcp": struct{}{}}
 	if cfg.D2K {
 		portBindings["2376/tcp"] = []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
+		exposedPorts["2376/tcp"] = struct{}{}
+	}
+
+	// Publish workload ports: explicit --container-ports if given, otherwise
+	// inherit whatever the previous container published (upgrade preservation).
+	if cfg.ContainerPorts != "" {
+		exposed, bindings, err := ParseContainerPorts(cfg.ContainerPorts)
+		if err != nil {
+			return err
+		}
+		for p, b := range bindings {
+			portBindings[p] = b
+		}
+		for p := range exposed {
+			exposedPorts[p] = struct{}{}
+		}
+	} else {
+		for p, b := range prevWorkloadPorts {
+			portBindings[p] = b
+			exposedPorts[p] = struct{}{}
+		}
 	}
 
 	resp, err := cli.ContainerCreate(ctx,
 		&container.Config{
-			Image: img,
-			Cmd:   cmdArgs,
+			Image:        img,
+			Cmd:          cmdArgs,
+			ExposedPorts: exposedPorts,
 		},
 		&container.HostConfig{
 			Privileged:    true,
@@ -171,6 +208,7 @@ func ResetContainer(name string) error {
 	img := resp.Config.Image
 	cmdArgs := resp.Config.Cmd
 	portBindings := resp.HostConfig.PortBindings
+	exposedPorts := resp.Config.ExposedPorts
 
 	// Stop and remove the container.
 	timeout := 30
@@ -187,8 +225,9 @@ func ResetContainer(name string) error {
 	log.Info().Msgf("creating fresh container %q...", cname)
 	createResp, err := cli.ContainerCreate(ctx,
 		&container.Config{
-			Image: img,
-			Cmd:   cmdArgs,
+			Image:        img,
+			Cmd:          cmdArgs,
+			ExposedPorts: exposedPorts,
 		},
 		&container.HostConfig{
 			Privileged:    true,
@@ -264,6 +303,27 @@ func GetContainerD2KPort(name string) (int, error) {
 		return 0, fmt.Errorf("invalid host port %q: %w", bindings[0].HostPort, err)
 	}
 	return port, nil
+}
+
+// ContainerExistsByName reports whether a container with the given name exists
+// (running or stopped). It returns false — never an error — when the container
+// engine is unreachable or no such container exists, so callers can use it to
+// detect container run mode on any host without a hard dependency on a reachable
+// engine (a host-service install on a box with no engine simply reports false).
+func ContainerExistsByName(cname string) bool {
+	cli, err := newContainerClient()
+	if err != nil {
+		return false
+	}
+	defer cli.Close()
+	_, err = cli.ContainerInspect(context.Background(), cname)
+	return err == nil
+}
+
+// ContainerExists reports whether the KubeSolo container for the given instance
+// name exists. Convenience wrapper around ContainerExistsByName.
+func ContainerExists(name string) bool {
+	return ContainerExistsByName(ContainerNameFor(name))
 }
 
 func newContainerClient() (*client.Client, error) {

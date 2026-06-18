@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
@@ -26,9 +27,9 @@ prepare a bundle for a different target, e.g. when downloading on an amd64
 laptop for deployment to an arm64 device.
 
 Examples:
-  kubesoloctl download --version=v1.1.5 --path=./offline-bundle
-  kubesoloctl download --version=v1.1.5 --path=./offline-bundle --arch=arm64
-  kubesoloctl download --version=v1.1.5 --path=./offline-bundle --arch=amd64-musl`,
+  kubesoloctl download --version=v1.1.7 --path=./offline-bundle
+  kubesoloctl download --version=v1.1.7 --path=./offline-bundle --arch=arm64
+  kubesoloctl download --version=v1.1.7 --path=./offline-bundle --arch=amd64-musl`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := ui.New()
 			p.Header("download")
@@ -55,12 +56,16 @@ Examples:
 			}
 			p.OK("Target resolved", info.ArchiveName(cfg.Version))
 
+			archiveName := info.ArchiveName(cfg.Version)
 			p.Step(fmt.Sprintf("Downloading KubeSolo %s", cfg.Version))
-			if err := download.DownloadBundle(dir, info.ArchiveName(cfg.Version), info.InstallerName(), cfg.Version); err != nil {
+			if err := download.DownloadBundle(dir, archiveName, cfg.Version); err != nil {
 				return p.Fail("download", err)
 			}
 
-			p.Done(fmt.Sprintf("Bundle downloaded to %s", dir))
+			p.Done(fmt.Sprintf("Bundle ready in %s", dir))
+			p.Section("Next steps")
+			p.Info("Transfer the files to the target machine, then:")
+			p.Info(fmt.Sprintf("  sudo ./kubesoloctl install --offline-install=%s", filepath.Join(dir, archiveName)))
 			return nil
 		},
 	}

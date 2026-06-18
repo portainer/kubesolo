@@ -36,16 +36,13 @@ func Install(offlineSrc, archiveName, version string) error {
 	return installOnline(archiveName, version)
 }
 
-// DownloadBundle downloads the KubeSolo release tarball and the installer
-// binary for this host into outDir, producing a fully self-contained offline
-// bundle ready to be transferred to an air-gapped machine.
+// DownloadBundle downloads the KubeSolo release tarball into outDir and copies
+// the running kubesoloctl binary alongside it, producing a fully self-contained
+// offline bundle ready to be transferred to an air-gapped machine.
 //
-//   - archiveName  is the kubesolo release tarball, e.g. "kubesolo-v1.1.5-linux-amd64.tar.gz"
-//   - installerName is the kubesoloctl binary asset, e.g. "kubesoloctl-linux-amd64"
-//   - version      is the kubesolo release tag, e.g. "v1.1.5"
-//
-// On the target machine, run: sudo ./kubesoloctl install --offline-install=./<archiveName>
-func DownloadBundle(outDir, archiveName, installerName, version string) error {
+//   - archiveName is the kubesolo release tarball, e.g. "kubesolo-v1.1.7-linux-amd64.tar.gz"
+//   - version     is the kubesolo release tag, e.g. "v1.1.7"
+func DownloadBundle(outDir, archiveName, version string) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory %s: %w", outDir, err)
 	}
@@ -59,22 +56,20 @@ func DownloadBundle(outDir, archiveName, installerName, version string) error {
 	}
 	log.Info().Msgf("KubeSolo archive saved to: %s", tarDest)
 
-	// 2. kubesoloctl binary for the target arch
-	installerURL := fmt.Sprintf("%s/%s/%s", releaseBaseURL, version, installerName)
+	// 2. Copy the running kubesoloctl binary — no need to download what we already have.
+	selfPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to locate running kubesoloctl binary: %w", err)
+	}
 	installerDest := filepath.Join(outDir, "kubesoloctl")
-	log.Info().Msgf("downloading kubesoloctl (%s)...", installerName)
-	if err := downloadFile(installerURL, installerDest); err != nil {
-		return fmt.Errorf("failed to download kubesoloctl binary: %w", err)
+	log.Info().Msgf("copying kubesoloctl to %s...", installerDest)
+	if err := copyFile(selfPath, installerDest); err != nil {
+		return fmt.Errorf("failed to copy kubesoloctl binary: %w", err)
 	}
 	if err := os.Chmod(installerDest, 0o755); err != nil {
 		return fmt.Errorf("failed to make kubesoloctl executable: %w", err)
 	}
-	log.Info().Msgf("kubesoloctl binary saved to: %s", installerDest)
-
-	log.Info().Msgf(
-		"download complete — transfer to the target machine and run: sudo %s install --offline-install=%s",
-		installerDest, tarDest,
-	)
+	log.Info().Msgf("kubesoloctl saved to: %s", installerDest)
 	return nil
 }
 

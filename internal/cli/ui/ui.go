@@ -150,3 +150,29 @@ func (p *Printer) Hint(label string, lines ...string) {
 		fmt.Fprintf(p.w, "     %s\n", l)
 	}
 }
+
+// Cmd prints a primary shell command at a shallow indent, highlighted in colour
+// mode. Use for the first actionable commands to run after a successful install.
+func (p *Printer) Cmd(msg string) {
+	if p.color {
+		fmt.Fprintf(p.w, "  %s%s%s\n", ansiCyan, msg, ansiReset)
+	} else {
+		fmt.Fprintf(p.w, "  %s\n", msg)
+	}
+}
+
+// Label prints a right-padded label and value pair on a single line, with the
+// label dimmed in colour mode. Use for compact command-reference tables such as
+// "Manage  systemctl status kubesolo".
+func (p *Printer) Label(label, value string) {
+	if p.color {
+		fmt.Fprintf(p.w, "  %s%-8s%s %s\n", ansiGray, label, ansiReset, value)
+	} else {
+		fmt.Fprintf(p.w, "  %-8s %s\n", label, value)
+	}
+}
+
+// Blank emits a bare newline — use to separate visual groups in footers.
+func (p *Printer) Blank() {
+	fmt.Fprintln(p.w)
+}

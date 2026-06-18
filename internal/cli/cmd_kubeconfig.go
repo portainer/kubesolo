@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
@@ -30,7 +29,7 @@ Examples:
   # Write to a specific file:
   kubesoloctl kubeconfig --output=~/.kube/config
 
-  # Fetch from a running Docker container and merge into ~/.kube/config:
+  # Fetch from a running KubeSolo container and merge into ~/.kube/config:
   kubesoloctl kubeconfig fetch`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runKubeconfig(dataPath, output)
@@ -47,29 +46,34 @@ Examples:
 func kubeconfigFetchCmd() *cobra.Command {
 	var containerName string
 	var socketPath string
+	var dataPath string
 	cmd := &cobra.Command{
 		Use:   "fetch",
-		Short: "Fetch kubeconfig from a Docker container and merge into ~/.kube/config",
-		Long: `Copies /var/lib/kubesolo/pki/admin/admin.kubeconfig out of a running
-KubeSolo Docker container using the Docker SDK and merges it into the local
-user's ~/.kube/config (backed up first if it already exists).
+		Short: "Merge the admin kubeconfig into ~/.kube/config",
+		Long: `Merges the KubeSolo admin kubeconfig into the local user's ~/.kube/config,
+backing up any existing config first.
+
+In container mode (a running KubeSolo container is detected), the kubeconfig is
+copied out of the container. Otherwise it is read from the local KubeSolo data
+directory (a host install running as a system service).
 
 Examples:
-  # Fetch from the default container name:
   kubesoloctl kubeconfig fetch
-
-  # Fetch from a container with a custom name or ID:
-  kubesoloctl kubeconfig fetch --container my-kubesolo
-
-  # Use a non-default Docker socket:
-  kubesoloctl kubeconfig fetch --socket /run/user/1000/docker.sock`,
+  kubesoloctl kubeconfig fetch --path /var/lib/kubesolo   (host install)
+  kubesoloctl kubeconfig fetch --container my-kubesolo    (container mode)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := ui.New()
 			p.Header("kubeconfig fetch")
 
-			p.Step("Fetching and merging kubeconfig")
-			if err := kubeconfig.FetchAndMergeFromContainer(containerName, socketPath); err != nil {
-				return p.Fail("kubeconfig fetch", err)
+			p.Step("Merging kubeconfig")
+			if containerModeActiveFor(containerName) {
+				if err := kubeconfig.FetchAndMergeFromContainer(containerName, socketPath); err != nil {
+					return p.Fail("kubeconfig fetch", err)
+				}
+			} else {
+				if err := kubeconfig.MergeFromDisk(dataPath); err != nil {
+					return p.Fail("kubeconfig fetch", err)
+				}
 			}
 			p.OK("Kubeconfig merged", "~/.kube/config")
 
@@ -78,9 +82,11 @@ Examples:
 		},
 	}
 	cmd.Flags().StringVar(&containerName, "container", service.ContainerNameFor(envOr("KUBESOLO_NAME", config.AppName)),
-		"Docker container name or ID running KubeSolo")
+		"Container name or ID running KubeSolo (container mode)")
 	cmd.Flags().StringVar(&socketPath, "socket", "",
-		"Docker socket path (default: DOCKER_HOST env or /var/run/docker.sock)")
+		"Container engine socket path (default: DOCKER_HOST env or /var/run/docker.sock) (container mode)")
+	cmd.Flags().StringVar(&dataPath, "path", config.DefaultPath,
+		"KubeSolo data directory (host install)")
 	return cmd
 }
 
@@ -93,14 +99,15 @@ func kubeconfigViewCmd() *cobra.Command {
 		Short: "Print the admin kubeconfig to stdout",
 		Long: `Print the raw admin kubeconfig to stdout.
 
-On macOS the kubeconfig is read directly from the running KubeSolo Docker
-container. On Linux it is read from the KubeSolo data directory.
+In container mode (a running KubeSolo container is detected), the kubeconfig is
+read directly from the container. Otherwise it is read from the local KubeSolo
+data directory.
 
 Examples:
   kubesoloctl kubeconfig view
   kubesoloctl kubeconfig view --container my-kubesolo`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if runtime.GOOS == "darwin" {
+			if containerModeActiveFor(containerName) {
 				data, err := kubeconfig.GetFromContainer(containerName, socketPath)
 				if err != nil {
 					return err
@@ -118,17 +125,17 @@ Examples:
 		},
 	}
 	cmd.Flags().StringVar(&containerName, "container", service.ContainerNameFor(envOr("KUBESOLO_NAME", config.AppName)),
-		"Docker container name or ID running KubeSolo (macOS only)")
+		"Container name or ID running KubeSolo (container mode)")
 	cmd.Flags().StringVar(&socketPath, "socket", "",
-		"Docker socket path (default: DOCKER_HOST env or /var/run/docker.sock) (macOS only)")
+		"Container engine socket path (default: DOCKER_HOST env or /var/run/docker.sock) (container mode)")
 	cmd.Flags().StringVar(&dataPath, "path", config.DefaultPath,
-		"KubeSolo data directory (Linux only)")
+		"KubeSolo data directory (host install)")
 	return cmd
 }
 
 func runKubeconfig(dataPath, output string) error {
-	if runtime.GOOS == "darwin" {
-		return fmt.Errorf("on macOS, KubeSolo runs in a container — use: kubesoloctl kubeconfig view")
+	if containerModeActive(config.AppName) {
+		return fmt.Errorf("KubeSolo is running in container mode — use: kubesoloctl kubeconfig view")
 	}
 	kcPath := kubeconfig.KubeSoloKubeconfigPath(dataPath)
 	data, err := os.ReadFile(kcPath)

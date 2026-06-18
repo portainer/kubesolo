@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"time"
 
@@ -35,7 +34,7 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 
 	f.StringVar(&cfg.Version, "version",
 		envOr("KUBESOLO_VERSION", config.DefaultVersion),
-		"KubeSolo version to install (e.g. v1.1.5)")
+		"KubeSolo version to install (e.g. v1.1.7)")
 
 	f.StringVar(&cfg.Path, "path",
 		envOr("KUBESOLO_PATH", config.DefaultPath),
@@ -71,7 +70,8 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 
 	f.StringVar(&cfg.RunMode, "run-mode",
 		envOr("KUBESOLO_RUN_MODE", config.DefaultRunMode),
-		"How to run KubeSolo: service (default), daemon, foreground, or container (macOS)")
+		"How to run KubeSolo: service (default), daemon, foreground, or container\n"+
+			"(runs on Docker Engine; supported on macOS, Windows WSL2, or Linux)")
 
 	f.StringVar(&cfg.Proxy, "proxy",
 		os.Getenv("KUBESOLO_PROXY"),
@@ -95,28 +95,59 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 
 	f.StringVar(&cfg.ContainerImage, "image",
 		os.Getenv("KUBESOLO_IMAGE"),
-		"Docker image to use in container mode (default: portainer/kubesolo:<version>).\n"+
+		"Container image to use in container mode (default: portainer/kubesolo:<version>).\n"+
 			"Accepts a full reference including tag, e.g. portainerci/kubesolo:pr-42-linux-arm64")
+
+	f.StringVar(&cfg.ContainerPorts, "container-ports",
+		os.Getenv("KUBESOLO_CONTAINER_PORTS"),
+		"Container-mode only: comma-separated host ports to publish for workloads\n"+
+			"(e.g. --container-ports=9001,8080:80,9000-9100,53/udp). Bare ports and\n"+
+			"ranges map host==container; explicit host:container forms are honored.")
 
 	f.StringVar(&cfg.Name, "name",
 		envOr("KUBESOLO_NAME", config.AppName),
-		"Name for this KubeSolo instance — used as the Docker container name and kubeconfig context")
+		"Name for this KubeSolo instance — used as the container name and kubeconfig context")
 }
 
 func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	p := ui.New()
 	p.Header("install")
 
-	// On macOS, KubeSolo must run as a Docker container — the binary is Linux-only.
-	// Auto-add 127.0.0.1 to SANs so kubectl works via Docker's published port 6443.
+	// On macOS, KubeSolo must run as a container — the binary is Linux-only.
+	// Auto-add 127.0.0.1 to SANs so kubectl works via the published port 6443.
 	if runtime.GOOS == "darwin" {
 		if cmd.Flags().Changed("run-mode") && cfg.RunMode != config.RunModeContainer {
-			return fmt.Errorf("on macOS, only --run-mode=container is supported (KubeSolo is Linux-only and runs inside Docker)")
+			return fmt.Errorf("on macOS, only --run-mode=container is supported (KubeSolo is Linux-only and runs inside a container)")
 		}
 		cfg.RunMode = config.RunModeContainer
 	}
 
 	containerMode := cfg.RunMode == config.RunModeContainer
+
+	// ── Feature/version compatibility ──────────────────────────────────────────
+	// d2k flags only exist in kubesolo >= MinD2KVersion. Passing --d2k to an older
+	// binary makes it exit 1 on every start (systemd then crash-loops it). A custom
+	// --image overrides the version entirely, so skip the check in that case.
+	if cfg.D2K && !(containerMode && cfg.ContainerImage != "") {
+		if cmp, ok := compareVersions(cfg.Version, config.MinD2KVersion); ok && cmp < 0 {
+			return p.Fail("version check", fmt.Errorf(
+				"--d2k requires kubesolo %s or newer; %s has no d2k support — re-run with --version=%s (or later)",
+				config.MinD2KVersion, cfg.Version, config.MinD2KVersion))
+		}
+	}
+
+	// ── Container port mappings ─────────────────────────────────────────────────
+	// Only meaningful in container mode — a host install runs on the host network,
+	// so workloads bind host ports directly. Validate early so a typo fails before
+	// any system changes are made.
+	if cfg.ContainerPorts != "" {
+		if !containerMode {
+			p.Warn("--container-ports is ignored outside container mode (host installs use the host network directly)")
+			cfg.ContainerPorts = ""
+		} else if _, _, err := service.ParseContainerPorts(cfg.ContainerPorts); err != nil {
+			return p.Fail("container ports", err)
+		}
+	}
 
 	// ── Detect system ─────────────────────────────────────────────────────────
 	p.Step("Detecting system")
@@ -149,7 +180,7 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	}
 	p.OK(fmt.Sprintf("Pre-flight checks passed (%d/%d)", len(checks), len(checks)), "")
 
-	// ── Download / install binary (Linux only) ────────────────────────────────
+	// ── Download / install binary (host mode only) ────────────────────────────
 	if !containerMode {
 		p.Step(fmt.Sprintf("Installing KubeSolo %s", cfg.Version))
 		if err := download.Install(cfg.OfflineInstall, info.ArchiveName(cfg.Version), cfg.Version); err != nil {
@@ -173,8 +204,8 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		return p.Fail("service setup", err)
 	}
 
-	// In container mode, discover the random host port Docker assigned, wait for
-	// the kubeconfig, and keep progress under the "Starting container" step.
+	// In container mode, discover the random host port the engine assigned, wait
+	// for the kubeconfig, and keep progress under the "Starting container" step.
 	var containerKubeconfig []byte
 	var apiAddr string
 	if containerMode {
@@ -196,10 +227,15 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		p.Step("Merging kubeconfig")
 		if containerMode {
 			kubeconfig.MergeContainerKubeconfig(containerKubeconfig, cfg.Name, "https://"+apiAddr)
+			p.OK("Kubeconfig merged", "~/.kube/config")
+		} else if err := kubeconfig.MergeAfterStartup(cfg.Path); err != nil {
+			// Don't claim success — the cluster is still coming up. The kubeconfig
+			// is already on disk; the user can merge it once the API server is ready.
+			p.Warn("kubeconfig not merged yet — " + err.Error())
+			p.Info("Once ready, run:  kubesoloctl kubeconfig fetch")
 		} else {
-			kubeconfig.MergeAfterStartup(cfg.Path)
+			p.OK("Kubeconfig merged", "~/.kube/config")
 		}
-		p.OK("Kubeconfig merged", "~/.kube/config")
 	}
 
 	// ── Wait for API server ───────────────────────────────────────────────────
@@ -214,46 +250,33 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 
 	p.Done(fmt.Sprintf("KubeSolo %s is running", cfg.Version))
 
-	// ── Post-install hints ────────────────────────────────────────────────────
+	// ── Post-install footer ───────────────────────────────────────────────────
 	if cfg.RunMode != config.RunModeForeground {
-		p.Section("Next steps")
+		p.Cmd("kubectl get nodes --watch")
+		p.Cmd("kubectl get pods -A")
+		p.Blank()
 
-		p.Info("kubectl get nodes --watch     # wait until STATUS: Ready")
-		p.Info("kubectl get pods -A")
-		p.Info("")
-
+		app := config.AppName
 		if containerMode {
-			p.Info("Tip: kubesoloctl kubeconfig fetch  (refresh kubeconfig after upgrade/reset)")
+			p.Label("Refresh", "kubesoloctl kubeconfig fetch")
 		} else {
-			app := config.AppName
 			switch info.InitSystem {
 			case detect.InitSystemd:
-				p.Info(fmt.Sprintf("Manage:  systemctl status %s", app))
-				p.Info(fmt.Sprintf("Logs:    journalctl -u %s -f", app))
+				p.Label("Manage", fmt.Sprintf("systemctl status %s", app))
+				p.Label("Logs", fmt.Sprintf("journalctl -u %s -f", app))
 			case detect.InitOpenRC:
-				p.Info(fmt.Sprintf("Manage:  rc-service %s status", app))
-				p.Info("Logs:    tail -f /var/log/messages")
+				p.Label("Manage", fmt.Sprintf("rc-service %s status", app))
+				p.Label("Logs", "tail -f /var/log/messages")
 			case detect.InitSysV:
-				p.Info(fmt.Sprintf("Manage:  service %s status", app))
-				p.Info("Logs:    tail -f /var/log/syslog")
+				p.Label("Manage", fmt.Sprintf("service %s status", app))
+				p.Label("Logs", "tail -f /var/log/syslog")
 			default:
-				p.Info(fmt.Sprintf("Logs:    tail -f %s", config.LogFile))
+				p.Label("Logs", fmt.Sprintf("tail -f %s", config.LogFile))
 			}
 		}
 
 		if cfg.D2K {
-			if containerMode {
-				p.Hint("D2K (Docker-to-Kubernetes API, mTLS)",
-					"kubesoloctl d2k fetch     # set up Docker context once KubeSolo has started",
-				)
-			} else {
-				pki := filepath.Join(cfg.Path, "pki")
-				p.Hint("D2K (Docker-to-Kubernetes API on port 2376, mTLS)",
-					fmt.Sprintf("Cert dir:  %s/d2k/", pki),
-					"Create a Docker context once KubeSolo has started:",
-					fmt.Sprintf(`  docker context create kubesolo --docker "host=tcp://$(hostname -I | awk '{print $1}'):2376,ca=%s/ca/ca.crt,cert=%s/d2k/client.crt,key=%s/d2k/client.key"`, pki, pki, pki),
-				)
-			}
+			p.Label("D2K", "kubesoloctl d2k fetch")
 		}
 	}
 

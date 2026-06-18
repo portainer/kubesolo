@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
@@ -25,8 +24,8 @@ binary, and restart the service. Cluster state (certificates, database) is
 preserved across the upgrade.
 
 Examples:
-  sudo kubesoloctl upgrade --version=v1.1.5
-  sudo kubesoloctl upgrade --version=v1.1.5 --offline-install=/tmp/kubesolo-v1.1.5-linux-amd64.tar.gz`,
+  sudo kubesoloctl upgrade --version=v1.1.7
+  sudo kubesoloctl upgrade --version=v1.1.7 --offline-install=/tmp/kubesolo-v1.1.7-linux-amd64.tar.gz`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUpgrade(cfg)
 		},
@@ -45,7 +44,7 @@ func runUpgrade(cfg *config.Config) error {
 	p := ui.New()
 	p.Header("upgrade")
 
-	if runtime.GOOS == "darwin" {
+	if containerModeActive(cfg.Name) {
 		return runContainerUpgrade(p, cfg)
 	}
 
@@ -92,6 +91,9 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config) error {
 	if err != nil {
 		return p.Fail("container inspect", err)
 	}
+	// Container mode always runs with upstream defaults (--full); ensure it
+	// survives upgrades of containers created before that became the default.
+	oldArgs = ensureArg(oldArgs, "--full")
 	p.OK("Current configuration retrieved", config.AppName)
 
 	// ── Pull new image, stop old container, start fresh ───────────────────────
