@@ -7,12 +7,11 @@ require (
 	github.com/containerd/containerd/v2 v2.2.3
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.7
+	github.com/docker/docker v28.5.2+incompatible
+	github.com/docker/go-connections v0.5.0
 	github.com/k3s-io/kine v0.15.0
 	github.com/klauspost/compress v1.18.6
 	github.com/mattn/go-sqlite3 v1.14.44
-	github.com/docker/docker v28.5.2+incompatible
-	github.com/docker/go-connections v0.5.0
-	github.com/klauspost/compress v1.18.5
 	github.com/pelletier/go-toml v1.9.5
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/cobra v1.10.2

@@ -110,6 +110,31 @@ kubectl get all -n mosquitto
 
 **Note:** If you're running KubeSolo on a device with less than 512 MB of RAM, interact with the cluster using an externally installed `kubectl`.
 
+### kubesoloctl (CLI)
+
+`kubesoloctl` is a single, dependency-free binary that manages the full KubeSolo lifecycle — install, upgrade, reset, uninstall, and kubeconfig wiring — and adds a **container mode** for running KubeSolo on macOS, Windows (WSL2), or any Linux host with a container engine. It's the recommended way to spin up KubeSolo for local development and CI.
+
+Download the binary for your platform from the [releases page](https://github.com/portainer/kubesolo/releases) (`kubesoloctl-<os>-<arch>`), put it on your `PATH`, then:
+
+```bash
+# Linux host (runs as a system service):
+sudo kubesoloctl install
+
+# Container mode — macOS / WSL2 / Linux dev (requires a container engine):
+kubesoloctl install --run-mode=container
+
+# Then, regardless of mode:
+kubectl get nodes --watch
+```
+
+`install` runs pre-flight checks, starts KubeSolo, and merges the admin kubeconfig into `~/.kube/config` automatically. In container mode you can publish workload ports just like Kind:
+
+```bash
+kubesoloctl install --run-mode=container --container-ports=9001,8080:80,9000-9100
+```
+
+For the full command reference, run modes, container-port syntax, multi-instance usage, and offline bundles, see the [kubesoloctl guide](docs/installation/kubesoloctl.md).
+
 ### Advanced Installation
 
 For detailed installation instructions including support for industrial devices, embedded systems, different init systems, and custom configurations, see the [Installation Guide](INSTALL.md).
