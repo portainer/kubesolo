@@ -44,16 +44,11 @@ func createClusterRoleBinding(ctx context.Context, clientset *kubernetes.Clients
 		},
 	}
 
+	// Create only if absent. On reboot the ClusterRoleBinding is restored from
+	// kine, so we leave it untouched to preserve any Portainer-managed changes.
 	_, err := clientset.RbacV1().ClusterRoleBindings().Create(ctx, clusterRoleBinding, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
-	}
-
-	if errors.IsAlreadyExists(err) {
-		_, err = clientset.RbacV1().ClusterRoleBindings().Update(ctx, clusterRoleBinding, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil

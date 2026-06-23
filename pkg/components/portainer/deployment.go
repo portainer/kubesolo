@@ -116,16 +116,12 @@ func createDeployment(ctx context.Context, clientset *kubernetes.Clientset, conf
 		},
 	}
 
+	// Create the deployment only if it does not already exist. On reboot the
+	// deployment is restored from kine, so we must not overwrite it — doing so
+	// would revert any Portainer-managed agent version back to the default.
 	_, err := clientset.AppsV1().Deployments(PortainerNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
-	}
-
-	if errors.IsAlreadyExists(err) {
-		_, err = clientset.AppsV1().Deployments(PortainerNamespace).Update(ctx, deployment, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
