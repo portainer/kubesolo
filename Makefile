@@ -215,6 +215,43 @@ archive:
 archive-musl:
 	tar -czf dist/kubesolo-musl.tar.gz dist/kubesolo install.sh
 
+# ── kubesoloctl binary ──────────────────────────────────────────────────────────
+#
+# kubesoloctl is built with CGO_ENABLED=0 (pure Go). A single binary per
+# architecture runs on both glibc and musl systems, so there is no libc split.
+#
+# Supported targets: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64
+
+KUBESOLOCTL_LDFLAGS = -s -w \
+	-X main.Version=$(VERSION) \
+	-X main.Commit=$(COMMIT) \
+	-X main.BuildDate=$(BUILD_DATE)
+
+KUBESOLOCTL_OUTPUT ?= ./dist/kubesoloctl-$(GOOS)-$(GOARCH)
+
+# Build kubesoloctl for the current GOOS/GOARCH.
+# Pass GOARM=7 when targeting arm (armhf/ARMv7), e.g.: make build-kubesoloctl GOARCH=arm GOARM=7
+.PHONY: build-kubesoloctl
+build-kubesoloctl:
+	@mkdir -p $(dir $(KUBESOLOCTL_OUTPUT))
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=$(GOARM) go build \
+		-ldflags="$(KUBESOLOCTL_LDFLAGS)" \
+		-o $(KUBESOLOCTL_OUTPUT) \
+		./cmd/kubesoloctl
+
+# Build kubesoloctl for all supported architectures
+.PHONY: build-kubesoloctl-all
+build-kubesoloctl-all:
+	GOOS=linux GOARCH=amd64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-amd64    make build-kubesoloctl
+	GOOS=linux GOARCH=arm64   KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-linux-arm64    make build-kubesoloctl
+	GOOS=darwin GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-darwin-amd64 make build-kubesoloctl
+	GOOS=darwin GOARCH=arm64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-darwin-arm64 make build-kubesoloctl
+
+# Clean kubesoloctl build artefacts
+.PHONY: clean-kubesoloctl
+clean-kubesoloctl:
+	rm -f ./dist/kubesoloctl-*
+
 # Include custom make targets
 -include $(wildcard .dev/*.make)
 

@@ -51,6 +51,42 @@ jobs:
           path: ./dist/kubesolo
           retention-days: 30
 
+  build-kubesoloctl:
+    name: build kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[execution] build kubesoloctl for ${{ matrix.goos }}/${{ matrix.goarch }}"
+        run: |
+          make build-kubesoloctl \
+            GOOS=${{ matrix.goos }} \
+            GOARCH=${{ matrix.goarch }} \
+            KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
+      - name: "[execution] upload artifact"
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./dist/kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
+          retention-days: 30
+
   docker-build:
     runs-on: ubuntu-latest
     strategy:
