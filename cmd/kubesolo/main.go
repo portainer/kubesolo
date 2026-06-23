@@ -273,7 +273,7 @@ func (s *kubesolo) run() {
 	if s.localStorage {
 		log.Info().Str("component", "kubesolo").Msg("deploying local path...")
 		if err := localpath.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.LocalPathStorageDir, s.localStorageSharedPath); err != nil {
-			log.Fatal().Err(err).Msg("failed to deploy local path")
+			log.Error().Err(err).Msg("failed to deploy local path, continuing without it")
 		}
 	}
 
@@ -285,7 +285,7 @@ func (s *kubesolo) run() {
 			EdgeAsync:        s.portainerEdgeAsync,
 			EdgeInsecurePoll: "true",
 		}); err != nil {
-			log.Fatal().Err(err).Msg("failed to deploy portainer edge agent...")
+			log.Error().Err(err).Msg("failed to deploy portainer edge agent, continuing without it")
 		}
 	}
 
@@ -296,7 +296,7 @@ func (s *kubesolo) run() {
 			Image:     types.DefaultD2KImage,
 			Certs:     s.embedded.D2KCerts,
 		}); err != nil {
-			log.Fatal().Err(err).Msg("failed to deploy d2k")
+			log.Error().Err(err).Msg("failed to deploy d2k, continuing without it")
 		}
 
 	}

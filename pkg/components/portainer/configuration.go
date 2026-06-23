@@ -33,16 +33,11 @@ func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, confi
 		Data: data,
 	}
 
+	// Create only if absent. On reboot the ConfigMap is restored from kine, so
+	// we leave it untouched to preserve any Portainer-managed changes.
 	_, err := clientset.CoreV1().ConfigMaps(PortainerNamespace).Create(ctx, configMap, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
-	}
-
-	if errors.IsAlreadyExists(err) {
-		_, err = clientset.CoreV1().ConfigMaps(PortainerNamespace).Update(ctx, configMap, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -59,16 +54,11 @@ func createSecret(ctx context.Context, clientset *kubernetes.Clientset, edgeKey 
 		},
 	}
 
+	// Create only if absent. On reboot the Secret is restored from kine, so we
+	// leave it untouched to preserve any Portainer-managed changes.
 	_, err := clientset.CoreV1().Secrets(PortainerNamespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
-	}
-
-	if errors.IsAlreadyExists(err) {
-		_, err = clientset.CoreV1().Secrets(PortainerNamespace).Update(ctx, secret, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }

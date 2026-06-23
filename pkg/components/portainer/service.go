@@ -36,16 +36,11 @@ func createHeadlessService(ctx context.Context, clientset *kubernetes.Clientset)
 		},
 	}
 
+	// Create only if absent. On reboot the Service is restored from kine, so we
+	// leave it untouched to preserve any Portainer-managed changes.
 	_, err := clientset.CoreV1().Services(PortainerNamespace).Create(ctx, service, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
-	}
-
-	if errors.IsAlreadyExists(err) {
-		_, err = clientset.CoreV1().Services(PortainerNamespace).Update(ctx, service, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
