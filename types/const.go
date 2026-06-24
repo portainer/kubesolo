@@ -27,11 +27,11 @@ const (
 	DefaultKineSocket                = "kine.sock"
 	DefaultControllerManagerDir      = "controller-manager"
 	DefaultSandboxImage              = "docker.io/portainer/pause:latest"
-	DefaultPortainerAgentImage       = "docker.io/portainer/agent:2.39.2"
-	DefaultCoreDNSImage              = "docker.io/coredns/coredns:1.14.3"
+	DefaultPortainerAgentImage       = "docker.io/portainer/agent:2.39.5"
+	DefaultCoreDNSImage              = "docker.io/coredns/coredns:1.14.4"
 	DefaultLocalPathProvisionerImage = "docker.io/rancher/local-path-provisioner:v0.0.36"
 	DefaultLocalPathStorageDir       = "local-path-storage"
-	DefaultD2KImage                  = "docker.io/portainer/d2k:1.2.2"
+	DefaultD2KImage                  = "docker.io/portainer/d2k:1.2.3"
 	DefaultD2KPort                   = int32(2376)
 	DefaultD2KDir                    = "d2k"
 	DefaultWebhookReadWriteTimeout   = 10 * time.Second
