@@ -1,0 +1,17 @@
+{
+  // KubeSolo is Linux-only: most of the codebase sits behind
+  // //go:build linux (and arch) constraints, plus Linux-only containerd
+  // snapshotter plugin imports. Without this, gopls analyzes for the host
+  // platform (e.g. darwin/arm64) and reports false "undefined" / build-constraint
+  // errors for symbols like EnsureEmbeddedDependencies, mountMakeRShared, the
+  // embedded.go binaries, and the overlay/fuse-overlayfs plugins.
+  //
+  // Targeting linux makes gopls' diagnostics match what actually compiles in CI
+  // and `make build`. Host arch applies (linux/amd64 or linux/arm64 — both
+  // satisfy the embedded build tags).
+  "gopls": {
+    "build.env": {
+      "GOOS": "linux"
+    }
+  }
+}

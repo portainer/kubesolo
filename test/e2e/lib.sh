@@ -30,7 +30,9 @@ _resolve_ctx() {
   if "$KUBECTL" config get-contexts -o name 2>/dev/null | grep -qx "$want"; then
     KS_CONTEXT="$want"
   else
-    KS_CONTEXT="$("$KUBECTL" config get-contexts -o name 2>/dev/null | grep -E "@${KS_NAME}\$" | head -1)"
+    # `|| true`: under `set -euo pipefail`, grep exiting non-zero on no match
+    # would otherwise abort the script before the fallback below runs.
+    KS_CONTEXT="$("$KUBECTL" config get-contexts -o name 2>/dev/null | grep -E "@${KS_NAME}\$" | head -1 || true)"
   fi
   [ -n "$KS_CONTEXT" ] || KS_CONTEXT="$KS_NAME"
 }

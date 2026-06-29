@@ -10,6 +10,6 @@ import (
 func StartMonitoring() {
 	go func() {
 		log.Debug().Msg("Starting pprof server on :6060")
-		http.ListenAndServe(":6060", nil)
+		_ = http.ListenAndServe(":6060", nil)
 	}()
 }

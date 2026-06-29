@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
-	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -33,8 +32,6 @@ type Service struct {
 	nodeSelectorPatchObj    []map[string]any
 	pvcAnnotationPatch      []map[string]any
 	loadBalancerStatusPatch []byte
-	requestMutex            sync.Mutex
-	lastRequest             time.Time
 	adminKubeconfig         string
 	loadBalancer            bool
 	loadBalancerUpdateLocks sync.Map

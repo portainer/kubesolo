@@ -83,7 +83,7 @@ func installOnline(archiveName, version string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	archivePath := filepath.Join(tmpDir, archiveName)
 	if err := downloadFile(url, archivePath); err != nil {
@@ -104,7 +104,7 @@ func installOffline(src string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	lower := strings.ToLower(src)
 	switch {

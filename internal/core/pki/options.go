@@ -36,7 +36,7 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 		KeySize:      2048,
 	}
 
-	ipAddresses := []net.IP{}
+	var ipAddresses []net.IP
 	ips, err := network.GetLocalIPs()
 	if err == nil {
 		ipAddresses = ips

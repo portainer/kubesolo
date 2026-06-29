@@ -59,12 +59,12 @@ jobs:
       - name: "[preparation] download embedded deps"
         run: make deps GOOS=linux GOARCH=amd64
       # golangci-lint-action v7 pairs with golangci-lint v2 (matches the
-      # `version: "2"` schema in .golangci.yml).
-      # NOTE: pin this to a commit SHA to match the repo's action-pinning policy.
+      # `version: "2"` schema in .golangci.yml). Pinned to a commit SHA like the
+      # repo's other actions; golangci-lint itself pinned for reproducible CI.
       - name: "[execution] run golangci-lint"
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7.0.1
         with:
-          version: latest
+          version: v2.12.2
 
   build:
     runs-on: ubuntu-latest

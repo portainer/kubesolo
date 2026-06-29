@@ -92,7 +92,7 @@ func (w *Service) createConfig(webhookConfig *admissionregistrationv1.MutatingWe
 
 // updateConfig updates an existing webhook configuration
 func (w *Service) updateConfig(webhookConfig *admissionregistrationv1.MutatingWebhookConfiguration, existingConfig *admissionregistrationv1.MutatingWebhookConfiguration) error {
-	webhookConfig.ObjectMeta.ResourceVersion = existingConfig.ObjectMeta.ResourceVersion
+	webhookConfig.ResourceVersion = existingConfig.ResourceVersion
 	cs := w.getClientset()
 	_, err := cs.AdmissionregistrationV1().MutatingWebhookConfigurations().Update(context.Background(), webhookConfig, metav1.UpdateOptions{})
 	if err != nil {

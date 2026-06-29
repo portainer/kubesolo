@@ -76,7 +76,7 @@ func (s *service) postSetup() error {
 		s.cancelShutdown()
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := s.checkContainerdHealth(ctx, client); err != nil {
 		log.Error().Str("component", "containerd").Msgf("containerd health check failed: %v...", err)

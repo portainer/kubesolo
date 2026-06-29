@@ -29,7 +29,7 @@ func (s *service) repairWALIfCorrupt() {
 		s.handleCorruption(dbPath, "cannot open SQLite DB for integrity check: %v", err)
 		return
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -39,7 +39,7 @@ func (s *service) repairWALIfCorrupt() {
 		s.handleCorruption(dbPath, "SQLite quick_check query failed: %v", err)
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if rows.Next() {
 		var result string

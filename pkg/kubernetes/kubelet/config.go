@@ -37,7 +37,7 @@ func (s *service) writeKubeletConfigFile() error {
 		log.Error().Str("component", "kubelet").Msgf("failed to create config file: %v", err)
 		return err
 	}
-	defer configFile.Close()
+	defer func() { _ = configFile.Close() }()
 
 	_, err = configFile.Write(yamlConfig)
 	if err != nil {
