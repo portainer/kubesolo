@@ -13,7 +13,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createDeployment(ctx context.Context, clientset *kubernetes.Clientset, containerMode bool) error {
+func createDeployment(ctx context.Context, clientset kubernetes.Interface, containerMode bool) error {
 	replicas := int32(1)
 	priorityClassName := "system-cluster-critical"
 

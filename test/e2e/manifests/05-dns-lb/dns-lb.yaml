@@ -1,0 +1,71 @@
+# Tier 5 — DNS & LoadBalancer: cross-namespace Service DNS resolution and the
+# KubeSolo LoadBalancer webhook (which patches status with the node IP).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tier5-a
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tier5-b
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: tier5-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: tier5-a
+spec:
+  type: ClusterIP
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-lb
+  namespace: tier5-a
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Client in a different namespace, used to resolve web.tier5-a via CoreDNS.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dns-client
+  namespace: tier5-b
+spec:
+  restartPolicy: Never
+  containers:
+    - name: client
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep 3600"]

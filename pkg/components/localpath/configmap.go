@@ -20,7 +20,7 @@ type nodePathMapEntry struct {
 	Paths []string `json:"paths"`
 }
 
-func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, path, sharedPath string) error {
+func createConfigMap(ctx context.Context, clientset kubernetes.Interface, path, sharedPath string) error {
 	var config localPathConfig
 
 	if sharedPath != "" {

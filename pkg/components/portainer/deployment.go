@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createDeployment(ctx context.Context, clientset *kubernetes.Clientset, config types.EdgeAgentConfig) error {
+func createDeployment(ctx context.Context, clientset kubernetes.Interface, config types.EdgeAgentConfig) error {
 	replicas := int32(1)
 
 	envVars := []corev1.EnvVar{

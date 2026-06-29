@@ -1,0 +1,60 @@
+# Tier 3 — config & identity: a pod consuming a ConfigMap, a Secret, and a
+# projected ServiceAccount token. The token projection exercises the rshared
+# mount-propagation path that container mode depends on.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tier3-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: tier3-config
+data:
+  greeting: hello-kubesolo
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+  namespace: tier3-config
+type: Opaque
+stringData:
+  token: s3cr3t-value
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: consumer
+  namespace: tier3-config
+spec:
+  restartPolicy: Never
+  containers:
+    - name: consumer
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep 3600"]
+      env:
+        - name: GREETING
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: greeting
+      volumeMounts:
+        - name: secret
+          mountPath: /etc/secret
+          readOnly: true
+        - name: token
+          mountPath: /var/run/secrets/tokens
+          readOnly: true
+  volumes:
+    - name: secret
+      secret:
+        secretName: app-secret
+    - name: token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: sa-token
+              expirationSeconds: 3600
+              audience: kubesolo-e2e

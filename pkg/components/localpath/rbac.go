@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createServiceAccount(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createServiceAccount(ctx context.Context, clientset kubernetes.Interface) error {
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "local-path-provisioner-service-account",
@@ -25,7 +25,7 @@ func createServiceAccount(ctx context.Context, clientset *kubernetes.Clientset) 
 	return nil
 }
 
-func createRole(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createRole(ctx context.Context, clientset kubernetes.Interface) error {
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "local-path-provisioner-role",
@@ -54,7 +54,7 @@ func createRole(ctx context.Context, clientset *kubernetes.Clientset) error {
 	return nil
 }
 
-func createClusterRole(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createClusterRole(ctx context.Context, clientset kubernetes.Interface) error {
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "local-path-provisioner-role",
@@ -97,7 +97,7 @@ func createClusterRole(ctx context.Context, clientset *kubernetes.Clientset) err
 	return nil
 }
 
-func createRoleBinding(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createRoleBinding(ctx context.Context, clientset kubernetes.Interface) error {
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "local-path-provisioner-bind",
@@ -131,7 +131,7 @@ func createRoleBinding(ctx context.Context, clientset *kubernetes.Clientset) err
 	return nil
 }
 
-func createClusterRoleBinding(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createClusterRoleBinding(ctx context.Context, clientset kubernetes.Interface) error {
 	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "local-path-provisioner-bind",

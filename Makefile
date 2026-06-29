@@ -186,6 +186,48 @@ lint:
 	go mod tidy
 	go fmt ./...
 
+# lint-ci runs the full static-analysis suite. Kept separate from `lint` because
+# the build targets depend on `lint`, and we don't want every build to require
+# golangci-lint to be installed. CI installs golangci-lint and calls this target.
+.PHONY: lint-ci
+lint-ci:
+	golangci-lint run
+
+# test compiles and runs the unit suite. It depends on `deps` because
+# internal/core/embedded uses //go:embed on binaries that only exist after
+# `make deps` has downloaded them — without it, `go test ./...` fails to compile.
+# CGO is required for the SQLite (kine) dependency.
+.PHONY: test
+test: deps
+	CGO_ENABLED=1 go test -covermode=atomic -coverprofile=coverage.out ./...
+
+# test-race adds the race detector (slower, heavier compile). Use when touching
+# concurrent code such as the service-startup orchestration.
+.PHONY: test-race
+test-race: deps
+	CGO_ENABLED=1 go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+# test-e2e boots KubeSolo as a container via kubesoloctl and runs the smoke
+# suite. Requires Docker + kubectl and a Linux host (KubeSolo is Linux-only).
+# Build kubesoloctl first, then point the harness at an image to test.
+E2E_IMAGE ?= portainer/kubesolo:dev
+.PHONY: test-e2e
+test-e2e: build-kubesoloctl
+	IMAGE=$(E2E_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/e2e/run.sh
+
+# bench boots KubeSolo and records boot time / idle RSS / image size / pod
+# density. Reports only unless a test/perf/baseline.<arch>.json is committed.
+PERF_IMAGE ?= portainer/kubesolo:dev
+.PHONY: bench
+bench: build-kubesoloctl
+	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/bench.sh
+
+# soak loops the manifest tiers and watches for container restarts and idle-RSS
+# growth (a leak detector). Used by the nightly workflow.
+.PHONY: soak
+soak: build-kubesoloctl
+	IMAGE=$(E2E_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/e2e/soak.sh
+
 .PHONY: run
 run: build
 	sudo $(OUTPUT)

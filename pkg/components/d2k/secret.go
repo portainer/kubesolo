@@ -20,7 +20,7 @@ import (
 // The CA certificate is *not* embedded in this Secret because d2k does not
 // require it for serving — operators verify the server cert against the
 // kubesolo CA on disk via `docker --tlscacert`.
-func createTLSSecret(ctx context.Context, clientset *kubernetes.Clientset, namespace string, certs types.D2KCertificatePaths) error {
+func createTLSSecret(ctx context.Context, clientset kubernetes.Interface, namespace string, certs types.D2KCertificatePaths) error {
 	cert, err := os.ReadFile(certs.ServerCert)
 	if err != nil {
 		return fmt.Errorf("failed to read d2k server certificate %s: %v", certs.ServerCert, err)

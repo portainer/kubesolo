@@ -9,6 +9,63 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    name: unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      # `make test` depends on `deps`, which downloads the embedded binaries that
+      # internal/core/embedded references via //go:embed. Without them the test
+      # binary fails to compile. gcc (for CGO/SQLite) is preinstalled on the runner.
+      - name: "[execution] run unit tests with coverage"
+        run: make test GOOS=linux GOARCH=amd64
+      - name: "[reporting] coverage summary"
+        if: always()
+        run: |
+          if [[ -f coverage.out ]]; then
+            echo "### Coverage" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            go tool cover -func=coverage.out | tail -n 1 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: "[reporting] upload coverage artifact"
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 30
+          if-no-files-found: ignore
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      # golangci-lint type-checks the packages it analyses, so the embedded
+      # binaries must exist first (same //go:embed reason as the test job).
+      - name: "[preparation] download embedded deps"
+        run: make deps GOOS=linux GOARCH=amd64
+      # golangci-lint-action v7 pairs with golangci-lint v2 (matches the
+      # `version: "2"` schema in .golangci.yml).
+      # NOTE: pin this to a commit SHA to match the repo's action-pinning policy.
+      - name: "[execution] run golangci-lint"
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -169,3 +226,61 @@ jobs:
             -t portainerci/kubesolo:${{ steps.manifest.outputs.tag }} \
             portainerci/kubesolo:${{ steps.manifest.outputs.tag }}-linux-amd64 \
             portainerci/kubesolo:${{ steps.manifest.outputs.tag }}-linux-arm64
+
+  # ── End-to-end smoke ────────────────────────────────────────────────────────
+  # Boots the just-built image as a container on a NATIVE runner (no QEMU — a
+  # full Kubernetes boot under emulation is far too slow) and runs the smoke
+  # suite via kubesoloctl. Gated on same-repo events so the published image and
+  # Docker Hub secrets are available. arm64 runs on develop pushes only to keep
+  # PR-time arm64 minutes down; flip its `if` to match e2e-amd64 to run it on PRs.
+  e2e-amd64:
+    name: e2e (amd64)
+    needs: [docker-manifest]
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl"
+        run: make build-kubesoloctl GOOS=linux GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[preparation] resolve image tag"
+        id: image
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=develop" >> "$GITHUB_OUTPUT"
+          fi
+      - name: "[execution] run e2e smoke suite"
+        run: IMAGE=portainerci/kubesolo:${{ steps.image.outputs.tag }} KUBESOLOCTL=./dist/kubesoloctl test/e2e/run.sh
+
+  e2e-arm64:
+    name: e2e (arm64)
+    needs: [docker-manifest]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl"
+        run: make build-kubesoloctl GOOS=linux GOARCH=arm64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/arm64/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[execution] run e2e smoke suite"
+        run: IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/e2e/run.sh

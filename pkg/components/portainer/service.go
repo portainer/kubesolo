@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createHeadlessService(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createHeadlessService(ctx context.Context, clientset kubernetes.Interface) error {
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PortainerEdgeAgentServiceName,

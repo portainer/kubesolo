@@ -15,7 +15,7 @@ import (
 // The kubesolo webhook (when --load-balancer is enabled, which is the default)
 // observes the Service and patches its Status.LoadBalancer.Ingress with the
 // node IP, which the endpoint persister then surfaces to operators.
-func createService(ctx context.Context, clientset *kubernetes.Clientset, namespace string) error {
+func createService(ctx context.Context, clientset kubernetes.Interface, namespace string) error {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName,

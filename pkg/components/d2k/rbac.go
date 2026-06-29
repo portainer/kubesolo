@@ -12,7 +12,7 @@ import (
 
 // createServiceAccount creates the namespace-scoped ServiceAccount used by
 // the d2k pod.
-func createServiceAccount(ctx context.Context, clientset *kubernetes.Clientset, namespace string) error {
+func createServiceAccount(ctx context.Context, clientset kubernetes.Interface, namespace string) error {
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceAccountName,
@@ -30,7 +30,7 @@ func createServiceAccount(ctx context.Context, clientset *kubernetes.Clientset, 
 
 // createRole creates the namespace-scoped Role granting d2k the workload
 // management permissions enumerated in the upstream reference manifest.
-func createRole(ctx context.Context, clientset *kubernetes.Clientset, namespace string) error {
+func createRole(ctx context.Context, clientset kubernetes.Interface, namespace string) error {
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
@@ -116,7 +116,7 @@ func createRole(ctx context.Context, clientset *kubernetes.Clientset, namespace 
 }
 
 // createRoleBinding binds the namespace-scoped Role to the d2k ServiceAccount.
-func createRoleBinding(ctx context.Context, clientset *kubernetes.Clientset, namespace string) error {
+func createRoleBinding(ctx context.Context, clientset kubernetes.Interface, namespace string) error {
 	rb := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleBindingName,
@@ -154,7 +154,7 @@ func createRoleBinding(ctx context.Context, clientset *kubernetes.Clientset, nam
 // createNodeReaderClusterRole creates the cluster-scoped read-only ClusterRole
 // d2k uses for SwarmListNodes, SwarmInspectNode, and storageclass discovery.
 // Node mutation verbs are deliberately absent.
-func createNodeReaderClusterRole(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createNodeReaderClusterRole(ctx context.Context, clientset kubernetes.Interface) error {
 	cr := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   NodeReaderClusterRoleName,
@@ -190,7 +190,7 @@ func createNodeReaderClusterRole(ctx context.Context, clientset *kubernetes.Clie
 
 // createNodeReaderClusterRoleBinding binds the cluster-scoped ClusterRole to
 // the d2k ServiceAccount in the target namespace.
-func createNodeReaderClusterRoleBinding(ctx context.Context, clientset *kubernetes.Clientset, namespace string) error {
+func createNodeReaderClusterRoleBinding(ctx context.Context, clientset kubernetes.Interface, namespace string) error {
 	crb := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   NodeReaderClusterRoleBindingName,

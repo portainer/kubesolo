@@ -65,7 +65,7 @@ func Deploy(adminKubeconfig string, containerMode bool, disableIPv6 bool) error 
 }
 
 // waitForCoreDNSReady polls the CoreDNS deployment until at least one replica is ready
-func waitForCoreDNSReady(clientset *kubernetes.Clientset) error {
+func waitForCoreDNSReady(clientset kubernetes.Interface) error {
 	log.Info().Str("component", "coredns").Msg("waiting for CoreDNS to become ready...")
 
 	for i := range types.DefaultRetryCount * 3 {

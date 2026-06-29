@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createServiceAccount(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createServiceAccount(ctx context.Context, clientset kubernetes.Interface) error {
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      coreDNSServiceAccountName,
@@ -25,7 +25,7 @@ func createServiceAccount(ctx context.Context, clientset *kubernetes.Clientset) 
 	return nil
 }
 
-func createClusterRole(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createClusterRole(ctx context.Context, clientset kubernetes.Interface) error {
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: coreDNSClusterRoleName,
@@ -58,7 +58,7 @@ func createClusterRole(ctx context.Context, clientset *kubernetes.Clientset) err
 	return nil
 }
 
-func createClusterRoleBinding(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createClusterRoleBinding(ctx context.Context, clientset kubernetes.Interface) error {
 	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: coreDNSClusterRoleName,

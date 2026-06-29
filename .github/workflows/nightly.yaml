@@ -1,0 +1,119 @@
+name: nightly
+
+# Heavy suites kept off the PR path: performance/footprint measurement on native
+# amd64 + arm64 against the latest develop image. Runs on a schedule and on demand.
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  perf:
+    name: perf (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl"
+        run: make build-kubesoloctl GOOS=linux GOARCH=${{ matrix.arch }} KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/${{ matrix.arch }}/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[preparation] log in to docker hub"
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: "[execution] performance baseline"
+        run: IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/perf/bench.sh
+      - name: "[reporting] upload result"
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: perf-${{ matrix.arch }}
+          path: test/perf/result.${{ matrix.arch }}.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # Soak / stability: loop the manifest tiers and watch for restarts + RSS growth.
+  soak:
+    name: soak (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl"
+        run: make build-kubesoloctl GOOS=linux GOARCH=${{ matrix.arch }} KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/${{ matrix.arch }}/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[preparation] log in to docker hub"
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: "[execution] soak"
+        run: IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/e2e/soak.sh
+
+  # Conformance-lite: focused single-node-safe subset of upstream e2e via Sonobuoy.
+  # amd64 only — the upstream test binary is heavy and one arch is enough signal.
+  conformance-lite:
+    name: conformance-lite (amd64)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl"
+        run: make build-kubesoloctl GOOS=linux GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[preparation] install sonobuoy"
+        run: |
+          curl -fsSL https://github.com/vmware-tanzu/sonobuoy/releases/download/v0.57.3/sonobuoy_0.57.3_linux_amd64.tar.gz \
+            | tar -xz -C /usr/local/bin sonobuoy
+          chmod +x /usr/local/bin/sonobuoy
+      - name: "[preparation] log in to docker hub"
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: "[execution] conformance-lite"
+        run: IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/e2e/conformance.sh

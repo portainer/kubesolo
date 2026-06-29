@@ -1,0 +1,30 @@
+# golangci-lint configuration for KubeSolo.
+#
+# Intentionally lenient to start: we enable a focused set of high-signal linters
+# and avoid style/complexity linters (gocyclo, lll, ...) that would flood the
+# first run with legacy findings. Tighten over time as coverage and cleanup land.
+#
+# Run locally with: make lint-ci
+version: "2"
+
+run:
+  # KubeSolo vendors a large Kubernetes fork; give the loader room.
+  timeout: 10m
+
+linters:
+  default: none
+  enable:
+    - errcheck      # unchecked errors
+    - govet         # suspicious constructs
+    - ineffassign   # ineffective assignments
+    - staticcheck   # broad correctness + simplification set
+    - unused        # unused code
+  exclusions:
+    generated: lax
+    # Don't lint the embedded-binary glue; it's generated/IO plumbing.
+    paths:
+      - internal/core/embedded
+
+formatters:
+  enable:
+    - gofmt

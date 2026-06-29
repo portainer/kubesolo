@@ -1,0 +1,18 @@
+# Tier 2 — storage: a PVC backed by the local-path provisioner. Bound lazily
+# (WaitForFirstConsumer) when the first pod mounts it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tier2-storage
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: tier2-storage
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 64Mi

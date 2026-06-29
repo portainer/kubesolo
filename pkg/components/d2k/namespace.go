@@ -12,7 +12,7 @@ import (
 // createNamespace creates the target namespace if it does not already exist.
 // `default` and other system namespaces are valid targets, so we ignore
 // AlreadyExists rather than treating it as an error.
-func createNamespace(ctx context.Context, clientset *kubernetes.Clientset, namespace string) error {
+func createNamespace(ctx context.Context, clientset kubernetes.Interface, namespace string) error {
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
