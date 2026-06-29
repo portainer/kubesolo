@@ -123,7 +123,7 @@ func sanitizeResolvConf(srcPath, dataDir string) (string, error) {
 	if err != nil {
 		return srcPath, nil
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	nameserverRe := regexp.MustCompile(`^nameserver\s+([^\s]*)`)
 

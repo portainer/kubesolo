@@ -266,7 +266,7 @@ func writeCertificateAndKey(certPath, keyPath string, cert []byte, privateKey *r
 	if err != nil {
 		return fmt.Errorf("failed to open certificate file for writing: %v", err)
 	}
-	defer certOut.Close()
+	defer func() { _ = certOut.Close() }()
 
 	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: cert}); err != nil {
 		return fmt.Errorf("failed to write certificate data: %v", err)
@@ -276,7 +276,7 @@ func writeCertificateAndKey(certPath, keyPath string, cert []byte, privateKey *r
 	if err != nil {
 		return fmt.Errorf("failed to open key file for writing: %v", err)
 	}
-	defer keyOut.Close()
+	defer func() { _ = keyOut.Close() }()
 
 	keyBlock := &pem.Block{
 		Type:  "RSA PRIVATE KEY",

@@ -34,14 +34,14 @@ func FetchAndMergeFromContainer(containerName, socketPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	log.Info().Msgf("copying kubeconfig from container %q...", containerName)
 	rc, _, err := cli.CopyFromContainer(context.Background(), containerName, containerKubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("docker cp from %s:%s failed: %w", containerName, containerKubeconfigPath, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// CopyFromContainer returns a tar stream — extract the single file.
 	data, err := extractFirstFile(rc)
@@ -152,13 +152,13 @@ func GetFromContainer(containerName, socketPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	rc, _, err := cli.CopyFromContainer(context.Background(), containerName, containerKubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("docker cp from %s:%s: %w", containerName, containerKubeconfigPath, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	return extractFirstFile(rc)
 }
@@ -171,7 +171,7 @@ func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error
 	if err != nil {
 		return nil, fmt.Errorf("cannot connect to Docker: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	log.Info().Msgf("waiting for kubeconfig in container %q (up to 60s)...", containerName)
 

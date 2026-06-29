@@ -234,7 +234,7 @@ func (s *kubesolo) run() {
 			start: func() {
 				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.FullMode)
 				s.wg.Go(func() {
-					kubeproxyService.Run(kubeletReadyCh)
+					_ = kubeproxyService.Run(kubeletReadyCh)
 				})
 			},
 			readyCh: kubeproxyReadyCh,
@@ -404,7 +404,7 @@ func (s *kubesolo) bootstrap() {
 	}
 
 	// Disable OpenTelemetry SDK to prevent it from interfering with the application's logging
-	os.Setenv("OTEL_SDK_DISABLED", "true")
+	_ = os.Setenv("OTEL_SDK_DISABLED", "true")
 
 	// Setup paths
 	basePath := *flags.Path

@@ -39,7 +39,7 @@ func FetchD2KFromContainer(containerName, name, socketPath string, port int) err
 	if err != nil {
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	_, realHome, realUID, realGID := resolveRealUser()
 	certDir := filepath.Join(realHome, ".docker", "d2k", name)

@@ -179,13 +179,13 @@ func extractTarGz(archivePath, destDir, target string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return fmt.Errorf("invalid gzip stream: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -210,10 +210,10 @@ func extractTarGz(archivePath, destDir, target string) error {
 			return fmt.Errorf("failed to create %s: %w", destPath, err)
 		}
 		if _, err := io.Copy(out, tr); err != nil {
-			out.Close()
+			_ = out.Close()
 			return fmt.Errorf("failed to write %s: %w", destPath, err)
 		}
-		out.Close()
+		_ = out.Close()
 		log.Debug().Msgf("extracted %s -> %s", hdr.Name, destPath)
 		return nil
 	}
@@ -227,7 +227,7 @@ func downloadFile(url, dest string) error {
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GET %s returned HTTP %d", url, resp.StatusCode)
@@ -237,7 +237,7 @@ func downloadFile(url, dest string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", dest, err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	written, err := io.Copy(out, &progressReader{r: resp.Body, total: resp.ContentLength, url: url})
 	if err != nil {
@@ -267,13 +267,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, in)
 	return err
