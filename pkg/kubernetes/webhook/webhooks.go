@@ -252,7 +252,7 @@ func (w *Service) sendResponse(resp http.ResponseWriter, admissionReview *admiss
 		http.Error(resp, fmt.Sprintf("failed to marshal response: %v", err), http.StatusInternalServerError)
 		return
 	}
-	resp.Write(data)
+	_, _ = resp.Write(data)
 	log.Debug().Str("component", "webhook").Msg("webhook response sent")
 }
 

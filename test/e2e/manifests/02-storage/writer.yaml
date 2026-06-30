@@ -1,0 +1,22 @@
+# Writes a marker into the PVC, then exits. Run to completion before the reader.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: writer
+  namespace: tier2-storage
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: writer
+          image: busybox:1.36
+          command: ["sh", "-c", "echo persisted-ok > /data/marker && sync"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data

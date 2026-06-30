@@ -1,0 +1,91 @@
+# Tier 4 — controllers: exercise the full controller-manager surface on a single
+# node: Job (run-to-completion), CronJob (schedulable), DaemonSet (one-per-node),
+# StatefulSet (ordered, headless-service backed).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tier4-controllers
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: oneshot
+  namespace: tier4-controllers
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: oneshot
+          image: busybox:1.36
+          command: ["sh", "-c", "echo done"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: periodic
+  namespace: tier4-controllers
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: tick
+              image: busybox:1.36
+              command: ["sh", "-c", "echo tick"]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: agent
+  namespace: tier4-controllers
+spec:
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      containers:
+        - name: agent
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 3600"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stateful
+  namespace: tier4-controllers
+spec:
+  clusterIP: None
+  selector:
+    app: stateful
+  ports:
+    - port: 80
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: stateful
+  namespace: tier4-controllers
+spec:
+  serviceName: stateful
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stateful
+  template:
+    metadata:
+      labels:
+        app: stateful
+    spec:
+      containers:
+        - name: stateful
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 3600"]

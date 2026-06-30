@@ -62,7 +62,7 @@ func coreDNSConfig(containerMode bool, disableIPv6 bool) string {
 // createConfigMap creates or patches the CoreDNS ConfigMap with the Corefile
 // for the selected IP family mode. On update it uses a merge patch so existing
 // metadata (labels, annotations) and unrelated data keys are preserved.
-func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, containerMode bool, disableIPv6 bool) error {
+func createConfigMap(ctx context.Context, clientset kubernetes.Interface, containerMode bool, disableIPv6 bool) error {
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      coreDNSConfigMapName,

@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createNamespace(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createNamespace(ctx context.Context, clientset kubernetes.Interface) error {
 	_, err := clientset.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: PortainerNamespace,

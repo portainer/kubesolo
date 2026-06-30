@@ -116,7 +116,7 @@ func (s *service) writeContainerdConfigFile() error {
 		log.Error().Str("component", "containerd").Msgf("failed to create config file: %v", err)
 		return err
 	}
-	defer configFile.Close()
+	defer func() { _ = configFile.Close() }()
 
 	_, err = tree.WriteTo(configFile)
 	if err != nil {

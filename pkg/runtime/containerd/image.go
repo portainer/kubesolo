@@ -61,13 +61,13 @@ func (s *service) importImage(ctx context.Context, c *client.Client, imageFile s
 	if err != nil {
 		return fmt.Errorf("failed to open image file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gzipReader, err := gzip.NewReader(f)
 	if err != nil {
 		return err
 	}
-	defer gzipReader.Close()
+	defer func() { _ = gzipReader.Close() }()
 
 	if _, err := c.Import(ctx, gzipReader); err != nil {
 		return fmt.Errorf("failed to import image %s: %v", imageRef, err)

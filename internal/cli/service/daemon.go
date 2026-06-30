@@ -41,7 +41,7 @@ func (m *daemonManager) Install(cfg *config.Config, cmdArgs []string) error {
 	// os.StartProcess calls Fd() on every Files entry; nil panics at runtime.
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
 	if err != nil {
-		logFH.Close()
+		_ = logFH.Close()
 		return fmt.Errorf("failed to open %s: %w", os.DevNull, err)
 	}
 
@@ -51,8 +51,8 @@ func (m *daemonManager) Install(cfg *config.Config, cmdArgs []string) error {
 		Files: []*os.File{devNull, logFH, logFH},
 		Sys:   daemonSysProcAttr(),
 	})
-	devNull.Close()
-	logFH.Close()
+	_ = devNull.Close()
+	_ = logFH.Close()
 	if err != nil {
 		return fmt.Errorf("failed to start KubeSolo daemon: %w", err)
 	}

@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createStorageClass(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createStorageClass(ctx context.Context, clientset kubernetes.Interface) error {
 	waitForFirstConsumer := storagev1.VolumeBindingWaitForFirstConsumer
 	reclaimPolicy := v1.PersistentVolumeReclaimRetain
 

@@ -4,3 +4,12 @@ dist/
 .dev/
 CLAUDE.md
 .claude
+
+# Test artifacts (generated; the test sources under test/ and *_test.go stay tracked)
+/coverage.out
+coverage.html
+*.cover
+# perf run output — committed baselines (baseline.*.json) are NOT ignored
+/test/perf/result.*.json
+# sonobuoy retrieve tarballs (e.g. 20260629_sonobuoy_<uuid>.tar.gz)
+*sonobuoy*.tar.gz

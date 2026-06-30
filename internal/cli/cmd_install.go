@@ -127,7 +127,7 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	// d2k flags only exist in kubesolo >= MinD2KVersion. Passing --d2k to an older
 	// binary makes it exit 1 on every start (systemd then crash-loops it). A custom
 	// --image overrides the version entirely, so skip the check in that case.
-	if cfg.D2K && !(containerMode && cfg.ContainerImage != "") {
+	if cfg.D2K && (!containerMode || cfg.ContainerImage == "") {
 		if cmp, ok := compareVersions(cfg.Version, config.MinD2KVersion); ok && cmp < 0 {
 			return p.Fail("version check", fmt.Errorf(
 				"--d2k requires kubesolo %s or newer; %s has no d2k support — re-run with --version=%s (or later)",

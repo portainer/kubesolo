@@ -44,7 +44,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	ctx := context.Background()
 
@@ -74,7 +74,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 		return fmt.Errorf("failed to pull image %s: %w", img, err)
 	}
 	logPullProgress(rc)
-	rc.Close()
+	_ = rc.Close()
 
 	// Bind to 127.0.0.1 with an empty HostPort so Docker picks a random
 	// ephemeral port. This allows multiple named clusters to run concurrently.
@@ -139,7 +139,7 @@ func (m *containerManager) Uninstall() error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	ctx := context.Background()
 	timeout := 30
@@ -159,7 +159,7 @@ func ContainerArgs(name string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	cname := ContainerNameFor(name)
 	resp, err := cli.ContainerInspect(context.Background(), cname)
@@ -176,7 +176,7 @@ func RemoveContainerVolume(name string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	vname := ContainerNameFor(name) + "-data"
 	if err := cli.VolumeRemove(context.Background(), vname, true); err != nil && !cerrdefs.IsNotFound(err) {
@@ -194,7 +194,7 @@ func ResetContainer(name string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	ctx := context.Background()
 	cname := ContainerNameFor(name)
@@ -257,7 +257,7 @@ func GetContainerAPIPort(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	cname := ContainerNameFor(name)
 	resp, err := cli.ContainerInspect(context.Background(), cname)
@@ -285,7 +285,7 @@ func GetContainerD2KPort(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	cname := ContainerNameFor(name)
 	resp, err := cli.ContainerInspect(context.Background(), cname)
@@ -315,7 +315,7 @@ func ContainerExistsByName(cname string) bool {
 	if err != nil {
 		return false
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 	_, err = cli.ContainerInspect(context.Background(), cname)
 	return err == nil
 }

@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createDeployment(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createDeployment(ctx context.Context, clientset kubernetes.Interface) error {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "local-path-provisioner",

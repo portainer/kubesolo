@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createService(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createService(ctx context.Context, clientset kubernetes.Interface) error {
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      coreDNSServiceName,

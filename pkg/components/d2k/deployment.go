@@ -17,7 +17,7 @@ import (
 // downward API to populate D2K_NAMESPACE, sets D2K_PORT=2376 and
 // D2K_SWARM_MODE=true, and mounts the d2k-tls Secret into /etc/d2k/tls so
 // d2k listens with TLS on 2376.
-func createDeployment(ctx context.Context, clientset *kubernetes.Clientset, namespace, image string) error {
+func createDeployment(ctx context.Context, clientset kubernetes.Interface, namespace, image string) error {
 	replicas := int32(1)
 
 	envVars := []corev1.EnvVar{

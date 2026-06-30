@@ -1,0 +1,20 @@
+# Mounts the SAME PVC after the writer is gone and blocks until the marker is
+# present — proving data persisted across pods.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reader
+  namespace: tier2-storage
+spec:
+  restartPolicy: Never
+  containers:
+    - name: reader
+      image: busybox:1.36
+      command: ["sh", "-c", "test \"$(cat /data/marker)\" = persisted-ok && sleep 3600"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: data

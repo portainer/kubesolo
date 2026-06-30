@@ -52,16 +52,22 @@ func ColorEnabled() bool {
 // main.go checks err.Error() == "" to distinguish it from real errors.
 var ErrAlreadyReported = fmt.Errorf("")
 
+// fprintf writes to the printer's writer, ignoring write errors — the target is
+// a terminal or buffer where writes do not meaningfully fail.
+func (p *Printer) fprintf(format string, a ...any) {
+	_, _ = fmt.Fprintf(p.w, format, a...)
+}
+
 // Header prints a command banner at the start of a kubesoloctl command.
 func (p *Printer) Header(cmd string) {
 	title := "kubesoloctl  " + cmd
 	bar := strings.Repeat("─", len(title)+4)
 	if p.color {
-		fmt.Fprintf(p.w, "\n  %s%s%s\n  %s%s%s\n",
+		p.fprintf("\n  %s%s%s\n  %s%s%s\n",
 			ansiBold, title, ansiReset,
 			ansiGray, bar, ansiReset)
 	} else {
-		fmt.Fprintf(p.w, "\n  %s\n  %s\n", title, bar)
+		p.fprintf("\n  %s\n  %s\n", title, bar)
 	}
 }
 
@@ -69,9 +75,9 @@ func (p *Printer) Header(cmd string) {
 // slow operation so the user has immediate visual feedback.
 func (p *Printer) Step(msg string) {
 	if p.color {
-		fmt.Fprintf(p.w, "\n  %s▸%s  %s\n", ansiCyan, ansiReset, msg)
+		p.fprintf("\n  %s▸%s  %s\n", ansiCyan, ansiReset, msg)
 	} else {
-		fmt.Fprintf(p.w, "\n  > %s\n", msg)
+		p.fprintf("\n  > %s\n", msg)
 	}
 }
 
@@ -81,16 +87,16 @@ func (p *Printer) Step(msg string) {
 func (p *Printer) OK(msg, detail string) {
 	if p.color {
 		if detail != "" {
-			fmt.Fprintf(p.w, "  %s✓%s  %-40s%s%s%s\n",
+			p.fprintf("  %s✓%s  %-40s%s%s%s\n",
 				ansiGreen, ansiReset, msg, ansiGray, detail, ansiReset)
 		} else {
-			fmt.Fprintf(p.w, "  %s✓%s  %s\n", ansiGreen, ansiReset, msg)
+			p.fprintf("  %s✓%s  %s\n", ansiGreen, ansiReset, msg)
 		}
 	} else {
 		if detail != "" {
-			fmt.Fprintf(p.w, "  [ok] %-40s%s\n", msg, detail)
+			p.fprintf("  [ok] %-40s%s\n", msg, detail)
 		} else {
-			fmt.Fprintf(p.w, "  [ok] %s\n", msg)
+			p.fprintf("  [ok] %s\n", msg)
 		}
 	}
 }
@@ -99,9 +105,9 @@ func (p *Printer) OK(msg, detail string) {
 // ErrAlreadyReported. Use in return statements: return p.Fail("stage", err)
 func (p *Printer) Fail(msg string, err error) error {
 	if p.color {
-		fmt.Fprintf(p.w, "  %s✗%s  %s: %v\n", ansiRed, ansiReset, msg, err)
+		p.fprintf("  %s✗%s  %s: %v\n", ansiRed, ansiReset, msg, err)
 	} else {
-		fmt.Fprintf(p.w, "  [fail] %s: %v\n", msg, err)
+		p.fprintf("  [fail] %s: %v\n", msg, err)
 	}
 	return ErrAlreadyReported
 }
@@ -109,45 +115,45 @@ func (p *Printer) Fail(msg string, err error) error {
 // Warn prints a non-fatal warning.
 func (p *Printer) Warn(msg string) {
 	if p.color {
-		fmt.Fprintf(p.w, "  %s⚠%s   %s\n", ansiYellow, ansiReset, msg)
+		p.fprintf("  %s⚠%s   %s\n", ansiYellow, ansiReset, msg)
 	} else {
-		fmt.Fprintf(p.w, "  [warn] %s\n", msg)
+		p.fprintf("  [warn] %s\n", msg)
 	}
 }
 
 // Info prints a plain indented line — use for next-steps, tips, or shell
 // snippets shown at the end of a command.
 func (p *Printer) Info(msg string) {
-	fmt.Fprintf(p.w, "     %s\n", msg)
+	p.fprintf("     %s\n", msg)
 }
 
 // Done prints the final success message for a command, bold green in colour mode.
 func (p *Printer) Done(msg string) {
 	if p.color {
-		fmt.Fprintf(p.w, "\n  %s%s%s\n\n", ansiBold+ansiGreen, msg, ansiReset)
+		p.fprintf("\n  %s%s%s\n\n", ansiBold+ansiGreen, msg, ansiReset)
 	} else {
-		fmt.Fprintf(p.w, "\n  %s\n\n", msg)
+		p.fprintf("\n  %s\n\n", msg)
 	}
 }
 
 // Section prints a labelled group header — use for "Next steps" blocks.
 func (p *Printer) Section(title string) {
 	if p.color {
-		fmt.Fprintf(p.w, "\n  %s%s%s\n", ansiGray, title, ansiReset)
+		p.fprintf("\n  %s%s%s\n", ansiGray, title, ansiReset)
 	} else {
-		fmt.Fprintf(p.w, "\n  %s\n", title)
+		p.fprintf("\n  %s\n", title)
 	}
 }
 
 // Hint prints a labelled tip block with indented shell-snippet lines.
 func (p *Printer) Hint(label string, lines ...string) {
 	if p.color {
-		fmt.Fprintf(p.w, "\n  %s%s%s\n", ansiGray, label, ansiReset)
+		p.fprintf("\n  %s%s%s\n", ansiGray, label, ansiReset)
 	} else {
-		fmt.Fprintf(p.w, "\n  %s\n", label)
+		p.fprintf("\n  %s\n", label)
 	}
 	for _, l := range lines {
-		fmt.Fprintf(p.w, "     %s\n", l)
+		p.fprintf("     %s\n", l)
 	}
 }
 
@@ -155,9 +161,9 @@ func (p *Printer) Hint(label string, lines ...string) {
 // mode. Use for the first actionable commands to run after a successful install.
 func (p *Printer) Cmd(msg string) {
 	if p.color {
-		fmt.Fprintf(p.w, "  %s%s%s\n", ansiCyan, msg, ansiReset)
+		p.fprintf("  %s%s%s\n", ansiCyan, msg, ansiReset)
 	} else {
-		fmt.Fprintf(p.w, "  %s\n", msg)
+		p.fprintf("  %s\n", msg)
 	}
 }
 
@@ -166,13 +172,13 @@ func (p *Printer) Cmd(msg string) {
 // "Manage  systemctl status kubesolo".
 func (p *Printer) Label(label, value string) {
 	if p.color {
-		fmt.Fprintf(p.w, "  %s%-8s%s %s\n", ansiGray, label, ansiReset, value)
+		p.fprintf("  %s%-8s%s %s\n", ansiGray, label, ansiReset, value)
 	} else {
-		fmt.Fprintf(p.w, "  %-8s %s\n", label, value)
+		p.fprintf("  %-8s %s\n", label, value)
 	}
 }
 
 // Blank emits a bare newline — use to separate visual groups in footers.
 func (p *Printer) Blank() {
-	fmt.Fprintln(p.w)
+	_, _ = fmt.Fprintln(p.w)
 }

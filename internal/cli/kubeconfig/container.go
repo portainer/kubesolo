@@ -34,14 +34,14 @@ func FetchAndMergeFromContainer(containerName, socketPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	log.Info().Msgf("copying kubeconfig from container %q...", containerName)
 	rc, _, err := cli.CopyFromContainer(context.Background(), containerName, containerKubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("docker cp from %s:%s failed: %w", containerName, containerKubeconfigPath, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// CopyFromContainer returns a tar stream — extract the single file.
 	data, err := extractFirstFile(rc)
@@ -55,13 +55,13 @@ func FetchAndMergeFromContainer(containerName, socketPath string) error {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("failed to write kubeconfig to temp file: %w", err)
 	}
-	tmp.Close()
+	_ = tmp.Close()
 
 	_, realHome, realUID, realGID := resolveRealUser()
 	realUser := filepath.Base(realHome)
@@ -152,13 +152,13 @@ func GetFromContainer(containerName, socketPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	rc, _, err := cli.CopyFromContainer(context.Background(), containerName, containerKubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("docker cp from %s:%s: %w", containerName, containerKubeconfigPath, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	return extractFirstFile(rc)
 }
@@ -171,7 +171,7 @@ func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error
 	if err != nil {
 		return nil, fmt.Errorf("cannot connect to Docker: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	log.Info().Msgf("waiting for kubeconfig in container %q (up to 60s)...", containerName)
 
@@ -183,7 +183,7 @@ func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error
 			continue
 		}
 		data, err := extractFirstFile(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err == nil && len(data) > 0 {
 			return data, nil
 		}
@@ -229,14 +229,14 @@ func MergeContainerKubeconfig(data []byte, name, serverURL string) {
 		return
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	if _, err := tmp.Write(renameKubeconfigEntries(data, name)); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		log.Warn().Err(err).Msg("failed to write kubeconfig to temp file")
 		return
 	}
-	tmp.Close()
+	_ = tmp.Close()
 
 	_, realHome, realUID, realGID := resolveRealUser()
 	realUser := filepath.Base(realHome)
@@ -276,7 +276,7 @@ func WaitForAPIServer(addr string, timeout time.Duration) error {
 	for time.Now().Before(deadline) {
 		resp, err := httpClient.Get(url)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return nil
 		}
 		time.Sleep(2 * time.Second)

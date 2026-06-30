@@ -180,7 +180,7 @@ func (s *kubesolo) run() {
 			start: func() {
 				containerdService := containerd.NewService(ctx, cancel, containerdReadyCh, &s.embedded)
 				s.wg.Go(func() {
-					containerdService.Run()
+					_ = containerdService.Run()
 				})
 			},
 			readyCh: containerdReadyCh,
@@ -190,7 +190,7 @@ func (s *kubesolo) run() {
 			start: func() {
 				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.dbWALRepair)
 				s.wg.Go(func() {
-					kineService.Run()
+					_ = kineService.Run()
 				})
 			},
 			readyCh: kineReadyCh,
@@ -200,7 +200,7 @@ func (s *kubesolo) run() {
 			start: func() {
 				apiserverService := apiserver.NewService(ctx, cancel, apiServerReadyCh, s.hostName, s.embedded)
 				s.wg.Go(func() {
-					apiserverService.Run(kineReadyCh)
+					_ = apiserverService.Run(kineReadyCh)
 				})
 			},
 			readyCh: apiServerReadyCh,
@@ -210,7 +210,7 @@ func (s *kubesolo) run() {
 			start: func() {
 				controllerService := controller.NewService(ctx, cancel, controllerReadyCh, s.embedded.ControllerDir, s.embedded)
 				s.wg.Go(func() {
-					controllerService.Run(apiServerReadyCh)
+					_ = controllerService.Run(apiServerReadyCh)
 				})
 			},
 			readyCh: controllerReadyCh,
@@ -224,7 +224,7 @@ func (s *kubesolo) run() {
 			start: func() {
 				kubeletService := kubelet.NewService(ctx, cancel, kubeletReadyCh, &s.embedded)
 				s.wg.Go(func() {
-					kubeletService.Run(apiServerReadyCh)
+					_ = kubeletService.Run(apiServerReadyCh)
 				})
 			},
 			readyCh: kubeletReadyCh,
@@ -234,7 +234,7 @@ func (s *kubesolo) run() {
 			start: func() {
 				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.FullMode)
 				s.wg.Go(func() {
-					kubeproxyService.Run(kubeletReadyCh)
+					_ = kubeproxyService.Run(kubeletReadyCh)
 				})
 			},
 			readyCh: kubeproxyReadyCh,
@@ -404,7 +404,7 @@ func (s *kubesolo) bootstrap() {
 	}
 
 	// Disable OpenTelemetry SDK to prevent it from interfering with the application's logging
-	os.Setenv("OTEL_SDK_DISABLED", "true")
+	_ = os.Setenv("OTEL_SDK_DISABLED", "true")
 
 	// Setup paths
 	basePath := *flags.Path

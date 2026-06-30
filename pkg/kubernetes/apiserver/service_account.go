@@ -29,7 +29,7 @@ func (s *service) generateServiceAccountKey() error {
 	if err != nil {
 		return fmt.Errorf("failed to open key file: %v", err)
 	}
-	defer keyFile.Close()
+	defer func() { _ = keyFile.Close() }()
 
 	if err := pem.Encode(keyFile, privateKeyPEM); err != nil {
 		return fmt.Errorf("failed to write private key: %v", err)

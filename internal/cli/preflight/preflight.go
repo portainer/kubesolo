@@ -120,7 +120,7 @@ func CheckDockerConflict() error {
 	// Socket is the most reliable runtime indicator — present even without the CLI
 	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
 		return fmt.Errorf(
-			"Docker daemon socket detected at /var/run/docker.sock. " +
+			"detected Docker daemon socket at /var/run/docker.sock; " +
 				"Docker conflicts with KubeSolo networking. " +
 				"Please stop and remove Docker before installing: https://docs.kubesolo.io/prerequisites",
 		)
@@ -129,7 +129,7 @@ func CheckDockerConflict() error {
 	for _, p := range []string{"/usr/bin/docker", "/usr/local/bin/docker"} {
 		if _, err := os.Stat(p); err == nil {
 			return fmt.Errorf(
-				"Docker is installed at %s. "+
+				"found Docker installed at %s; "+
 					"Docker conflicts with KubeSolo networking. "+
 					"Please remove Docker before installing: https://docs.kubesolo.io/prerequisites",
 				p,
@@ -346,7 +346,7 @@ func moduleLoaded(name string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

@@ -123,7 +123,7 @@ func sanitizeResolvConf(srcPath, dataDir string) (string, error) {
 	if err != nil {
 		return srcPath, nil
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	nameserverRe := regexp.MustCompile(`^nameserver\s+([^\s]*)`)
 
@@ -185,7 +185,7 @@ func isValidResolvConf(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	nameserver := regexp.MustCompile(`^nameserver\s+([^\s]*)`)
 	scanner := bufio.NewScanner(file)

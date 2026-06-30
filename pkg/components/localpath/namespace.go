@@ -13,7 +13,7 @@ const (
 	LocalPathNamespace = "local-path-storage"
 )
 
-func createNamespace(ctx context.Context, clientset *kubernetes.Clientset) error {
+func createNamespace(ctx context.Context, clientset kubernetes.Interface) error {
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: LocalPathNamespace,

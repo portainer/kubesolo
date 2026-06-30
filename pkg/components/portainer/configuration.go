@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, config types.EdgeAgentConfig) error {
+func createConfigMap(ctx context.Context, clientset kubernetes.Interface, config types.EdgeAgentConfig) error {
 	data := map[string]string{
 		"EDGE_ID":            config.EdgeID,
 		"EDGE_INSECURE_POLL": config.EdgeInsecurePoll,
@@ -42,7 +42,7 @@ func createConfigMap(ctx context.Context, clientset *kubernetes.Clientset, confi
 	return nil
 }
 
-func createSecret(ctx context.Context, clientset *kubernetes.Clientset, edgeKey string) error {
+func createSecret(ctx context.Context, clientset kubernetes.Interface, edgeKey string) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PortainerEdgeAgentSecretName,
