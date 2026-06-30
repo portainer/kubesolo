@@ -1068,7 +1068,7 @@ install_binary() {
 # is a no-op on systems without procfs.
 if [ -n "$SUDO_USER" ] && [ -z "$KUBESOLO_PORTAINER_EDGE_KEY" ] && [ -r "/proc/$PPID/environ" ]; then
     while IFS= read -r _kv; do
-        export "$_kv"
+        [ -n "$_kv" ] && export "$_kv"
     done << _PENV
 $(tr '\0' '\n' < "/proc/$PPID/environ" | grep '^KUBESOLO_[A-Z_]*=')
 _PENV
