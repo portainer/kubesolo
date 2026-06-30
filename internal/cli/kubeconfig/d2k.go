@@ -54,7 +54,7 @@ func FetchD2KFromContainer(containerName, name, socketPath string, port int) err
 			return fmt.Errorf("docker cp %s:%s failed: %w", containerName, f.containerPath, err)
 		}
 		data, extractErr := extractFirstFile(rc)
-		rc.Close()
+		_ = rc.Close()
 		if extractErr != nil {
 			return fmt.Errorf("failed to extract %s: %w", f.containerPath, extractErr)
 		}

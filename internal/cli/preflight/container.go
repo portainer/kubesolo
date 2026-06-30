@@ -43,6 +43,6 @@ func dialEngine(network, addr string) error {
 	if err != nil {
 		return fmt.Errorf("container engine not accessible at %s://%s: %w (is the container engine running?)", network, addr, err)
 	}
-	conn.Close()
+	_ = conn.Close()
 	return nil
 }
