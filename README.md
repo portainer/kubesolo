@@ -184,6 +184,8 @@ curl -sfL https://get.kubesolo.io | KUBESOLO_PORTAINER_EDGE_ID=your-portainer-ed
 
 Please see the [documentation](https://kubesolo.io/documentation) for complete documentation.
 
+- [Installing a CNI (Cilium)](docs/configuration/cni.md) — running an external CNI such as Cilium on a single KubeSolo node.
+
 ## Building from Source
 
 ### Prerequisites
