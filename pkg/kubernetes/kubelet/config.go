@@ -111,36 +111,5 @@ func (s *service) generateKubeletConfig() map[string]any {
 		return config
 	}
 
-	// Edge-optimised overrides — only applied when not in full mode.
-	// When full mode is enabled, upstream Kubernetes defaults are used instead.
-	if !s.fullMode {
-		config["enableProfilingHandler"] = false
-		config["enableDebugFlagsHandler"] = false
-		config["streamingConnectionIdleTimeout"] = "1h0s"
-		config["syncFrequency"] = "5m0s"
-		config["fileCheckFrequency"] = "2m0s"
-		config["httpCheckFrequency"] = "2m0s"
-		config["nodeStatusUpdateFrequency"] = "60s"
-		config["nodeStatusReportFrequency"] = "15m0s"
-		config["volumeStatsAggPeriod"] = "5m0s"
-		config["imageMinimumGCAge"] = "10m0s"
-		config["imageMaximumGCAge"] = "0s"
-		config["imageGCHighThresholdPercent"] = 95
-		config["runtimeRequestTimeout"] = "60s"
-		config["cpuManagerReconcilePeriod"] = "60s"
-		config["kubeAPIQPS"] = 10
-		config["kubeAPIBurst"] = 20
-		config["eventRecordQPS"] = 5
-		config["eventBurst"] = 10
-		config["containerLogMaxSize"] = "512Ki"
-		config["maxPods"] = 20
-		config["evictionHard"] = map[string]string{
-			"memory.available": "75Mi",
-			"nodefs.available": "50Mi",
-		}
-		config["systemReserved"] = map[string]string{"memory": "25Mi"}
-		config["kubeReserved"] = map[string]string{"memory": "25Mi"}
-	}
-
 	return config
 }

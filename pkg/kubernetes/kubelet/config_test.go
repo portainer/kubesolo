@@ -36,7 +36,7 @@ func TestGenerateKubeletConfig_Common(t *testing.T) {
 }
 
 func TestGenerateKubeletConfig_ContainerMode(t *testing.T) {
-	s := &service{kubeletDir: t.TempDir(), containerMode: true, fullMode: false}
+	s := &service{kubeletDir: t.TempDir(), containerMode: true}
 	cfg := s.generateKubeletConfig()
 
 	// In container mode the host resolv.conf is never consulted.
@@ -56,38 +56,19 @@ func TestGenerateKubeletConfig_ContainerMode(t *testing.T) {
 	assert.False(t, hasMaxPods, "container mode must not set edge-mode maxPods")
 }
 
-func TestGenerateKubeletConfig_EdgeMode(t *testing.T) {
-	s := &service{kubeletDir: t.TempDir(), containerMode: false, fullMode: false}
+func TestGenerateKubeletConfig_UpstreamDefaults(t *testing.T) {
+	s := &service{kubeletDir: t.TempDir(), containerMode: false}
 	cfg := s.generateKubeletConfig()
 
-	assert.Equal(t, 20, cfg["maxPods"])
-	assert.Equal(t, false, cfg["enableProfilingHandler"])
-	assert.Equal(t, 95, cfg["imageGCHighThresholdPercent"])
-
-	evict, ok := cfg["evictionHard"].(map[string]string)
-	require.True(t, ok)
-	assert.Equal(t, "75Mi", evict["memory.available"])
-
-	sysReserved, ok := cfg["systemReserved"].(map[string]string)
-	require.True(t, ok)
-	assert.Equal(t, "25Mi", sysReserved["memory"])
-
-	// Edge mode is not container mode — the QoS-disabling key must be absent.
-	_, hasCgroupsPerQOS := cfg["cgroupsPerQOS"]
-	assert.False(t, hasCgroupsPerQOS)
-}
-
-func TestGenerateKubeletConfig_FullMode(t *testing.T) {
-	s := &service{kubeletDir: t.TempDir(), containerMode: false, fullMode: true}
-	cfg := s.generateKubeletConfig()
-
-	// Full mode uses upstream defaults — neither edge nor container overrides apply.
-	for _, k := range []string{"maxPods", "enableProfilingHandler", "cgroupsPerQOS", "evictionHard"} {
+	// Outside container mode, KubeSolo uses upstream Kubernetes defaults — none of
+	// the former edge overrides or the container-mode QoS keys are set.
+	for _, k := range []string{"maxPods", "enableProfilingHandler", "imageGCHighThresholdPercent", "evictionHard", "systemReserved", "kubeReserved", "cgroupsPerQOS"} {
 		_, ok := cfg[k]
-		assert.Falsef(t, ok, "full mode must not set %q", k)
+		assert.Falsef(t, ok, "upstream defaults must not set %q", k)
 	}
 
-	// Baseline secure-default keys still apply in full mode.
+	// Baseline secure-default keys still apply.
 	assert.Equal(t, 0, cfg["readOnlyPort"])
 	assert.Equal(t, false, cfg["failSwapOn"])
+	assert.Equal(t, true, cfg["rotateCertificates"])
 }

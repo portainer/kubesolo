@@ -162,8 +162,6 @@ func (s *service) generateContainerdConfig() map[string]any {
 				},
 			},
 
-			"io.containerd.gc.v1.scheduler": s.generateGCSchedulerConfig(),
-
 			"io.containerd.runtime.v2.task": map[string]any{
 				"platforms": []string{"linux/amd64", "linux/arm64", "linux/arm"},
 			},
@@ -172,14 +170,12 @@ func (s *service) generateContainerdConfig() map[string]any {
 }
 
 // generateCRIImagesConfig returns the CRI images plugin configuration.
-// Edge-specific overrides (max_concurrent_downloads, stats_collect_period) are
-// only applied when not in full mode.
 //
 // Note: the snapshotter is configured per-runtime in
 // generateContainerdConfig (under runtimes.crun); the CRI images plugin
 // inherits that selection for unpack operations, so no setting is needed here.
 func (s *service) generateCRIImagesConfig() map[string]any {
-	cfg := map[string]any{
+	return map[string]any{
 		"image_pull_progress_timeout": "2m0s",
 		"pinned_images": map[string]any{
 			"sandbox": types.DefaultSandboxImage,
@@ -187,29 +183,6 @@ func (s *service) generateCRIImagesConfig() map[string]any {
 		"registry": map[string]any{
 			"config_path": s.containerdRegistryConfigDir,
 		},
-	}
-
-	if !s.fullMode {
-		cfg["max_concurrent_downloads"] = 1
-		cfg["stats_collect_period"] = 120
-	}
-
-	return cfg
-}
-
-// generateGCSchedulerConfig returns the GC scheduler plugin configuration.
-// Edge-specific overrides are only applied when not in full mode.
-func (s *service) generateGCSchedulerConfig() map[string]any {
-	if s.fullMode {
-		return map[string]any{}
-	}
-
-	return map[string]any{
-		"pause_threshold":    0.01,
-		"deletion_threshold": 0,
-		"mutation_threshold": 50,
-		"schedule_delay":     "5s",
-		"startup_delay":      "200ms",
 	}
 }
 

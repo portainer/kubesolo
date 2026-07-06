@@ -62,7 +62,7 @@ Requires a running container engine (Docker Engine / Docker Desktop).
 kubesoloctl install --run-mode=container
 ```
 
-KubeSolo starts in a container, the API server is published on a random localhost port, and your kubeconfig is merged and pointed at it automatically. Because container mode targets dev/CI, it always runs with upstream Kubernetes defaults (`--full`) rather than the edge memory-saving profile.
+KubeSolo starts in a container, the API server is published on a random localhost port, and your kubeconfig is merged and pointed at it automatically. Container mode also adjusts cgroups, mounts, DNS, and eviction thresholds so the node comes up cleanly inside a container.
 
 ```bash
 kubectl get nodes --watch
