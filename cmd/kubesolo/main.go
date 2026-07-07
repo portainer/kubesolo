@@ -50,7 +50,6 @@ type kubesolo struct {
 	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
-	fullMode               bool
 	disableIPv6            bool
 	dbWALRepair            bool
 	d2k                    bool
@@ -90,7 +89,6 @@ func service() (*kubesolo, error) {
 		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
-		fullMode:               *flags.Full,
 		disableIPv6:            *flags.DisableIPv6,
 		dbWALRepair:            *flags.DBWALRepair,
 		d2k:                    d2kEnabled,
@@ -109,6 +107,10 @@ func main() {
 	if *flags.Version {
 		log.Info().Str("version", Version).Msg("kubesolo version")
 		os.Exit(0)
+	}
+
+	if *flags.Full {
+		log.Warn().Str("component", "kubesolo").Msg("the --full flag (KUBESOLO_FULL) is deprecated and has no effect; KubeSolo always uses upstream Kubernetes defaults")
 	}
 
 	if *flags.StartupTimeout > 0 {
@@ -139,16 +141,10 @@ func (s *kubesolo) run() {
 		cancel()
 	}()
 
-	profile := "edge"
-	if s.fullMode {
-		profile = "full"
-	}
-
 	log.Info().
 		Str("version", Version).
 		Str("build-date", BuildDate).
 		Str("commit", Commit).
-		Str("profile", profile).
 		Msg("starting kubesolo...")
 
 	log.Info().Str("component", "kubesolo").Msg("ensuring all embedded dependencies are available...")
@@ -232,7 +228,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kubeproxy",
 			start: func() {
-				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.FullMode)
+				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode)
 				s.wg.Go(func() {
 					_ = kubeproxyService.Run(kubeletReadyCh)
 				})
@@ -550,9 +546,6 @@ func (s *kubesolo) bootstrap() {
 
 		// Container Mode
 		ContainerMode: containerMode,
-
-		// Full mode
-		FullMode: s.fullMode,
 
 		// IPv6
 		DisableIPv6: s.disableIPv6,

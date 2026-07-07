@@ -42,33 +42,5 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	// feature gates - disable SizeBasedListCostEstimate to suppress "Error getting keys" messages
 	_ = flags.Set("feature-gates", "SizeBasedListCostEstimate=false")
 
-	// Edge-optimised overrides — only applied when not in full mode.
-	// When full mode is enabled, upstream Kubernetes defaults are used instead.
-	if !s.fullMode {
-		// etcd metric collection
-		_ = flags.Set("etcd-count-metric-poll-period", "0")
-		_ = flags.Set("etcd-db-metric-poll-interval", "0")
-
-		// request throttling and timeouts
-		_ = flags.Set("max-requests-inflight", "2000")
-		_ = flags.Set("max-mutating-requests-inflight", "1000")
-		_ = flags.Set("min-request-timeout", "180")
-		_ = flags.Set("request-timeout", "900s")
-		_ = flags.Set("kubelet-timeout", "30s")
-
-		// diagnostics
-		_ = flags.Set("profiling", "false")
-
-		// admission control
-		_ = flags.Set("enable-admission-plugins", "NodeRestriction,ServiceAccount,ValidatingAdmissionWebhook,MutatingAdmissionWebhook,DefaultStorageClass,CertificateApproval,CertificateSigning,CertificateSubjectRestriction,ValidatingAdmissionPolicy,MutatingAdmissionPolicy")
-		_ = flags.Set("disable-admission-plugins", "RuntimeClass,PodSecurity,ClusterTrustBundleAttest,DefaultIngressClass,TaintNodesByCondition,DefaultTolerationSeconds,StorageObjectInUseProtection,PersistentVolumeClaimResize,ResourceQuota,LimitRanger,Priority")
-
-		// audit logging
-		_ = flags.Set("audit-log-path", "-")
-		_ = flags.Set("audit-log-maxage", "0")
-		_ = flags.Set("audit-log-maxbackup", "0")
-		_ = flags.Set("audit-log-maxsize", "0")
-	}
-
 	return nil
 }

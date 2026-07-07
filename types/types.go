@@ -148,9 +148,6 @@ type Embedded struct {
 	// Container Mode
 	ContainerMode bool
 
-	// Full mode — disables memory-saving overrides, uses upstream Kubernetes defaults
-	FullMode bool
-
 	// IPv6
 	DisableIPv6 bool
 

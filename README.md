@@ -164,7 +164,7 @@ KubeSolo supports the following command-line flags:
 | `--local-storage-shared-path` | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | Path to the shared file system for the local storage | `""` |
 | `--debug` | `KUBESOLO_DEBUG` | Enable debug logging | `false` |
 | `--pprof-server` | `KUBESOLO_PPROF_SERVER` | Enable pprof server for profiling | `false` |
-| `--full` | `KUBESOLO_FULL` | Disable memory-saving overrides and use upstream Kubernetes defaults (recommended for CI and development) | `false` |
+| `--full` | `KUBESOLO_FULL` | Deprecated: has no effect. KubeSolo always uses upstream Kubernetes defaults. Retained for backwards compatibility; will be removed in a future release | `false` |
 | `--container-mode` | `KUBESOLO_CONTAINER_MODE` | Run KubeSolo inside a container, adjusting cgroups, mounts, DNS, and eviction thresholds. Auto-detected when running in a container. See [docs/configuration/container-mode.md](docs/configuration/container-mode.md) | _(auto-detected)_ |
 | `--db-wal-repair` | `KUBESOLO_DB_WAL_REPAIR` | Run SQLite integrity checks on startup and repair WAL/SHM artifacts if corruption is detected | `false` |
 | `--disable-ipv6` | `KUBESOLO_DISABLE_IPV6` | Disable IPv6 support for CoreDNS reverse zones and kubelet node address registration | `false` |

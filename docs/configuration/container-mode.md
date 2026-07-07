@@ -33,13 +33,13 @@ Running a Kubernetes node inside a container means the kubelet, containerd, and 
 | cgroup driver | `systemd` / `cgroupfs` per host | `cgroupfs`, with controller delegation set up on the root cgroup |
 | Mount propagation | inherited from host | `/` remounted `rshared` so kubelet can propagate volume mounts (e.g. projected service-account tokens) into pods |
 | kubelet QoS cgroups | enabled | `cgroupsPerQOS: false`, `enforceNodeAllocatable: []` — avoids the cgroupv2 "no internal processes" conflict |
-| Eviction / image GC | edge or upstream thresholds | relaxed (`memory.available: 50Mi`, disk thresholds `0%`, `imageGCHighThresholdPercent: 100`) so a containerised node isn't evicted by the host's disk usage |
+| Eviction / image GC | upstream thresholds | relaxed (`memory.available: 50Mi`, disk thresholds `0%`, `imageGCHighThresholdPercent: 100`) so a containerised node isn't evicted by the host's disk usage |
 | Pod DNS (`resolvConf`) | host `/etc/resolv.conf` | `/dev/null`, to prevent the host's DNS config leaking into pods |
 | CoreDNS upstream | `forward . /etc/resolv.conf` | `forward . 1.1.1.1 8.8.8.8` (since the node `resolv.conf` is empty) |
 | CoreDNS resources | memory limit `64Mi` | memory limit removed (requests retained) to avoid OOM under a constrained container memory limit |
-| kube-proxy conntrack | tuned `conntrack-max-per-core` / `conntrack-min` | both set to `0` — avoids writing to `/proc/sys/net/netfilter/nf_conntrack_max`, which is often read-only inside a container |
+| kube-proxy conntrack | upstream defaults | both set to `0` — avoids writing to `/proc/sys/net/netfilter/nf_conntrack_max`, which is often read-only inside a container |
 
-> **Container mode implies upstream defaults, not the edge profile.** The edge memory-saving overrides (`--full=false`) are skipped in container mode in favour of the adjustments above. NodeSetter is still used in place of the scheduler, as always.
+> **Container mode applies the adjustments above on top of the standard upstream Kubernetes defaults.** NodeSetter is still used in place of the scheduler, as always.
 
 ---
 

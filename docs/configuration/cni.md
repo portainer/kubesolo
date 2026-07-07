@@ -42,7 +42,7 @@ For components like `cilium-operator` that default to multiple replicas, set the
 
 Tested with Cilium `1.19.5` installed via the [Cilium CLI](https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/).
 
-> **Resource requirements:** Cilium is heavy. KubeSolo will not run it on a 512MB device — the Cilium agent, Envoy, and operator alone exceed that budget. Run on a beefier machine, and start KubeSolo with the `--full` flag (`KUBESOLO_FULL=true`) so the memory-saving overrides are disabled and upstream Kubernetes defaults are used, for the best outcome.
+> **Resource requirements:** Cilium is heavy. KubeSolo will not run it on a 512MB device — the Cilium agent, Envoy, and operator alone exceed that budget. Run on a beefier machine for the best outcome.
 
 ### Install
 
