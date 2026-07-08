@@ -26,6 +26,14 @@ func TestRemoveLeafCerts(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a symlinked PKI directory", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "real")
+		require.NoError(t, os.MkdirAll(target, 0o755))
+		link := filepath.Join(t.TempDir(), "pki-link")
+		require.NoError(t, os.Symlink(target, link))
+		assert.Error(t, removeLeafCerts(link), "a symlinked PKI dir must be refused")
+	})
+
 	t.Run("removes leaf certs but preserves the CA dirs", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "pki")
 		for _, sub := range []string{"ca", "request-header", "apiserver", "admin", "kubelet"} {

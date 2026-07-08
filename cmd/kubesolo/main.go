@@ -394,7 +394,7 @@ func (s *kubesolo) bootstrap() {
 	}
 
 	// System Node IP
-	nodeIP, err := network.ResolveNodeIP(*flags.NodeIP)
+	nodeIP, nodeIPPinned, err := network.ResolveNodeIP(*flags.NodeIP)
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to get node IP address, using default loopback IP address")
 	}
@@ -425,7 +425,7 @@ func (s *kubesolo) bootstrap() {
 	s.embedded = types.Embedded{
 		// System Node IP
 		NodeIP:          nodeIP,
-		NodeIPSpecified: *flags.NodeIP != "",
+		NodeIPSpecified: nodeIPPinned,
 
 		// Admin kubeconfig file
 		AdminKubeconfigFile: filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.kubeconfig"),

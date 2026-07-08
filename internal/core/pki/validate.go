@@ -15,7 +15,7 @@ import (
 )
 
 // InvalidateIfIPChanged checks whether the existing apiserver certificate covers the
-// current node IPs. If not, it removes the leaf certificates so that
+// advertised node IP. If not, it removes the leaf certificates so that
 // GenerateAllCertificates will re-sign fresh certificates on the next call.
 //
 // This handles DHCP address changes between restarts: the old certs embed the
@@ -89,6 +89,17 @@ var caDirNames = map[string]bool{"ca": true, "request-header": true}
 func removeLeafCerts(pkiDir string) error {
 	if pkiDir == "" || pkiDir == "/" || pkiDir == "." {
 		return fmt.Errorf("refusing to modify PKI directory: unsafe path %q", pkiDir)
+	}
+	// Reject a symlinked PKI directory: os.ReadDir follows it, so a symlink to an
+	// unexpected location (e.g. /etc) would redirect the per-entry deletions
+	// there. os.RemoveAll on the directory itself would have removed the symlink
+	// instead, so this path is only reachable with the new per-entry approach.
+	info, err := os.Lstat(pkiDir)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to modify PKI directory: %q is a symlink", pkiDir)
 	}
 	entries, err := os.ReadDir(pkiDir)
 	if err != nil {

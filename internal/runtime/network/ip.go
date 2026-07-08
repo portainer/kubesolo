@@ -37,30 +37,35 @@ func GetLocalIPs() ([]net.IP, error) {
 	return append(ips, net.ParseIP("127.0.0.1")), nil
 }
 
-// ResolveNodeIP returns the node IP to advertise. When override is non-empty it
-// is used as-is after validation: an unparseable value is ignored (with a
-// warning) and detection falls back to GetNodeIP, while a valid value that is
-// not bound to a local interface is allowed but logged (e.g. a VIP). When
-// override is empty, the node IP is auto-detected via GetNodeIP.
-func ResolveNodeIP(override string) (string, error) {
+// ResolveNodeIP returns the node IP to advertise and whether it was explicitly
+// pinned via a valid override. When override is a valid IPv4 it is used as-is
+// and pinned is true — a value not bound to a local interface is still allowed
+// but logged (e.g. a VIP). An empty or unparseable override falls back to
+// auto-detection via GetNodeIP with pinned false, so a typo does not silently
+// switch the caller into "pinned" behavior.
+func ResolveNodeIP(override string) (ip string, pinned bool, err error) {
 	if override == "" {
-		return GetNodeIP()
+		ip, err = GetNodeIP()
+		return ip, false, err
 	}
 	if !IsIPv4Address(override) {
 		log.Warn().Str("component", "network").Str("node-ip", override).
 			Msg("--node-ip is not a valid IPv4 address; ignoring it and auto-detecting the node IP")
-		return GetNodeIP()
+		ip, err = GetNodeIP()
+		return ip, false, err
 	}
 	if !isLocalIP(override) {
 		log.Warn().Str("component", "network").Str("node-ip", override).
 			Msg("--node-ip is not bound to a local interface; using it anyway (e.g. VIP)")
 	}
-	return override, nil
+	return override, true, nil
 }
 
 // GetNodeIP returns a non-loopback IPv4 address of the node, preferring a
-// private (RFC 1918) address over a public one. This keeps selection stable on
-// hosts with multiple NICs, where InterfaceAddrs ordering is not guaranteed.
+// private (RFC 1918) address over a public one. On a host with several private
+// addresses the first one encountered is returned, so the choice is not
+// guaranteed to be stable across reboots — pin a specific address with
+// --node-ip when that matters.
 func GetNodeIP() (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -89,7 +94,7 @@ func selectNodeIP(addrs []net.Addr) (string, error) {
 	if firstNonLoopback != "" {
 		return firstNonLoopback, nil
 	}
-	return "127.0.0.1", fmt.Errorf("could not find non-loopback private IP address")
+	return "127.0.0.1", fmt.Errorf("could not find non-loopback IPv4 address")
 }
 
 // isLocalIP reports whether ip is bound to one of the host's interfaces.

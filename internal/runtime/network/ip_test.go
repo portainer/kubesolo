@@ -49,20 +49,22 @@ func TestSelectNodeIP(t *testing.T) {
 }
 
 func TestResolveNodeIP(t *testing.T) {
-	t.Run("valid override is used as-is", func(t *testing.T) {
+	t.Run("valid override is used as-is and marked pinned", func(t *testing.T) {
 		// 203.0.113.5 is a documentation-range address, not bound locally, so it
 		// exercises the "valid but not local" (VIP) branch.
-		got, err := ResolveNodeIP("203.0.113.5")
+		got, pinned, err := ResolveNodeIP("203.0.113.5")
 		require.NoError(t, err)
+		assert.True(t, pinned, "a valid override must be reported as pinned")
 		assert.Equal(t, "203.0.113.5", got)
 	})
 
-	t.Run("invalid override falls back to auto-detection", func(t *testing.T) {
-		got, err := ResolveNodeIP("not-an-ip")
-		// Falls through to GetNodeIP; on any host that yields a non-empty IP.
-		require.NoError(t, err)
+	t.Run("invalid override falls back to auto-detection and is not pinned", func(t *testing.T) {
+		// Falls through to GetNodeIP, which is host-dependent (and errors on a
+		// loopback-only host), so we only assert the override was rejected — not
+		// the detected value or the error.
+		got, pinned, _ := ResolveNodeIP("not-an-ip")
+		assert.False(t, pinned, "an invalid override must not be treated as pinned")
 		assert.NotEqual(t, "not-an-ip", got)
-		assert.NotEmpty(t, got)
 	})
 }
 
