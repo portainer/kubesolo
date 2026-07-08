@@ -44,6 +44,11 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 		os.Getenv("KUBESOLO_APISERVER_EXTRA_SANS"),
 		"Comma-separated extra Subject Alternative Names for the API server certificate")
 
+	f.StringVar(&cfg.NodeIP, "node-ip",
+		os.Getenv("KUBESOLO_NODE_IP"),
+		"Override the auto-detected node IP (advertise address, kubeconfig, kubelet, LoadBalancer EXTERNAL-IP).\n"+
+			"Useful on hosts with multiple NICs. Defaults to auto-detection (prefers a private address)")
+
 	f.StringVar(&cfg.PortainerEdgeID, "portainer-edge-id",
 		os.Getenv("KUBESOLO_PORTAINER_EDGE_ID"),
 		"Portainer edge agent ID")

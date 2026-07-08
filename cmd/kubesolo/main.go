@@ -394,7 +394,7 @@ func (s *kubesolo) bootstrap() {
 	}
 
 	// System Node IP
-	nodeIP, err := network.GetNodeIP()
+	nodeIP, err := network.ResolveNodeIP(*flags.NodeIP)
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to get node IP address, using default loopback IP address")
 	}

@@ -37,20 +37,74 @@ func GetLocalIPs() ([]net.IP, error) {
 	return append(ips, net.ParseIP("127.0.0.1")), nil
 }
 
-// GetNodeIP returns the first non-loopback IP address of the node
+// ResolveNodeIP returns the node IP to advertise. When override is non-empty it
+// is used as-is after validation: an unparseable value is ignored (with a
+// warning) and detection falls back to GetNodeIP, while a valid value that is
+// not bound to a local interface is allowed but logged (e.g. a VIP). When
+// override is empty, the node IP is auto-detected via GetNodeIP.
+func ResolveNodeIP(override string) (string, error) {
+	if override == "" {
+		return GetNodeIP()
+	}
+	if !IsIPv4Address(override) {
+		log.Warn().Str("component", "network").Str("node-ip", override).
+			Msg("--node-ip is not a valid IPv4 address; ignoring it and auto-detecting the node IP")
+		return GetNodeIP()
+	}
+	if !isLocalIP(override) {
+		log.Warn().Str("component", "network").Str("node-ip", override).
+			Msg("--node-ip is not bound to a local interface; using it anyway (e.g. VIP)")
+	}
+	return override, nil
+}
+
+// GetNodeIP returns a non-loopback IPv4 address of the node, preferring a
+// private (RFC 1918) address over a public one. This keeps selection stable on
+// hosts with multiple NICs, where InterfaceAddrs ordering is not guaranteed.
 func GetNodeIP() (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return "127.0.0.1", fmt.Errorf("failed to get node IP address: %v", err)
 	}
+	return selectNodeIP(addrs)
+}
 
+// selectNodeIP picks the node IP from the given interface addresses, preferring
+// the first private IPv4 and falling back to the first non-loopback IPv4.
+func selectNodeIP(addrs []net.Addr) (string, error) {
+	var firstNonLoopback string
 	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
-			return ipnet.IP.To4().String(), nil
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+			continue
+		}
+		ipv4 := ipnet.IP.To4()
+		if ipv4.IsPrivate() {
+			return ipv4.String(), nil
+		}
+		if firstNonLoopback == "" {
+			firstNonLoopback = ipv4.String()
 		}
 	}
-
+	if firstNonLoopback != "" {
+		return firstNonLoopback, nil
+	}
 	return "127.0.0.1", fmt.Errorf("could not find non-loopback private IP address")
+}
+
+// isLocalIP reports whether ip is bound to one of the host's interfaces.
+func isLocalIP(ip string) bool {
+	target := net.ParseIP(ip)
+	locals, err := GetLocalIPs()
+	if err != nil {
+		return false
+	}
+	for _, l := range locals {
+		if l.Equal(target) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsIPv4Address returns true if the given string is a valid IPv4 address
