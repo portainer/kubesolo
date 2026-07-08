@@ -10,17 +10,21 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
 
 // InvalidateIfIPChanged checks whether the existing apiserver certificate covers the
-// current node IPs. If not, it removes the entire PKI directory so that
-// GenerateAllCertificates will produce fresh certificates on the next call.
+// advertised node IP. If not, it removes the leaf certificates so that
+// GenerateAllCertificates will re-sign fresh certificates on the next call.
 //
 // This handles DHCP address changes between restarts: the old certs embed the
 // previous IP in their SANs, causing TLS failures until the PKI is regenerated.
+//
+// The CA is deliberately preserved (see removeLeafCerts): regenerating it on
+// every IP change would rotate the cluster's trust anchor and force every
+// previously distributed kubeconfig to be updated. Keeping the CA stable lets
+// re-signed leaf certs (and existing client certs) keep validating.
 func InvalidateIfIPChanged(embedded types.Embedded) error {
 	certPath := filepath.Join(embedded.PKIAPIServerDir, "apiserver.crt")
 
@@ -35,77 +39,81 @@ func InvalidateIfIPChanged(embedded types.Embedded) error {
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
 		log.Warn().Str("component", "pki").Str("cert", certPath).
-			Msg("existing certificate is corrupt (PEM decode failed) — removing PKI directory for regeneration")
-		return removePKIDir(embedded.PKIDir)
+			Msg("existing certificate is corrupt (PEM decode failed) — regenerating leaf certificates")
+		return removeLeafCerts(embedded.PKIDir)
 	}
 
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		log.Warn().Str("component", "pki").Str("cert", certPath).
-			Msg("existing certificate is corrupt (parse failed) — removing PKI directory for regeneration")
-		return removePKIDir(embedded.PKIDir)
+			Msg("existing certificate is corrupt (parse failed) — regenerating leaf certificates")
+		return removeLeafCerts(embedded.PKIDir)
 	}
 
 	if time.Now().After(cert.NotAfter) {
 		log.Warn().Str("component", "pki").Time("expired_at", cert.NotAfter).
-			Msg("existing certificate has expired — removing PKI directory for regeneration")
-		return removePKIDir(embedded.PKIDir)
+			Msg("existing certificate has expired — regenerating leaf certificates")
+		return removeLeafCerts(embedded.PKIDir)
 	}
 
-	currentIPs, err := network.GetLocalIPs()
-	if err != nil {
-		log.Warn().Str("component", "pki").Err(err).
-			Msg("could not enumerate local IPs — skipping PKI invalidation check")
-		return nil
-	}
-	if len(currentIPs) == 0 {
-		return nil
-	}
-
-	// Loopback (127.0.0.1) is always present in both the current IP list and
-	// the cert SANs, so comparing it would always produce a match even when
-	// the real node IP has changed. Only compare non-loopback IPs.
-	nodeIPs := nonLoopback(currentIPs)
-	if len(nodeIPs) == 0 {
+	// Verify the cert covers the node IP we are going to advertise. The apiserver
+	// cert SANs are scoped to this IP (plus the service IP and localhost), so
+	// comparing against every local IP would wrongly fire on unrelated
+	// interfaces (public NIC, cni0) and regenerate on every boot.
+	nodeIP := net.ParseIP(embedded.NodeIP)
+	if nodeIP == nil || nodeIP.IsLoopback() {
 		return nil
 	}
 
-	for _, current := range nodeIPs {
-		covered := false
-		for _, san := range cert.IPAddresses {
-			if current.Equal(san) {
-				covered = true
-				break
-			}
-		}
-		if !covered {
-			log.Warn().
-				Str("component", "pki").
-				Str("missing_ip", current.String()).
-				Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
-				Msg("node IP not found in existing certificate SANs — removing PKI directory for regeneration")
-			return removePKIDir(embedded.PKIDir)
+	for _, san := range cert.IPAddresses {
+		if nodeIP.Equal(san) {
+			return nil
 		}
 	}
 
-	return nil
+	log.Warn().
+		Str("component", "pki").
+		Str("missing_ip", nodeIP.String()).
+		Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
+		Msg("node IP not found in existing certificate SANs — regenerating leaf certificates")
+	return removeLeafCerts(embedded.PKIDir)
 }
 
-func removePKIDir(pkiDir string) error {
+// caDirNames are the PKI subdirectories preserved across regeneration. Keeping
+// the CA and request-header CA stable avoids rotating the cluster trust anchor
+// (which would invalidate every distributed kubeconfig).
+var caDirNames = map[string]bool{"ca": true, "request-header": true}
+
+// removeLeafCerts removes every entry under pkiDir except the CA directories, so
+// GenerateAllCertificates re-signs fresh leaf certificates with the existing CA.
+func removeLeafCerts(pkiDir string) error {
 	if pkiDir == "" || pkiDir == "/" || pkiDir == "." {
-		return fmt.Errorf("refusing to remove PKI directory: unsafe path %q", pkiDir)
+		return fmt.Errorf("refusing to modify PKI directory: unsafe path %q", pkiDir)
 	}
-	return os.RemoveAll(pkiDir)
-}
-
-func nonLoopback(ips []net.IP) []net.IP {
-	var out []net.IP
-	for _, ip := range ips {
-		if !ip.IsLoopback() {
-			out = append(out, ip)
+	// Reject a symlinked PKI directory: os.ReadDir follows it, so a symlink to an
+	// unexpected location (e.g. /etc) would redirect the per-entry deletions
+	// there. os.RemoveAll on the directory itself would have removed the symlink
+	// instead, so this path is only reachable with the new per-entry approach.
+	info, err := os.Lstat(pkiDir)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to modify PKI directory: %q is a symlink", pkiDir)
+	}
+	entries, err := os.ReadDir(pkiDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if caDirNames[entry.Name()] {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(pkiDir, entry.Name())); err != nil {
+			return err
 		}
 	}
-	return out
+	return nil
 }
 
 func ipsToStrings(ips []net.IP) []string {

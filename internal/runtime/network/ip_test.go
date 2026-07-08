@@ -1,6 +1,7 @@
 package network
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,63 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func cidr(t *testing.T, s string) *net.IPNet {
+	t.Helper()
+	ip, ipnet, err := net.ParseCIDR(s)
+	require.NoError(t, err)
+	ipnet.IP = ip
+	return ipnet
+}
+
+func TestSelectNodeIP(t *testing.T) {
+	t.Run("prefers a private IP over a public one regardless of order", func(t *testing.T) {
+		addrs := []net.Addr{
+			cidr(t, "203.0.113.9/24"), // public, listed first
+			cidr(t, "192.168.1.10/24"),
+		}
+		got, err := selectNodeIP(addrs)
+		require.NoError(t, err)
+		assert.Equal(t, "192.168.1.10", got)
+	})
+
+	t.Run("falls back to a public IP when no private address exists", func(t *testing.T) {
+		addrs := []net.Addr{
+			cidr(t, "127.0.0.1/8"),
+			cidr(t, "203.0.113.9/24"),
+		}
+		got, err := selectNodeIP(addrs)
+		require.NoError(t, err)
+		assert.Equal(t, "203.0.113.9", got)
+	})
+
+	t.Run("errors and returns loopback when only loopback is present", func(t *testing.T) {
+		addrs := []net.Addr{cidr(t, "127.0.0.1/8")}
+		got, err := selectNodeIP(addrs)
+		require.Error(t, err)
+		assert.Equal(t, "127.0.0.1", got)
+	})
+}
+
+func TestResolveNodeIP(t *testing.T) {
+	t.Run("valid override is used as-is and marked pinned", func(t *testing.T) {
+		// 203.0.113.5 is a documentation-range address, not bound locally, so it
+		// exercises the "valid but not local" (VIP) branch.
+		got, pinned, err := ResolveNodeIP("203.0.113.5")
+		require.NoError(t, err)
+		assert.True(t, pinned, "a valid override must be reported as pinned")
+		assert.Equal(t, "203.0.113.5", got)
+	})
+
+	t.Run("invalid override falls back to auto-detection and is not pinned", func(t *testing.T) {
+		// Falls through to GetNodeIP, which is host-dependent (and errors on a
+		// loopback-only host), so we only assert the override was rejected — not
+		// the detected value or the error.
+		got, pinned, _ := ResolveNodeIP("not-an-ip")
+		assert.False(t, pinned, "an invalid override must not be treated as pinned")
+		assert.NotEqual(t, "not-an-ip", got)
+	})
+}
 
 func TestIsIPv4Address(t *testing.T) {
 	cases := map[string]bool{

@@ -76,7 +76,20 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 			"localhost",
 		}
 		opts.IPAddresses = []net.IP{net.ParseIP(types.DefaultKubernetesServiceIP)}
-		opts.IPAddresses = append(opts.IPAddresses, ipAddresses...)
+		if embedded.NodeIPSpecified {
+			// When the node IP was pinned via --node-ip, scope the serving cert
+			// to that IP (plus localhost) so it does not vouch for unrelated NICs
+			// such as a public interface. Any other address must be added
+			// explicitly via --apiserver-extra-sans.
+			opts.IPAddresses = append(opts.IPAddresses, net.ParseIP("127.0.0.1"))
+			if nodeIP := net.ParseIP(embedded.NodeIP); nodeIP != nil {
+				opts.IPAddresses = append(opts.IPAddresses, nodeIP)
+			}
+		} else {
+			// Auto-detected: cover every local interface so a client reaching the
+			// API server on any of them still passes TLS verification.
+			opts.IPAddresses = append(opts.IPAddresses, ipAddresses...)
+		}
 		if len(embedded.APIServerExtraSANs) > 0 {
 			addExtraSANs(&opts, embedded.APIServerExtraSANs)
 		}

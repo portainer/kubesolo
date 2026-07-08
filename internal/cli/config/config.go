@@ -39,6 +39,9 @@ type Config struct {
 	// APIServerExtraSANs is an optional comma-separated list of extra SANs for the API server certificate
 	APIServerExtraSANs string
 
+	// NodeIP optionally overrides the auto-detected node IP (useful on multi-NIC hosts)
+	NodeIP string
+
 	// PortainerEdgeID is the Portainer edge agent ID
 	PortainerEdgeID string
 
@@ -102,6 +105,10 @@ func (c *Config) CmdArgs() []string {
 
 	if c.APIServerExtraSANs != "" {
 		args = append(args, "--apiserver-extra-sans="+c.APIServerExtraSANs)
+	}
+
+	if c.NodeIP != "" {
+		args = append(args, "--node-ip="+c.NodeIP)
 	}
 
 	if c.PortainerEdgeID != "" {

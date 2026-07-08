@@ -64,6 +64,11 @@ type Embedded struct {
 	// System Node IP
 	NodeIP string
 
+	// NodeIPSpecified is true when the node IP was explicitly set via --node-ip
+	// (rather than auto-detected). When set, the API server cert SANs are scoped
+	// to this IP instead of every local interface address.
+	NodeIPSpecified bool
+
 	// PKI directories
 	PKIDir              string
 	PKICADir            string
