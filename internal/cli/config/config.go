@@ -1,7 +1,7 @@
 package config
 
 const (
-	DefaultVersion     = "v1.1.7"
+	DefaultVersion     = "v1.1.8"
 	DefaultPath        = "/var/lib/kubesolo"
 	DefaultInstallPath = "/usr/local/bin/kubesolo"
 	DefaultRunMode     = RunModeService
@@ -12,7 +12,7 @@ const (
 	// MinD2KVersion is the first KubeSolo release whose binary understands the
 	// --d2k / --d2k-namespace flags (d2k integration landed after v1.1.5).
 	// The installer refuses to pass --d2k to an older binary, which would crash-loop.
-	MinD2KVersion = "v1.1.7"
+	MinD2KVersion = "v1.1.8"
 
 	RunModeService    = "service"
 	RunModeDaemon     = "daemon"
@@ -30,7 +30,7 @@ type Config struct {
 	// and kubeconfig context name. Defaults to AppName ("kubesolo").
 	Name string
 
-	// Version of KubeSolo to install (e.g. "v1.1.7")
+	// Version of KubeSolo to install (e.g. "v1.1.8")
 	Version string
 
 	// Path is the base directory KubeSolo stores its data in

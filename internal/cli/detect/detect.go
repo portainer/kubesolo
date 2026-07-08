@@ -62,7 +62,7 @@ type SystemInfo struct {
 }
 
 // ArchiveName returns the fully-qualified tarball name for the given version,
-// e.g. "kubesolo-v1.1.7-linux-amd64.tar.gz"
+// e.g. "kubesolo-v1.1.8-linux-amd64.tar.gz"
 func (s *SystemInfo) ArchiveName(version string) string {
 	return fmt.Sprintf("kubesolo-%s-%s-%s%s.tar.gz", version, s.OS, s.ArchiveSuffix, s.LibCSuffix)
 }
