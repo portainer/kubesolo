@@ -27,9 +27,9 @@ prepare a bundle for a different target, e.g. when downloading on an amd64
 laptop for deployment to an arm64 device.
 
 Examples:
-  kubesoloctl download --version=v1.1.7 --path=./offline-bundle
-  kubesoloctl download --version=v1.1.7 --path=./offline-bundle --arch=arm64
-  kubesoloctl download --version=v1.1.7 --path=./offline-bundle --arch=amd64-musl`,
+  kubesoloctl download --version=v1.1.8 --path=./offline-bundle
+  kubesoloctl download --version=v1.1.8 --path=./offline-bundle --arch=arm64
+  kubesoloctl download --version=v1.1.8 --path=./offline-bundle --arch=amd64-musl`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := ui.New()
 			p.Header("download")

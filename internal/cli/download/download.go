@@ -40,8 +40,8 @@ func Install(offlineSrc, archiveName, version string) error {
 // the running kubesoloctl binary alongside it, producing a fully self-contained
 // offline bundle ready to be transferred to an air-gapped machine.
 //
-//   - archiveName is the kubesolo release tarball, e.g. "kubesolo-v1.1.7-linux-amd64.tar.gz"
-//   - version     is the kubesolo release tag, e.g. "v1.1.7"
+//   - archiveName is the kubesolo release tarball, e.g. "kubesolo-v1.1.8-linux-amd64.tar.gz"
+//   - version     is the kubesolo release tag, e.g. "v1.1.8"
 func DownloadBundle(outDir, archiveName, version string) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory %s: %w", outDir, err)
