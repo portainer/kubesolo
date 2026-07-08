@@ -41,27 +41,15 @@ func TestRemoveLeafCerts(t *testing.T) {
 	})
 }
 
-func TestNonLoopback(t *testing.T) {
-	in := []net.IP{
-		net.ParseIP("127.0.0.1"),
-		net.ParseIP("10.0.0.5"),
-		net.ParseIP("::1"),
-		net.ParseIP("192.168.1.10"),
-	}
-	got := nonLoopback(in)
-	require.Len(t, got, 2)
-	assert.Equal(t, "10.0.0.5", got[0].String())
-	assert.Equal(t, "192.168.1.10", got[1].String())
-}
-
 func TestIPsToStrings(t *testing.T) {
 	got := ipsToStrings([]net.IP{net.ParseIP("10.0.0.1"), net.ParseIP("127.0.0.1")})
 	assert.Equal(t, []string{"10.0.0.1", "127.0.0.1"}, got)
 }
 
 // writeAPIServerCert builds an embedded layout under a temp dir with an
-// apiserver.crt generated from the given template, and returns the Embedded.
-func writeAPIServerCert(t *testing.T, certPEM []byte) types.Embedded {
+// apiserver.crt generated from the given template, and returns the Embedded
+// with NodeIP set (the IP the invalidation check compares against).
+func writeAPIServerCert(t *testing.T, nodeIP string, certPEM []byte) types.Embedded {
 	t.Helper()
 	pkiDir := filepath.Join(t.TempDir(), "pki")
 	apiDir := filepath.Join(pkiDir, "apiserver")
@@ -73,7 +61,7 @@ func writeAPIServerCert(t *testing.T, certPEM []byte) types.Embedded {
 	if certPEM != nil {
 		require.NoError(t, os.WriteFile(filepath.Join(apiDir, "apiserver.crt"), certPEM, 0o644))
 	}
-	return types.Embedded{PKIDir: pkiDir, PKIAPIServerDir: apiDir}
+	return types.Embedded{PKIDir: pkiDir, PKIAPIServerDir: apiDir, NodeIP: nodeIP}
 }
 
 func selfSignedCert(t *testing.T, notAfter time.Time, ips []net.IP) []byte {
@@ -102,21 +90,45 @@ func TestInvalidateIfIPChanged(t *testing.T) {
 	}
 
 	t.Run("missing cert is a no-op", func(t *testing.T) {
-		e := writeAPIServerCert(t, nil)
+		e := writeAPIServerCert(t, "10.0.0.5", nil)
 		require.NoError(t, InvalidateIfIPChanged(e))
 		assert.DirExists(t, e.PKIDir, "PKI dir must be left intact when no cert exists yet")
 	})
 
 	t.Run("corrupt PEM regenerates leaf certs but keeps the CA", func(t *testing.T) {
-		e := writeAPIServerCert(t, []byte("this is not a certificate"))
+		e := writeAPIServerCert(t, "10.0.0.5", []byte("this is not a certificate"))
 		require.NoError(t, InvalidateIfIPChanged(e))
 		assertRegenerated(t, e)
 	})
 
 	t.Run("expired cert regenerates leaf certs but keeps the CA", func(t *testing.T) {
 		expired := selfSignedCert(t, time.Now().Add(-1*time.Hour), []net.IP{net.ParseIP("10.0.0.5")})
-		e := writeAPIServerCert(t, expired)
+		e := writeAPIServerCert(t, "10.0.0.5", expired)
 		require.NoError(t, InvalidateIfIPChanged(e))
 		assertRegenerated(t, e)
+	})
+
+	t.Run("node IP covered by cert is a no-op", func(t *testing.T) {
+		valid := selfSignedCert(t, time.Now().Add(24*time.Hour), []net.IP{net.ParseIP("10.0.0.5")})
+		e := writeAPIServerCert(t, "10.0.0.5", valid)
+		require.NoError(t, InvalidateIfIPChanged(e))
+		assert.FileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"), "cert covering the node IP must be kept")
+	})
+
+	t.Run("node IP not covered regenerates leaf certs but keeps the CA", func(t *testing.T) {
+		// Cert only covers a stale IP; the current node IP is different.
+		valid := selfSignedCert(t, time.Now().Add(24*time.Hour), []net.IP{net.ParseIP("10.0.0.5")})
+		e := writeAPIServerCert(t, "192.168.1.10", valid)
+		require.NoError(t, InvalidateIfIPChanged(e))
+		assertRegenerated(t, e)
+	})
+
+	t.Run("only other local IPs change is a no-op", func(t *testing.T) {
+		// The node IP is covered even though the cert does not list unrelated
+		// interfaces (public NIC, cni0) — those must not trigger regeneration.
+		valid := selfSignedCert(t, time.Now().Add(24*time.Hour), []net.IP{net.ParseIP("10.0.0.5")})
+		e := writeAPIServerCert(t, "10.0.0.5", valid)
+		require.NoError(t, InvalidateIfIPChanged(e))
+		assert.FileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"), "unrelated local IPs must not trigger regeneration")
 	})
 }

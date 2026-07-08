@@ -424,7 +424,8 @@ func (s *kubesolo) bootstrap() {
 
 	s.embedded = types.Embedded{
 		// System Node IP
-		NodeIP: nodeIP,
+		NodeIP:          nodeIP,
+		NodeIPSpecified: *flags.NodeIP != "",
 
 		// Admin kubeconfig file
 		AdminKubeconfigFile: filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.kubeconfig"),

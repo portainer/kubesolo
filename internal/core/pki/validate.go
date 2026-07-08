@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
@@ -57,43 +56,27 @@ func InvalidateIfIPChanged(embedded types.Embedded) error {
 		return removeLeafCerts(embedded.PKIDir)
 	}
 
-	currentIPs, err := network.GetLocalIPs()
-	if err != nil {
-		log.Warn().Str("component", "pki").Err(err).
-			Msg("could not enumerate local IPs — skipping PKI invalidation check")
-		return nil
-	}
-	if len(currentIPs) == 0 {
-		return nil
-	}
-
-	// Loopback (127.0.0.1) is always present in both the current IP list and
-	// the cert SANs, so comparing it would always produce a match even when
-	// the real node IP has changed. Only compare non-loopback IPs.
-	nodeIPs := nonLoopback(currentIPs)
-	if len(nodeIPs) == 0 {
+	// Verify the cert covers the node IP we are going to advertise. The apiserver
+	// cert SANs are scoped to this IP (plus the service IP and localhost), so
+	// comparing against every local IP would wrongly fire on unrelated
+	// interfaces (public NIC, cni0) and regenerate on every boot.
+	nodeIP := net.ParseIP(embedded.NodeIP)
+	if nodeIP == nil || nodeIP.IsLoopback() {
 		return nil
 	}
 
-	for _, current := range nodeIPs {
-		covered := false
-		for _, san := range cert.IPAddresses {
-			if current.Equal(san) {
-				covered = true
-				break
-			}
-		}
-		if !covered {
-			log.Warn().
-				Str("component", "pki").
-				Str("missing_ip", current.String()).
-				Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
-				Msg("node IP not found in existing certificate SANs — regenerating leaf certificates")
-			return removeLeafCerts(embedded.PKIDir)
+	for _, san := range cert.IPAddresses {
+		if nodeIP.Equal(san) {
+			return nil
 		}
 	}
 
-	return nil
+	log.Warn().
+		Str("component", "pki").
+		Str("missing_ip", nodeIP.String()).
+		Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
+		Msg("node IP not found in existing certificate SANs — regenerating leaf certificates")
+	return removeLeafCerts(embedded.PKIDir)
 }
 
 // caDirNames are the PKI subdirectories preserved across regeneration. Keeping
@@ -120,16 +103,6 @@ func removeLeafCerts(pkiDir string) error {
 		}
 	}
 	return nil
-}
-
-func nonLoopback(ips []net.IP) []net.IP {
-	var out []net.IP
-	for _, ip := range ips {
-		if !ip.IsLoopback() {
-			out = append(out, ip)
-		}
-	}
-	return out
 }
 
 func ipsToStrings(ips []net.IP) []string {
