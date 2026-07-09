@@ -182,19 +182,16 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: "[preparation] set up docker buildx"
+      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
     - name: "[execution] create and push multi-arch manifest"
       run: |
         VERSION="${{ github.event.inputs.kubesolo_version }}"
         IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-        docker manifest create ${IMAGE}:${VERSION} \
+        docker buildx imagetools create \
+          -t ${IMAGE}:${VERSION} \
+          -t ${IMAGE}:latest \
           ${IMAGE}:${VERSION}-linux-amd64 \
           ${IMAGE}:${VERSION}-linux-arm64 \
           ${IMAGE}:${VERSION}-linux-arm \
           ${IMAGE}:${VERSION}-linux-riscv64
-        docker manifest push ${IMAGE}:${VERSION}
-        docker manifest create ${IMAGE}:latest \
-          ${IMAGE}:${VERSION}-linux-amd64 \
-          ${IMAGE}:${VERSION}-linux-arm64 \
-          ${IMAGE}:${VERSION}-linux-arm \
-          ${IMAGE}:${VERSION}-linux-riscv64
-        docker manifest push ${IMAGE}:latest
