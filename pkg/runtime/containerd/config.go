@@ -147,7 +147,8 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"default_runtime_name": "crun",
 					"runtimes": map[string]any{
 						"crun": map[string]any{
-							"runtime_type": "io.containerd.runc.v2",
+							// An absolute runtime type is supported by containerd and avoids installing the shim in /usr/bin.
+							"runtime_type": s.containerdShimBinaryFile,
 							"snapshotter":  snapshotter,
 							"options": map[string]any{
 								"BinaryName":    s.crunBinaryFile,
