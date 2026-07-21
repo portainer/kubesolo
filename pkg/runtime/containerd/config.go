@@ -147,8 +147,14 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"default_runtime_name": "crun",
 					"runtimes": map[string]any{
 						"crun": map[string]any{
-							// An absolute runtime type is supported by containerd and avoids installing the shim in /usr/bin.
-							"runtime_type": s.containerdShimBinaryFile,
+							// runtime_type must stay a registered containerd type: CRI switches on
+							// this exact string to pick the shim's options message. Any other value
+							// (e.g. an absolute path) falls back to runtimeoptions.v1.Options, which
+							// the runc-v2 shim cannot decode ("type with url runtimeoptions.v1.Options:
+							// not found"). runtime_path overrides the shim binary location instead, so
+							// the extracted shim is used without installing a symlink under /usr/bin.
+							"runtime_type": "io.containerd.runc.v2",
+							"runtime_path": s.containerdShimBinaryFile,
 							"snapshotter":  snapshotter,
 							"options": map[string]any{
 								"BinaryName":    s.crunBinaryFile,
