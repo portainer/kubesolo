@@ -21,15 +21,18 @@ func EnsureDirectoryExists(path string) error {
 	return nil
 }
 
-// EnsureSymbolicLink removes the existing target and creates a new symbolic link
-// it returns an error if it fails
+// EnsureSymbolicLink preserves a correct link and replaces any other target.
 func EnsureSymbolicLink(source, target string) error {
+	if destination, err := os.Readlink(target); err == nil && destination == source {
+		return nil
+	}
+
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove existing symlink %s: %v", target, err)
+		return fmt.Errorf("failed to replace symlink %s with %s: %w", target, source, err)
 	}
 
 	if err := os.Symlink(source, target); err != nil {
-		return fmt.Errorf("failed to create symlink %s: %v", target, err)
+		return fmt.Errorf("failed to install symlink %s -> %s: %w", target, source, err)
 	}
 	return nil
 }
