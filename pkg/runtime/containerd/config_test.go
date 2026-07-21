@@ -1,25 +1,16 @@
 package containerd
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/containerd/containerd/v2/plugins"
 )
 
-func TestGeneratedRuntimeUsesRegisteredTypeAndEmbeddedShimPath(t *testing.T) {
-	dir := t.TempDir()
-	shim := filepath.Join(dir, "containerd-shim-runc-v2")
-	marker := filepath.Join(dir, "launched")
-	if err := os.WriteFile(shim, []byte("#!/bin/sh\nprintf launched > \"$1\"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
+func TestGeneratedRuntimeUsesRegisteredTypeWithoutRuntimePath(t *testing.T) {
 	s := &service{
 		containerdRootDir:        t.TempDir(),
-		containerdShimBinaryFile: shim,
+		containerdShimBinaryFile: "/var/lib/kubesolo/containerd/containerd-shim-runc-v2",
+		crunBinaryFile:           "/var/lib/kubesolo/containerd/crun",
 	}
 	config := s.generateContainerdConfig()
 	plugins_ := config["plugins"].(map[string]any)
@@ -36,16 +27,18 @@ func TestGeneratedRuntimeUsesRegisteredTypeAndEmbeddedShimPath(t *testing.T) {
 		t.Fatalf("runtime_type = %q, want %q", runtimeType, plugins.RuntimeRuncV2)
 	}
 
-	// runtime_path points containerd at the extracted shim (must be absolute)
-	// so no symlink is installed under /usr/bin.
-	runtimePath := crun["runtime_path"].(string)
-	if runtimePath != shim || !filepath.IsAbs(runtimePath) {
-		t.Fatalf("runtime_path = %q, want absolute embedded shim path %q", runtimePath, shim)
+	// runtime_path must NOT be set. An absolute runtime_path makes containerd use
+	// the path as the runtime identifier, which bypasses the built-in short-circuit
+	// for io.containerd.runc.v2 and triggers a spurious `<shim> -info` probe that
+	// defaults to looking up "runc" (not shipped). The shim is resolved from $PATH
+	// instead (executor.go prepends the containerd binary dir).
+	if v, ok := crun["runtime_path"]; ok {
+		t.Fatalf("runtime_path must not be set; got %q", v)
 	}
-	if err := exec.Command(runtimePath, marker).Run(); err != nil {
-		t.Fatalf("configured shim did not launch: %v", err)
-	}
-	if _, err := os.Stat(marker); err != nil {
-		t.Fatalf("configured shim did not run: %v", err)
+
+	// crun stays the OCI runtime via options.BinaryName.
+	options := crun["options"].(map[string]any)
+	if got := options["BinaryName"].(string); got != s.crunBinaryFile {
+		t.Fatalf("options.BinaryName = %q, want %q", got, s.crunBinaryFile)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -33,6 +34,16 @@ func (s *service) Run() error {
 		s.terminate()
 		return err
 	}
+
+	// Prepend the containerd binary directory (where the extracted
+	// containerd-shim-runc-v2 lives) to $PATH so containerd can resolve the
+	// shim by its registered runtime type ("io.containerd.runc.v2") without a
+	// runtime_path override. This keeps the built-in shim short-circuit active
+	// and avoids the spurious "failed to load runtime info" probe (see the
+	// runtime_type comment in config.go). containerd runs in-process, so the
+	// shim inherits this process environment.
+	shimDir := filepath.Dir(s.containerdShimBinaryFile)
+	_ = os.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	app := command.App()
 	app.Flags = s.generateCustomFlags()
