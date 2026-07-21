@@ -33,18 +33,6 @@ func loadContainerdComponents(embedded types.Embedded) error {
 		}
 	}
 
-	// Symlink containerd-shim-runc-v2 alongside the kubesolo binary.
-	// containerd's resolveRuntimePath falls back to checking filepath.Dir(os.Executable())
-	// for shim binaries, so placing the shim there lets it be found without PATH manipulation.
-	selfPath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to resolve kubesolo executable path: %w", err)
-	}
-	shimLink := filepath.Join(filepath.Dir(selfPath), "containerd-shim-runc-v2")
-	if err := filesystem.EnsureSymbolicLink(embedded.ContainerdShimBinaryFile, shimLink); err != nil {
-		return fmt.Errorf("failed to create containerd-shim-runc-v2 symlink: %w", err)
-	}
-
 	return nil
 }
 
