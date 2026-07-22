@@ -1,5 +1,7 @@
 # Containerd cross-compilation for arm32 on native host
-FROM golang:1.24-bullseye
+# bookworm (glibc 2.36) matches the crun arm build; golang images are no longer
+# published on bullseye for Go >= 1.25, which containerd v2.2.5+ requires.
+FROM golang:1.26-bookworm
 
 # Install cross-compilation toolchain and dependencies
 RUN dpkg --add-architecture armhf && \
@@ -33,7 +35,7 @@ ENV PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
 ENV PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig
 
 # Clone containerd repository
-ARG CONTAINERD_VERSION=v2.2.3
+ARG CONTAINERD_VERSION=v2.2.5
 RUN git clone https://github.com/containerd/containerd.git /go/src/github.com/containerd/containerd
 WORKDIR /go/src/github.com/containerd/containerd
 
