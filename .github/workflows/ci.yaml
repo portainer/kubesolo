@@ -67,28 +67,17 @@ jobs:
           version: v2.12.2
 
   build:
+    # online: standard binary that pulls OCI images at runtime.
+    # offline: air-gapped binary with all OCI images embedded (built via the
+    # `-offline` make targets, which mirror release.yaml). Both glibc and musl
+    # are built for amd64/arm64 so every published variant is exercised on PRs.
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-        # glibc builds
-        - goos: linux
-          goarch: amd64
-          libc: glibc
-          build_target: build
-        - goos: linux
-          goarch: arm64
-          libc: glibc
-          build_target: build
-        # musl builds (required for Alpine and other musl-based distros)
-        - goos: linux
-          goarch: amd64
-          libc: musl
-          build_target: build-musl
-        - goos: linux
-          goarch: arm64
-          libc: musl
-          build_target: build-musl
+        goos: [linux]
+        goarch: [amd64, arm64]
+        libc: [glibc, musl]
+        variant: [online, offline]
     steps:
       - name: "[preparation] checkout the current branch"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -99,12 +88,19 @@ jobs:
           cache-dependency-path: go.sum
       - name: "[preparation] install cross-compilation toolchains"
         run: sudo make install-cross-compilers${{ matrix.libc == 'musl' && ' install-musl-cross-compilers' || '' }}
-      - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }} (${{ matrix.libc }})"
-        run: make ${{ matrix.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+      - name: "[preparation] resolve build target"
+        id: target
+        run: |
+          TARGET="build"
+          if [[ "${{ matrix.libc }}" == "musl" ]]; then TARGET="build-musl"; fi
+          if [[ "${{ matrix.variant }}" == "offline" ]]; then TARGET="${TARGET}-offline"; fi
+          echo "build_target=${TARGET}" >> "$GITHUB_OUTPUT"
+      - name: "[execution] build the binary for ${{ matrix.goos }}/${{ matrix.goarch }} (${{ matrix.libc }}, ${{ matrix.variant }})"
+        run: make ${{ steps.target.outputs.build_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
       - name: "[execution] upload artifact"
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}
+          name: kubesolo-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.libc == 'musl' && '-musl' || '' }}${{ matrix.variant == 'offline' && '-offline' || '' }}
           path: ./dist/kubesolo
           retention-days: 30
 

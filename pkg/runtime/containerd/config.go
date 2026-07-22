@@ -147,8 +147,22 @@ func (s *service) generateContainerdConfig() map[string]any {
 					"default_runtime_name": "crun",
 					"runtimes": map[string]any{
 						"crun": map[string]any{
-							// An absolute runtime type is supported by containerd and avoids installing the shim in /usr/bin.
-							"runtime_type": s.containerdShimBinaryFile,
+							// runtime_type must stay a registered containerd type: CRI switches on
+							// this exact string to pick the shim's options message. Any other value
+							// (e.g. an absolute path) falls back to runtimeoptions.v1.Options, which
+							// the runc-v2 shim cannot decode ("type with url runtimeoptions.v1.Options:
+							// not found").
+							//
+							// We deliberately do NOT set runtime_path. An absolute runtime_path makes
+							// containerd use that path as the runtime identifier, which bypasses the
+							// built-in short-circuit for "io.containerd.runc.v2" and triggers a spurious
+							// `<shim> -info` probe. That probe runs the shim with no options, so it
+							// defaults to looking up "runc" (which KubeSolo does not ship, it uses crun)
+							// and logs a harmless-but-alarming "failed to load runtime info" error.
+							// Using the registered type name lets containerd resolve the extracted
+							// containerd-shim-runc-v2 from $PATH (see executor.go, which prepends the
+							// containerd binary dir) and skips the probe entirely.
+							"runtime_type": "io.containerd.runc.v2",
 							"snapshotter":  snapshotter,
 							"options": map[string]any{
 								"BinaryName":    s.crunBinaryFile,
