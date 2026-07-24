@@ -1,0 +1,66 @@
+name: promote-release
+run-name: "${{ github.event.release.tag_name }} release"
+
+# :latest is only updated once a release is genuinely promoted to GitHub's
+# current latest — GitHub allows taking a release out of pre-release without
+# marking it latest, so this stays gated on that distinction.
+on:
+  release:
+    types: [released]
+
+permissions:
+  contents: read
+
+jobs:
+  check-promotion:
+    name: check-promotion
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: "[validation] check this release is github's current latest"
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+
+          # Only act on version-shaped tags.
+          if [[ ! "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::notice::$tag doesn't look like a release version — skipping :latest update."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Skip if this promotion isn't GitHub's current latest release, so
+          # :latest can't move backwards. `gh release view` has no isLatest
+          # field — the /releases/latest endpoint is the actual source of
+          # truth for what GitHub considers latest.
+          latest_tag=$(gh api "repos/${{ github.repository }}/releases/latest" --jq '.tag_name')
+          if [ "$latest_tag" != "$tag" ]; then
+            echo "::notice::$tag was promoted but is not GitHub's current latest release ($latest_tag is) — skipping :latest update."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  update-latest:
+    name: update-latest
+    runs-on: ubuntu-latest
+    needs: [check-promotion]
+    if: needs.check-promotion.outputs.skip != 'true'
+    steps:
+      - name: "[preparation] set up docker buildx"
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: "[preparation] log in to registry"
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+
+      # kubesolo's published tags keep the v prefix (unlike portainer-idp/d2k/
+      # openshift-migrator) — no stripping here, compare/reference as-is.
+      - name: "[execution] update :latest manifest"
+        run: |
+          docker buildx imagetools create \
+            --tag portainer/kubesolo:latest \
+            portainer/kubesolo:${{ github.event.release.tag_name }}
