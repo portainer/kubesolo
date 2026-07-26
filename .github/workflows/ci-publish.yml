@@ -1,0 +1,145 @@
+name: ci-publish
+
+# Runs default-branch code only, after CI — the only place secrets are used for PR-triggered publishing.
+on:
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+env:
+  REGISTRY: portainerci
+  IMAGE_NAME: kubesolo
+
+jobs:
+  publish-images:
+    name: publish-images
+    # Only for a successful pull_request-triggered CI run.
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.value }}
+      pr_number: ${{ steps.tag.outputs.pr_number }}
+    steps:
+      - name: "[preparation] download image artifact (linux/amd64)"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pr-image-linux-amd64
+          path: /tmp/amd64
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "[preparation] download image artifact (linux/arm64)"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pr-image-linux-arm64
+          path: /tmp/arm64
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "[preparation] download image tag artifact"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pr-image-tag
+          path: /tmp
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "[validation] resolve and validate image tag"
+        id: tag
+        run: |
+          # Validate strictly against pr-<number> — this came from an artifact, not a fixed literal.
+          RAW_TAG=$(cat /tmp/image-tag.txt)
+          if [[ ! "$RAW_TAG" =~ ^pr-[0-9]+$ ]]; then
+            echo "::error::Unexpected image tag format: $RAW_TAG"
+            exit 1
+          fi
+          echo "value=$RAW_TAG" >> $GITHUB_OUTPUT
+
+          PR_NUMBER="${RAW_TAG#pr-}"
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: "[preparation] set up docker buildx"
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: "[preparation] log in to registry"
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+
+      # oci-layout refs need the tag explicit (newer BuildKit defaults to :latest) — fork code was only ever built, never executed, here.
+      - name: "[execution] create and push multi-arch manifest"
+        run: |
+          mkdir -p /tmp/image-oci-amd64 /tmp/image-oci-arm64
+          tar -xf /tmp/amd64/image-amd64.tar -C /tmp/image-oci-amd64
+          tar -xf /tmp/arm64/image-arm64.tar -C /tmp/image-oci-arm64
+          docker buildx imagetools create \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }} \
+            "oci-layout:///tmp/image-oci-amd64:${{ steps.tag.outputs.value }}-linux-amd64" \
+            "oci-layout:///tmp/image-oci-arm64:${{ steps.tag.outputs.value }}-linux-arm64"
+
+      - name: "[post] post pr comment"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const prNumber = parseInt('${{ steps.tag.outputs.pr_number }}', 10);
+            const tag = '${{ steps.tag.outputs.value }}';
+            const registry = '${{ env.REGISTRY }}';
+            const image = '${{ env.IMAGE_NAME }}';
+            const marker = '<!-- ci-publish-image-comment -->';
+            const body = `${marker}\n> [!NOTE]\n> PR image published: \`${registry}/${image}:${tag}\``;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
+
+  # Only amd64 — arm64 e2e stays develop-push-only in ci.yml, to keep PR-time
+  # arm64 minutes down (same deliberate tradeoff as before this split).
+  e2e-amd64:
+    name: e2e (amd64)
+    needs: [publish-images]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: "[preparation] checkout the tested commit"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl"
+        run: make build-kubesoloctl GOOS=linux GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[execution] run e2e smoke suite"
+        run: IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.publish-images.outputs.tag }} KUBESOLOCTL=./dist/kubesoloctl test/e2e/run.sh

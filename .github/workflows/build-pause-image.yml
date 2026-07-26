@@ -23,7 +23,7 @@ jobs:
             gcc: riscv64-linux-gnu-gcc
     permissions:
       contents: read
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -50,7 +50,7 @@ jobs:
           mkdir -p bin
           ${{ matrix.gcc }} -Os -Wall -Werror -static -DVERSION=latest \
             -o bin/pause-linux-${{ matrix.goarch }} linux/pause.c
-          
+
           # Strip binary to reduce size
           case "${{ matrix.goarch }}" in
             amd64)   x86_64-linux-gnu-strip bin/pause-linux-${{ matrix.goarch }} ;;
@@ -66,8 +66,8 @@ jobs:
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
       - name: Build and push image
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
@@ -88,14 +88,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
+
     steps:
       - name: Log in to Docker Hub
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
       - name: Create and push multi-arch manifest
         run: |
@@ -104,4 +104,4 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-riscv64
-          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest 
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
