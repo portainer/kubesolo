@@ -13,10 +13,10 @@ import (
 const metricsNamespace = "kubesolo"
 
 // componentMetrics holds the set of mutable gauges that are updated either
-// by readiness-channel watchers or the periodic prober. Constant collectors
-// (build_info, full_mode, container_mode, uptime, kine_db_size_bytes) are
-// registered directly on the registry and don't need to be addressed after
-// construction.
+// by readiness-channel watchers or the periodic prober. Collectors that derive
+// their value on scrape or never change (build_info, uptime, kine_db_size_bytes,
+// certificate_*) are registered directly on the registry and don't need to be
+// addressed after construction.
 type componentMetrics struct {
 	componentUp                 *prometheus.GaugeVec
 	componentReadyTimestamp     *prometheus.GaugeVec
@@ -45,30 +45,6 @@ func newRegistry(embedded types.Embedded, build BuildInfo, startAt int64) (*prom
 		runtime.GOARCH,
 	).Set(1)
 	reg.MustRegister(buildInfo)
-
-	containerMode := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: metricsNamespace,
-		Name:      "container_mode",
-		Help:      "1 if kubesolo detects it is running inside a container, 0 otherwise.",
-	})
-	containerMode.Set(boolToFloat(detectContainerMode()))
-	reg.MustRegister(containerMode)
-
-	loadBalancer := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: metricsNamespace,
-		Name:      "load_balancer_enabled",
-		Help:      "1 if the kubesolo load balancer mutator is enabled, 0 otherwise.",
-	})
-	loadBalancer.Set(boolToFloat(embedded.LoadBalancer))
-	reg.MustRegister(loadBalancer)
-
-	portainerEdge := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: metricsNamespace,
-		Name:      "portainer_edge_enabled",
-		Help:      "1 if Portainer Edge Agent deployment is enabled, 0 otherwise.",
-	})
-	portainerEdge.Set(boolToFloat(embedded.IsPortainerEdge))
-	reg.MustRegister(portainerEdge)
 
 	startTime := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: metricsNamespace,
@@ -99,6 +75,8 @@ func newRegistry(embedded types.Embedded, build BuildInfo, startAt int64) (*prom
 		return float64(info.Size())
 	})
 	reg.MustRegister(kineDBSize)
+
+	reg.MustRegister(newCertificateCollector(embedded))
 
 	cm := &componentMetrics{
 		componentUp: prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -136,16 +114,4 @@ func boolToFloat(b bool) float64 {
 		return 1
 	}
 	return 0
-}
-
-// detectContainerMode mirrors the heuristic used by install.sh and reports
-// whether kubesolo is running inside a container. Both Docker (/.dockerenv)
-// and Podman/CRI-O (/run/.containerenv) are detected.
-func detectContainerMode() bool {
-	for _, p := range []string{"/.dockerenv", "/run/.containerenv"} {
-		if _, err := os.Stat(p); err == nil {
-			return true
-		}
-	}
-	return false
 }
