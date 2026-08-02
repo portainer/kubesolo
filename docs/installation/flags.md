@@ -118,7 +118,9 @@ curl -sfL https://get.kubesolo.io | \
 
 ### --portainer-edge-image
 
-Full image reference deployed for the Portainer Edge Agent, including the tag. Accepts any registry, repository, and tag. Only the default image is loaded from the bundled image; any other reference is pulled from the registry, so the node needs access to it.
+Full image reference deployed for the Portainer Edge Agent, including the tag. Accepts any registry, repository, and tag. Only the default image is loaded from the bundled image; any other reference is pulled from the registry, so the node needs access to it. If the registry cannot be reached at startup, KubeSolo logs a warning and continues — the kubelet retries the pull when the agent pod starts.
+
+Short references are expanded the way Docker expands them, so `portainerci/agent:develop` becomes `docker.io/portainerci/agent:develop` and an omitted tag defaults to `latest`. Use a full host prefix for other registries, e.g. `ghcr.io/portainer/agent:2.34.0`.
 
 Note that the deployment is only created once — on reboot it is restored from the database. Changing this flag on an existing installation does not update an already deployed agent.
 

@@ -33,15 +33,18 @@ func (s *service) importImages(ctx context.Context, c *client.Client, isPortaine
 			agentImage = types.DefaultPortainerAgentImage
 		}
 
-		// The embedded tarball only ever carries the default image, so a custom
-		// reference must come from the registry: an empty file path forces the pull path.
-		agentImageFile := s.portainerAgentImageFile
-		if agentImage != types.DefaultPortainerAgentImage {
-			agentImageFile = ""
-		}
-
-		if err := s.importImage(nsCtx, c, agentImageFile, agentImage); err != nil {
-			return err
+		if agentImage == types.DefaultPortainerAgentImage {
+			if err := s.importImage(nsCtx, c, s.portainerAgentImageFile, agentImage); err != nil {
+				return err
+			}
+		} else {
+			// A custom agent image is never in the embedded tarball, so it has to come
+			// from a registry: an empty file path forces the pull path. Pre-pulling it
+			// is only a warm cache — the deployment pulls with PullAlways — so a bad
+			// reference or an unreachable registry must not stop the node coming up.
+			if err := s.importImage(nsCtx, c, "", agentImage); err != nil {
+				log.Warn().Str("component", "containerd").Str("image", agentImage).Msgf("failed to pull custom portainer agent image, the kubelet will retry: %v", err)
+			}
 		}
 	}
 
