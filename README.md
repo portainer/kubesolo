@@ -159,7 +159,7 @@ KubeSolo supports the following command-line flags:
 | `--portainer-edge-id` | `KUBESOLO_PORTAINER_EDGE_ID` | Portainer Edge ID | `""` |
 | `--portainer-edge-key` | `KUBESOLO_PORTAINER_EDGE_KEY` | Portainer Edge Key | `""` |
 | `--portainer-edge-async` | `KUBESOLO_PORTAINER_EDGE_ASYNC` | Enable Portainer Edge Async Mode | `false` |
-| `--portainer-agent-image-tag` | `KUBESOLO_PORTAINER_AGENT_IMAGE_TAG` | Tag of the `docker.io/portainer/agent` image deployed for the Portainer Edge Agent. Any tag other than the default is pulled from the registry rather than loaded from the embedded image | `lts` |
+| `--portainer-edge-image` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | Image deployed for the Portainer Edge Agent, including the tag. Any image other than the default is pulled from the registry rather than loaded from the embedded image | `docker.io/portainer/agent:lts` |
 | `--load-balancer` | `KUBESOLO_LOAD_BALANCER` | Enable load balancer. With this enabled, kubesolo will update a newly deployed service with the load balancer type so that the EXTERNAL-IP is set to the node IP | `true` |
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | Enable local storage | `true` |
 | `--local-storage-shared-path` | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | Path to the shared file system for the local storage | `""` |

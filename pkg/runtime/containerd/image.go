@@ -33,8 +33,8 @@ func (s *service) importImages(ctx context.Context, c *client.Client, isPortaine
 			agentImage = types.DefaultPortainerAgentImage
 		}
 
-		// The embedded tarball only ever carries the default tag, so a custom tag
-		// must come from the registry: an empty file path forces the pull path.
+		// The embedded tarball only ever carries the default image, so a custom
+		// reference must come from the registry: an empty file path forces the pull path.
 		agentImageFile := s.portainerAgentImageFile
 		if agentImage != types.DefaultPortainerAgentImage {
 			agentImageFile = ""

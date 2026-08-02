@@ -116,21 +116,21 @@ curl -sfL https://get.kubesolo.io | \
 
 ---
 
-### --portainer-agent-image-tag
+### --portainer-edge-image
 
-Tag of the `docker.io/portainer/agent` image deployed for the Portainer Edge Agent. Only the embedded default tag is loaded from the bundled image; any other tag is pulled from the registry, so the node needs registry access.
+Full image reference deployed for the Portainer Edge Agent, including the tag. Accepts any registry, repository, and tag. Only the default image is loaded from the bundled image; any other reference is pulled from the registry, so the node needs access to it.
 
 Note that the deployment is only created once — on reboot it is restored from the database. Changing this flag on an existing installation does not update an already deployed agent.
 
 | Flag | Env var | Default |
 |---|---|---|
-| `--portainer-agent-image-tag=TAG` | `KUBESOLO_PORTAINER_AGENT_IMAGE_TAG` | `lts` |
+| `--portainer-edge-image=IMAGE` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | `docker.io/portainer/agent:lts` |
 
 ```bash
 curl -sfL https://get.kubesolo.io | \
   KUBESOLO_PORTAINER_EDGE_ID=<your-edge-id> \
   KUBESOLO_PORTAINER_EDGE_KEY=<your-edge-key> \
-  sudo -E sh -s -- --portainer-agent-image-tag=sts
+  sudo -E sh -s -- --portainer-edge-image=docker.io/portainer/agent:sts
 ```
 
 ---
