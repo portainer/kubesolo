@@ -104,6 +104,7 @@ Common flags:
 | `--container-ports` | `KUBESOLO_CONTAINER_PORTS` | _(none)_ | Workload host ports to publish (container mode) |
 | `--d2k` | `KUBESOLO_D2K` | `false` | Enable the Docker-compatible API translator |
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | `false` | Enable the local-path storage provisioner |
+| `--portainer-agent-image-tag` | `KUBESOLO_PORTAINER_AGENT_IMAGE_TAG` | `lts` | Tag of the `portainer/agent` image deployed for the edge agent |
 | `--offline-install` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ | Install from a local tarball/binary instead of downloading |
 | `--proxy` | `KUBESOLO_PROXY` | _(none)_ | HTTP/HTTPS proxy injected into the service environment |
 

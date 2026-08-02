@@ -130,7 +130,7 @@ Note that the deployment is only created once — on reboot it is restored from 
 curl -sfL https://get.kubesolo.io | \
   KUBESOLO_PORTAINER_EDGE_ID=<your-edge-id> \
   KUBESOLO_PORTAINER_EDGE_KEY=<your-edge-key> \
-  sudo -E sh -s -- --portainer-agent-image-tag=2.34.0
+  sudo -E sh -s -- --portainer-agent-image-tag=sts
 ```
 
 ---

@@ -61,6 +61,11 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 		envBool("KUBESOLO_PORTAINER_EDGE_ASYNC", false),
 		"Enable async mode for the Portainer edge agent")
 
+	f.StringVar(&cfg.PortainerAgentImageTag, "portainer-agent-image-tag",
+		os.Getenv("KUBESOLO_PORTAINER_AGENT_IMAGE_TAG"),
+		"Tag of the portainer/agent image to deploy (default: lts).\n"+
+			"Any tag other than the default is pulled from the registry")
+
 	f.BoolVar(&cfg.LocalStorage, "local-storage",
 		envBool("KUBESOLO_LOCAL_STORAGE", false),
 		"Enable the local-path storage provisioner")
