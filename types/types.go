@@ -148,7 +148,8 @@ type Embedded struct {
 	LocalPathStorageDir string
 
 	// Portainer Edge
-	IsPortainerEdge bool
+	IsPortainerEdge     bool
+	PortainerAgentImage string
 
 	// Container Mode
 	ContainerMode bool
@@ -164,6 +165,7 @@ type Embedded struct {
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent
 type EdgeAgentConfig struct {
+	Image            string
 	EdgeID           string
 	EdgeKey          string
 	EdgeAsync        bool

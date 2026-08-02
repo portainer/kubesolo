@@ -15,6 +15,11 @@ import (
 func createDeployment(ctx context.Context, clientset kubernetes.Interface, config types.EdgeAgentConfig) error {
 	replicas := int32(1)
 
+	image := config.Image
+	if image == "" {
+		image = types.DefaultPortainerAgentImage
+	}
+
 	envVars := []corev1.EnvVar{
 		{
 			Name:  "LOG_LEVEL",
@@ -87,7 +92,7 @@ func createDeployment(ctx context.Context, clientset kubernetes.Interface, confi
 					Containers: []corev1.Container{
 						{
 							Name:            "portainer-agent",
-							Image:           types.DefaultPortainerAgentImage,
+							Image:           image,
 							ImagePullPolicy: corev1.PullAlways,
 							Env:             envVars,
 							EnvFrom: []corev1.EnvFromSource{

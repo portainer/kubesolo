@@ -28,7 +28,19 @@ func (s *service) importImages(ctx context.Context, c *client.Client, isPortaine
 	}
 
 	if isPortainerAgent {
-		if err := s.importImage(nsCtx, c, s.portainerAgentImageFile, types.DefaultPortainerAgentImage); err != nil {
+		agentImage := s.portainerAgentImage
+		if agentImage == "" {
+			agentImage = types.DefaultPortainerAgentImage
+		}
+
+		// The embedded tarball only ever carries the default tag, so a custom tag
+		// must come from the registry: an empty file path forces the pull path.
+		agentImageFile := s.portainerAgentImageFile
+		if agentImage != types.DefaultPortainerAgentImage {
+			agentImageFile = ""
+		}
+
+		if err := s.importImage(nsCtx, c, agentImageFile, agentImage); err != nil {
 			return err
 		}
 	}

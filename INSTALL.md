@@ -98,6 +98,7 @@ export KUBESOLO_PATH="/var/lib/kubesolo"        # Installation path
 export KUBESOLO_PORTAINER_EDGE_ID="your-id"     # Portainer Edge ID
 export KUBESOLO_PORTAINER_EDGE_KEY="your-key"   # Portainer Edge Key
 export KUBESOLO_PORTAINER_EDGE_ASYNC="false"    # Async mode
+export KUBESOLO_PORTAINER_AGENT_IMAGE_TAG="lts" # Portainer Edge Agent image tag
 export KUBESOLO_LOCAL_STORAGE="false"           # Enable local storage
 export KUBESOLO_DEBUG="false"                   # Debug logging
 export KUBESOLO_PPROF_SERVER="false"            # Enable pprof

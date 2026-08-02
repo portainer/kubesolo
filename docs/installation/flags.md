@@ -116,6 +116,25 @@ curl -sfL https://get.kubesolo.io | \
 
 ---
 
+### --portainer-agent-image-tag
+
+Tag of the `docker.io/portainer/agent` image deployed for the Portainer Edge Agent. Only the embedded default tag is loaded from the bundled image; any other tag is pulled from the registry, so the node needs registry access.
+
+Note that the deployment is only created once — on reboot it is restored from the database. Changing this flag on an existing installation does not update an already deployed agent.
+
+| Flag | Env var | Default |
+|---|---|---|
+| `--portainer-agent-image-tag=TAG` | `KUBESOLO_PORTAINER_AGENT_IMAGE_TAG` | `lts` |
+
+```bash
+curl -sfL https://get.kubesolo.io | \
+  KUBESOLO_PORTAINER_EDGE_ID=<your-edge-id> \
+  KUBESOLO_PORTAINER_EDGE_KEY=<your-edge-key> \
+  sudo -E sh -s -- --portainer-agent-image-tag=2.34.0
+```
+
+---
+
 ### --local-storage
 
 Enable the [Local Path Provisioner](https://github.com/rancher/local-path-provisioner), which creates a `local-path` StorageClass backed by host-local directories. Workloads that request persistent volumes will have them provisioned automatically under the KubeSolo data path.

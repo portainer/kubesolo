@@ -47,6 +47,7 @@ type kubesolo struct {
 	portainerEdgeID        string
 	portainerEdgeKey       string
 	portainerEdgeAsync     bool
+	portainerAgentImage    string
 	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
@@ -86,6 +87,7 @@ func service() (*kubesolo, error) {
 		portainerEdgeID:        *flags.PortainerEdgeID,
 		portainerEdgeKey:       *flags.PortainerEdgeKey,
 		portainerEdgeAsync:     *flags.PortainerEdgeAsync,
+		portainerAgentImage:    types.DefaultPortainerAgentRepository + ":" + *flags.PortainerAgentImageTag,
 		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
@@ -276,6 +278,7 @@ func (s *kubesolo) run() {
 	if s.portainerEdgeID != "" && s.portainerEdgeKey != "" {
 		log.Info().Str("component", "kubesolo").Msg("deploying portainer edge agent...")
 		if err := portainer.DeployEdgeAgent(s.embedded.AdminKubeconfigFile, types.EdgeAgentConfig{
+			Image:            s.portainerAgentImage,
 			EdgeID:           s.portainerEdgeID,
 			EdgeKey:          s.portainerEdgeKey,
 			EdgeAsync:        s.portainerEdgeAsync,
@@ -543,7 +546,8 @@ func (s *kubesolo) bootstrap() {
 		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),
 
 		// Portainer Edge
-		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+		IsPortainerEdge:     s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+		PortainerAgentImage: s.portainerAgentImage,
 
 		// Container Mode
 		ContainerMode: containerMode,
