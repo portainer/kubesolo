@@ -27,7 +27,7 @@ const (
 	DefaultKineSocket                = "kine.sock"
 	DefaultControllerManagerDir      = "controller-manager"
 	DefaultSandboxImage              = "docker.io/portainer/pause:latest"
-	DefaultPortainerAgentImage       = "docker.io/portainer/agent:2.39.4"
+	DefaultPortainerAgentImage       = "docker.io/portainer/agent:lts"
 	DefaultCoreDNSImage              = "docker.io/coredns/coredns:1.14.4"
 	DefaultLocalPathProvisionerImage = "docker.io/rancher/local-path-provisioner:v0.0.36"
 	DefaultLocalPathStorageDir       = "local-path-storage"
