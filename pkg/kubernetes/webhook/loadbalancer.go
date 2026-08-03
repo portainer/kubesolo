@@ -54,7 +54,7 @@ func (s *Service) updateLoadBalancerStatusWithRetry(ctx context.Context, namespa
 			return true, nil
 		}
 
-		if len(svc.Status.LoadBalancer.Ingress) > 0 && svc.Status.LoadBalancer.Ingress[0].IP == s.nodeIP {
+		if len(svc.Status.LoadBalancer.Ingress) > 0 && svc.Status.LoadBalancer.Ingress[0].IP == s.loadBalancerIP {
 			return true, nil
 		}
 
@@ -78,7 +78,7 @@ func (s *Service) updateLoadBalancerStatusWithRetry(ctx context.Context, namespa
 		log.Info().Str("component", "webhook").
 			Str("service", name).
 			Str("namespace", namespace).
-			Str("ip", s.nodeIP).
+			Str("ip", s.loadBalancerIP).
 			Msg("updated LoadBalancer status")
 		return true, nil
 	})

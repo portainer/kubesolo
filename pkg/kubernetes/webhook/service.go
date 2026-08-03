@@ -21,7 +21,7 @@ type Service struct {
 	wg                      sync.WaitGroup
 	server                  *http.Server
 	nodeName                string
-	nodeIP                  string
+	loadBalancerIP          string
 	pkiPath                 string
 	clientsetMu             sync.Mutex
 	clientset               *kubernetes.Clientset
@@ -38,7 +38,7 @@ type Service struct {
 }
 
 // NewService creates a new webhook server
-func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer bool) *Service {
+func NewService(nodeName, loadBalancerIP, pkiPath, adminKubeconfig string, loadBalancer bool) *Service {
 	// define struct form first, marshal from it — no round trip
 	nodeNamePatchObj := []map[string]any{
 		{
@@ -76,7 +76,7 @@ func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer 
 			"loadBalancer": map[string]interface{}{
 				"ingress": []map[string]interface{}{
 					{
-						"ip": nodeIP,
+						"ip": loadBalancerIP,
 					},
 				},
 			},
@@ -85,7 +85,7 @@ func NewService(nodeName, nodeIP, pkiPath, adminKubeconfig string, loadBalancer 
 
 	return &Service{
 		nodeName:                nodeName,
-		nodeIP:                  nodeIP,
+		loadBalancerIP:          loadBalancerIP,
 		pkiPath:                 pkiPath,
 		adminKubeconfig:         adminKubeconfig,
 		hostsEntries:            make(map[string]string),

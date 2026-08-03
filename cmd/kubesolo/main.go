@@ -422,6 +422,9 @@ func (s *kubesolo) bootstrap() {
 		log.Warn().Err(err).Msg("failed to get node IP address, using default loopback IP address")
 	}
 
+	// LoadBalancer EXTERNAL-IP, which may differ from the node IP on multi-NIC hosts
+	loadBalancerIP := network.ResolveLoadBalancerIP(*flags.LoadBalancerIP, nodeIP)
+
 	// Disable OpenTelemetry SDK to prevent it from interfering with the application's logging
 	_ = os.Setenv("OTEL_SDK_DISABLED", "true")
 
@@ -560,7 +563,8 @@ func (s *kubesolo) bootstrap() {
 		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
 
 		// Load Balancer
-		LoadBalancer: s.loadBalancer,
+		LoadBalancer:   s.loadBalancer,
+		LoadBalancerIP: loadBalancerIP,
 
 		// Local Path Storage
 		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),
