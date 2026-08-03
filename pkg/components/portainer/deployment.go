@@ -93,7 +93,7 @@ func createDeployment(ctx context.Context, clientset kubernetes.Interface, confi
 						{
 							Name:            "portainer-agent",
 							Image:           image,
-							ImagePullPolicy: corev1.PullAlways,
+							ImagePullPolicy: corev1.PullIfNotPresent,
 							Env:             envVars,
 							EnvFrom: []corev1.EnvFromSource{
 								{
