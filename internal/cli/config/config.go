@@ -51,6 +51,10 @@ type Config struct {
 	// PortainerEdgeAsync enables async mode for the Portainer edge agent
 	PortainerEdgeAsync bool
 
+	// PortainerEdgeImage overrides the image deployed for the Portainer edge agent.
+	// Empty means the flag is not passed and the KubeSolo binary uses its default.
+	PortainerEdgeImage string
+
 	// LocalStorage enables the local-path storage provisioner
 	LocalStorage bool
 
@@ -121,6 +125,10 @@ func (c *Config) CmdArgs() []string {
 
 	if c.PortainerEdgeAsync {
 		args = append(args, "--portainer-edge-async")
+	}
+
+	if c.PortainerEdgeImage != "" {
+		args = append(args, "--portainer-edge-image="+c.PortainerEdgeImage)
 	}
 
 	if c.LocalStorage {

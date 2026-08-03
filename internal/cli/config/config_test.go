@@ -25,18 +25,21 @@ func TestCmdArgs_AllFlags(t *testing.T) {
 		LocalStorage:       true,
 		Debug:              true,
 		PprofServer:        true,
+
+		PortainerEdgeImage: "docker.io/portainer/agent:sts",
 	}
 	args := cfg.CmdArgs()
 
 	want := map[string]bool{
-		"--path=/data/kubesolo":                            true,
-		"--apiserver-extra-sans=192.168.1.1,my.host.local": true,
-		"--portainer-edge-id=edge-id-123":                  true,
-		"--portainer-edge-key=edge-key-abc":                true,
-		"--portainer-edge-async":                           true,
-		"--local-storage":                                  true,
-		"--debug":                                          true,
-		"--pprof-server":                                   true,
+		"--portainer-edge-image=docker.io/portainer/agent:sts": true,
+		"--path=/data/kubesolo":                                true,
+		"--apiserver-extra-sans=192.168.1.1,my.host.local":     true,
+		"--portainer-edge-id=edge-id-123":                      true,
+		"--portainer-edge-key=edge-key-abc":                    true,
+		"--portainer-edge-async":                               true,
+		"--local-storage":                                      true,
+		"--debug":                                              true,
+		"--pprof-server":                                       true,
 	}
 
 	if len(args) != len(want) {
@@ -97,6 +100,8 @@ func TestCmdArgs_EmptyStringsOmitted(t *testing.T) {
 		APIServerExtraSANs: "",
 		PortainerEdgeID:    "",
 		PortainerEdgeKey:   "",
+
+		PortainerEdgeImage: "",
 	}
 	args := cfg.CmdArgs()
 	for _, a := range args {
@@ -105,6 +110,8 @@ func TestCmdArgs_EmptyStringsOmitted(t *testing.T) {
 			t.Errorf("empty APIServerExtraSANs should be omitted, got: %q", a)
 		case len(a) > len("--portainer-edge-id=") && a[:len("--portainer-edge-id=")] == "--portainer-edge-id=":
 			t.Errorf("empty PortainerEdgeID should be omitted, got: %q", a)
+		case len(a) > len("--portainer-edge-image=") && a[:len("--portainer-edge-image=")] == "--portainer-edge-image=":
+			t.Errorf("empty PortainerEdgeImage should be omitted, got: %q", a)
 		}
 	}
 }

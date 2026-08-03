@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/distribution/reference"
 	"github.com/portainer/kubesolo/internal/config/flags"
 	"github.com/portainer/kubesolo/internal/core/embedded"
 	"github.com/portainer/kubesolo/internal/core/pki"
@@ -47,6 +49,7 @@ type kubesolo struct {
 	portainerEdgeID        string
 	portainerEdgeKey       string
 	portainerEdgeAsync     bool
+	portainerEdgeImage     string
 	loadBalancer           bool
 	localStorage           bool
 	localStorageSharedPath string
@@ -78,6 +81,11 @@ func service() (*kubesolo, error) {
 		log.Fatal().Str("component", "kubesolo").Msg("--d2k requires --load-balancer: the d2k Service endpoint is populated by the LoadBalancer webhook")
 	}
 
+	portainerEdgeImage, err := normaliseImageRef(*flags.PortainerEdgeImage)
+	if err != nil {
+		return nil, err
+	}
+
 	return &kubesolo{
 		hostName:               system.GetHostname(),
 		extraSANs:              *flags.APIServerExtraSANs,
@@ -86,6 +94,7 @@ func service() (*kubesolo, error) {
 		portainerEdgeID:        *flags.PortainerEdgeID,
 		portainerEdgeKey:       *flags.PortainerEdgeKey,
 		portainerEdgeAsync:     *flags.PortainerEdgeAsync,
+		portainerEdgeImage:     portainerEdgeImage,
 		loadBalancer:           *flags.LoadBalancer,
 		localStorage:           *flags.LocalStorage,
 		localStorageSharedPath: *flags.LocalStorageSharedPath,
@@ -94,6 +103,19 @@ func service() (*kubesolo, error) {
 		d2k:                    d2kEnabled,
 		d2kNamespace:           *flags.D2KNamespace,
 	}, nil
+}
+
+// normaliseImageRef expands a short image reference such as portainerci/agent:develop
+// into a fully qualified one (docker.io/portainerci/agent:develop). The containerd
+// client, unlike the Docker CLI, applies no Docker Hub defaults and would otherwise
+// treat the first component as a registry host and fail to resolve it.
+func normaliseImageRef(image string) (string, error) {
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return "", fmt.Errorf("invalid image reference %q: %v", image, err)
+	}
+
+	return reference.TagNameOnly(named).String(), nil
 }
 
 // main is the entry point for the kubesolo application
@@ -276,6 +298,7 @@ func (s *kubesolo) run() {
 	if s.portainerEdgeID != "" && s.portainerEdgeKey != "" {
 		log.Info().Str("component", "kubesolo").Msg("deploying portainer edge agent...")
 		if err := portainer.DeployEdgeAgent(s.embedded.AdminKubeconfigFile, types.EdgeAgentConfig{
+			Image:            s.portainerEdgeImage,
 			EdgeID:           s.portainerEdgeID,
 			EdgeKey:          s.portainerEdgeKey,
 			EdgeAsync:        s.portainerEdgeAsync,
@@ -531,7 +554,7 @@ func (s *kubesolo) bootstrap() {
 		WebhookDir: filepath.Join(basePath, types.KubesoloWebhookDir),
 
 		// Image paths
-		PortainerAgentImageFile:       filepath.Join(basePath, types.DefaultContainerdDir, "images", "portainer-agent.tar.gz"),
+		PortainerEdgeImageFile:        filepath.Join(basePath, types.DefaultContainerdDir, "images", "portainer-agent.tar.gz"),
 		CorednsImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "coredns.tar.gz"),
 		SandboxImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "pause.tar.gz"),
 		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
@@ -543,7 +566,8 @@ func (s *kubesolo) bootstrap() {
 		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),
 
 		// Portainer Edge
-		IsPortainerEdge: s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+		IsPortainerEdge:    s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+		PortainerEdgeImage: s.portainerEdgeImage,
 
 		// Container Mode
 		ContainerMode: containerMode,

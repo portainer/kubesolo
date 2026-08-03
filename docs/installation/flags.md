@@ -116,6 +116,27 @@ curl -sfL https://get.kubesolo.io | \
 
 ---
 
+### --portainer-edge-image
+
+Full image reference deployed for the Portainer Edge Agent, including the tag. Accepts any registry, repository, and tag. Only the default image is loaded from the bundled image; any other reference is pulled from the registry, so the node needs access to it. If the registry cannot be reached at startup, KubeSolo logs a warning and continues — the kubelet retries the pull when the agent pod starts.
+
+Short references are expanded the way Docker expands them, so `portainerci/agent:develop` becomes `docker.io/portainerci/agent:develop` and an omitted tag defaults to `latest`. Use a full host prefix for other registries, e.g. `ghcr.io/portainer/agent:2.34.0`.
+
+Note that the deployment is only created once — on reboot it is restored from the database. Changing this flag on an existing installation does not update an already deployed agent.
+
+| Flag | Env var | Default |
+|---|---|---|
+| `--portainer-edge-image=IMAGE` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | `docker.io/portainer/agent:lts` |
+
+```bash
+curl -sfL https://get.kubesolo.io | \
+  KUBESOLO_PORTAINER_EDGE_ID=<your-edge-id> \
+  KUBESOLO_PORTAINER_EDGE_KEY=<your-edge-key> \
+  sudo -E sh -s -- --portainer-edge-image=docker.io/portainer/agent:sts
+```
+
+---
+
 ### --local-storage
 
 Enable the [Local Path Provisioner](https://github.com/rancher/local-path-provisioner), which creates a `local-path` StorageClass backed by host-local directories. Workloads that request persistent volumes will have them provisioned automatically under the KubeSolo data path.

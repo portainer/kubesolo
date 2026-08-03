@@ -1082,6 +1082,7 @@ APISERVER_EXTRA_SANS="${KUBESOLO_APISERVER_EXTRA_SANS:-}"
 PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
 PORTAINER_EDGE_KEY="${KUBESOLO_PORTAINER_EDGE_KEY:-}"
 PORTAINER_EDGE_ASYNC="${KUBESOLO_PORTAINER_EDGE_ASYNC:-false}"
+PORTAINER_EDGE_IMAGE="${KUBESOLO_PORTAINER_EDGE_IMAGE:-}"
 LOAD_BALANCER="${KUBESOLO_LOAD_BALANCER:-true}"
 LOCAL_STORAGE="${KUBESOLO_LOCAL_STORAGE:-true}"
 LOCAL_STORAGE_SHARED_PATH="${KUBESOLO_LOCAL_STORAGE_SHARED_PATH:-}"
@@ -1119,6 +1120,9 @@ for arg in "$@"; do
       ;;
     --portainer-edge-async=*)
       PORTAINER_EDGE_ASYNC="${arg#*=}"
+      ;;
+    --portainer-edge-image=*)
+      PORTAINER_EDGE_IMAGE="${arg#*=}"
       ;;
     --local-storage=*)
       LOCAL_STORAGE="${arg#*=}"
@@ -1165,6 +1169,7 @@ for arg in "$@"; do
       echo "  --portainer-edge-id=ID       Set Portainer Edge ID"
       echo "  --portainer-edge-key=KEY     Set Portainer Edge Key"
       echo "  --portainer-edge-async=true|false   Enable Portainer Edge Async (default: $PORTAINER_EDGE_ASYNC)"
+      echo "  --portainer-edge-image=IMAGE        Set the Portainer Edge Agent image (default: docker.io/portainer/agent:lts)"
       echo "  --local-storage=true|false   Enable local storage (default: $LOCAL_STORAGE)"
       echo "  --d2k=true|false             Embed d2k Docker-to-Kubernetes API translator (default: $D2K)"
       echo "  --d2k-namespace=NAMESPACE    Namespace into which d2k is deployed (default: $D2K_NAMESPACE)"
@@ -1302,6 +1307,10 @@ fi
 
 if [ "$PORTAINER_EDGE_ASYNC" = "true" ]; then
   CMD_ARGS="$CMD_ARGS --portainer-edge-async=true"
+fi
+
+if [ -n "$PORTAINER_EDGE_IMAGE" ]; then
+  CMD_ARGS="$CMD_ARGS --portainer-edge-image=$PORTAINER_EDGE_IMAGE"
 fi
 
 if [ "$LOAD_BALANCER" = "false" ]; then
