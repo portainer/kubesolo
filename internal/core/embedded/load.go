@@ -147,7 +147,7 @@ func loadImages(containerdImagesDir string) error {
 		destination string
 		name        string
 	}{
-		{portainerAgentImageFile, filepath.Join(containerdImagesDir, "portainer-agent.tar.gz"), "portainer-agent"},
+		{portainerEdgeImageFile, filepath.Join(containerdImagesDir, "portainer-agent.tar.gz"), "portainer-agent"},
 		{corednsImageFile, filepath.Join(containerdImagesDir, "coredns.tar.gz"), "coredns"},
 		{localPathProvisionerImageFile, filepath.Join(containerdImagesDir, "local-path-provisioner.tar.gz"), "local-path-provisioner"},
 		{d2kImageFile, filepath.Join(containerdImagesDir, "d2k.tar.gz"), "d2k"},

@@ -554,7 +554,7 @@ func (s *kubesolo) bootstrap() {
 		WebhookDir: filepath.Join(basePath, types.KubesoloWebhookDir),
 
 		// Image paths
-		PortainerAgentImageFile:       filepath.Join(basePath, types.DefaultContainerdDir, "images", "portainer-agent.tar.gz"),
+		PortainerEdgeImageFile:        filepath.Join(basePath, types.DefaultContainerdDir, "images", "portainer-agent.tar.gz"),
 		CorednsImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "coredns.tar.gz"),
 		SandboxImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "pause.tar.gz"),
 		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
@@ -566,8 +566,8 @@ func (s *kubesolo) bootstrap() {
 		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),
 
 		// Portainer Edge
-		IsPortainerEdge:     s.portainerEdgeID != "" && s.portainerEdgeKey != "",
-		PortainerAgentImage: s.portainerEdgeImage,
+		IsPortainerEdge:    s.portainerEdgeID != "" && s.portainerEdgeKey != "",
+		PortainerEdgeImage: s.portainerEdgeImage,
 
 		// Container Mode
 		ContainerMode: containerMode,

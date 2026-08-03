@@ -2,9 +2,9 @@
 
 package embedded
 
-// portainerAgentImageFile is not embedded in the online build variant.
+// portainerEdgeImageFile is not embedded in the online build variant.
 // The image will be pulled from the registry at runtime.
-var portainerAgentImageFile []byte
+var portainerEdgeImageFile []byte
 
 // localPathProvisionerImageFile is not embedded in the online build variant.
 // The image will be pulled from the registry at runtime.

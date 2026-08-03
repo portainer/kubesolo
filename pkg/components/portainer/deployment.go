@@ -17,7 +17,7 @@ func createDeployment(ctx context.Context, clientset kubernetes.Interface, confi
 
 	image := config.Image
 	if image == "" {
-		image = types.DefaultPortainerAgentImage
+		image = types.DefaultPortainerEdgeImage
 	}
 
 	envVars := []corev1.EnvVar{

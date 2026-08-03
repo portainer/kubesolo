@@ -13,7 +13,7 @@ import (
 )
 
 // importImages imports the images into the containerd registry
-func (s *service) importImages(ctx context.Context, c *client.Client, isPortainerAgent, isD2K bool) error {
+func (s *service) importImages(ctx context.Context, c *client.Client, isPortainerEdge, isD2K bool) error {
 	nsCtx := namespaces.WithNamespace(ctx, types.DefaultK8sNamespace)
 	if err := s.importImage(nsCtx, c, s.corednsImageFile, types.DefaultCoreDNSImage); err != nil {
 		return err
@@ -27,23 +27,24 @@ func (s *service) importImages(ctx context.Context, c *client.Client, isPortaine
 		return err
 	}
 
-	if isPortainerAgent {
-		agentImage := s.portainerAgentImage
-		if agentImage == "" {
-			agentImage = types.DefaultPortainerAgentImage
+	if isPortainerEdge {
+		edgeImage := s.portainerEdgeImage
+		if edgeImage == "" {
+			edgeImage = types.DefaultPortainerEdgeImage
 		}
 
-		if agentImage == types.DefaultPortainerAgentImage {
-			if err := s.importImage(nsCtx, c, s.portainerAgentImageFile, agentImage); err != nil {
+		if edgeImage == types.DefaultPortainerEdgeImage {
+			if err := s.importImage(nsCtx, c, s.portainerEdgeImageFile, edgeImage); err != nil {
 				return err
 			}
 		} else {
-			// A custom agent image is never in the embedded tarball, so it has to come
+			// A custom edge image is never in the embedded tarball, so it has to come
 			// from a registry: an empty file path forces the pull path. Pre-pulling it
-			// is only a warm cache — the deployment pulls with PullAlways — so a bad
-			// reference or an unreachable registry must not stop the node coming up.
-			if err := s.importImage(nsCtx, c, "", agentImage); err != nil {
-				log.Warn().Str("component", "containerd").Str("image", agentImage).Msgf("failed to pull custom portainer agent image, the kubelet will retry: %v", err)
+			// is only a warm cache — the kubelet pulls it again when the pod starts —
+			// so a bad reference or an unreachable registry must not stop the node
+			// coming up.
+			if err := s.importImage(nsCtx, c, "", edgeImage); err != nil {
+				log.Warn().Str("component", "containerd").Str("image", edgeImage).Msgf("failed to pull custom portainer edge agent image, the kubelet will retry: %v", err)
 			}
 		}
 	}
