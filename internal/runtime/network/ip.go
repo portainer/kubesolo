@@ -94,17 +94,29 @@ func GetNodeIP() (string, error) {
 	return selectNodeIP(addrs)
 }
 
+// classifyIPv4 reports whether addr is a non-loopback IPv4 address, and if so
+// whether it is a private (RFC 1918) address. ok is false for anything else
+// (IPv6, loopback, or a non-*net.IPNet address), in which case ip and private
+// are meaningless.
+func classifyIPv4(addr net.Addr) (ip net.IP, private bool, ok bool) {
+	ipnet, isIPNet := addr.(*net.IPNet)
+	if !isIPNet || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+		return nil, false, false
+	}
+	ipv4 := ipnet.IP.To4()
+	return ipv4, ipv4.IsPrivate(), true
+}
+
 // selectNodeIP picks the node IP from the given interface addresses, preferring
 // the first private IPv4 and falling back to the first non-loopback IPv4.
 func selectNodeIP(addrs []net.Addr) (string, error) {
 	var firstNonLoopback string
 	for _, addr := range addrs {
-		ipnet, ok := addr.(*net.IPNet)
-		if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+		ipv4, private, ok := classifyIPv4(addr)
+		if !ok {
 			continue
 		}
-		ipv4 := ipnet.IP.To4()
-		if ipv4.IsPrivate() {
+		if private {
 			return ipv4.String(), nil
 		}
 		if firstNonLoopback == "" {

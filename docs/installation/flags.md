@@ -79,6 +79,20 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --apiserver-extra-sans=10.0.0.
 
 ---
 
+### --mtu
+
+Override the auto-detected network MTU used by the embedded CNI bridge (`cni0`) and pod veth interfaces. Useful on hosts whose primary interface has a reduced MTU (e.g. VPN/tunnel/PPPoE links), where the kernel default of 1500 would otherwise cause pod traffic to silently fragment or blackhole on egress. In container run mode this also sizes the outer Docker network the KubeSolo container itself runs on, so the two stay in lockstep.
+
+| Flag | Env var | Default |
+|---|---|---|
+| `--mtu=MTU` | `KUBESOLO_MTU` | _(auto-detect)_ |
+
+```bash
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --mtu=1400
+```
+
+---
+
 ### --portainer-edge-id and --portainer-edge-key
 
 Connect KubeSolo to a Portainer server as a Portainer Edge Agent. Both flags must be supplied together.

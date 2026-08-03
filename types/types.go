@@ -69,6 +69,13 @@ type Embedded struct {
 	// to this IP instead of every local interface address.
 	NodeIPSpecified bool
 
+	// Network MTU used by the embedded CNI bridge (cni0) and pod veth interfaces
+	MTU int
+
+	// MTUSpecified is true when the MTU was explicitly set via --mtu (rather
+	// than auto-detected).
+	MTUSpecified bool
+
 	// PKI directories
 	PKIDir              string
 	PKICADir            string

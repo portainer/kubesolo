@@ -40,4 +40,5 @@ const (
 	DefaultComponentSleep            = 5 * time.Second
 	DefaultStartupTimeout            = 600 // seconds
 	DefaultNftMasqTable              = "kubesolo-masq"
+	DefaultMTU                       = 1500 // fallback when MTU detection fails
 )

@@ -7,15 +7,99 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/portainer/kubesolo/internal/cli/config"
+	hostnetwork "github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/rs/zerolog/log"
 )
+
+// dockerBridgeMTUOption is the stable Docker bridge-driver network option key
+// (not versioned by the Engine API).
+const dockerBridgeMTUOption = "com.docker.network.driver.mtu"
+
+// defaultDockerBridgeMTU is Docker's own bridge default, used when cmdArgs
+// has no --mtu= (e.g. a CMD captured from a pre-MTU-support install).
+const defaultDockerBridgeMTU = 1500
+
+// networkNameFor returns the dedicated Docker network name for a given
+// instance name, mirroring ContainerNameFor's per-instance scoping.
+func networkNameFor(name string) string { return ContainerNameFor(name) + "-net" }
+
+func (m *containerManager) nname() string { return networkNameFor(m.name) }
+
+// mtuFromCmdArgs extracts --mtu=<value> from cmdArgs. Deriving the override
+// case from cmdArgs — not cfg.MTU — keeps the outer Docker network in
+// lockstep with whatever value is literally in the container's CMD across
+// install/upgrade/reset, since upgrade and reset reuse a previously-captured
+// CMD rather than a freshly resolved config.
+//
+// When cmdArgs has no --mtu= (the common case: the user didn't override),
+// this is kubesoloctl auto-detecting on the host, so it can safely call the
+// same interface-selection logic the embedded runtime uses rather than
+// falling back to Docker's hardcoded 1500 default. cmdArgs itself is left
+// unchanged — the container's CMD still has no --mtu=, so once it's attached
+// to a network sized to this value, the embedded kubesolo process detects
+// the same MTU from its own veth and still reports it as auto-detected, not
+// pinned.
+func mtuFromCmdArgs(cmdArgs []string) int {
+	for _, a := range cmdArgs {
+		v, ok := strings.CutPrefix(a, "--mtu=")
+		if !ok {
+			continue
+		}
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	if mtu, err := hostnetwork.GetNodeMTU(); err == nil {
+		return mtu
+	}
+	return defaultDockerBridgeMTU
+}
+
+// ensureNetwork makes sure a dedicated bridge network named nname exists with
+// the given MTU: creates it if missing; if it exists with a different MTU,
+// removes and recreates it. Callers must ensure no container is attached to
+// nname first (Docker refuses to remove a network with attached endpoints).
+func ensureNetwork(ctx context.Context, cli *client.Client, nname string, mtu int) error {
+	insp, err := cli.NetworkInspect(ctx, nname, network.InspectOptions{})
+	switch {
+	case err == nil:
+		current := defaultDockerBridgeMTU
+		if v, ok := insp.Options[dockerBridgeMTUOption]; ok {
+			if parsed, perr := strconv.Atoi(v); perr == nil {
+				current = parsed
+			}
+		}
+		if current == mtu {
+			return nil
+		}
+		log.Info().Msgf("network %q MTU changed (%d -> %d); recreating network", nname, current, mtu)
+		if err := cli.NetworkRemove(ctx, nname); err != nil {
+			return fmt.Errorf("failed to remove network %q for MTU change: %w", nname, err)
+		}
+	case cerrdefs.IsNotFound(err):
+		// fall through to create
+	default:
+		return fmt.Errorf("failed to inspect network %q: %w", nname, err)
+	}
+
+	if _, err := cli.NetworkCreate(ctx, nname, network.CreateOptions{
+		Driver:  "bridge",
+		Options: map[string]string{dockerBridgeMTUOption: strconv.Itoa(mtu)},
+	}); err != nil {
+		return fmt.Errorf("failed to create network %q: %w", nname, err)
+	}
+	log.Info().Msgf("network %q ready (mtu=%d)", nname, mtu)
+	return nil
+}
 
 // ContainerNameFor returns the Docker container name for a given instance name.
 // The default name ("kubesolo") is used as-is; any other name is prefixed with
@@ -66,6 +150,11 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	timeout := 10
 	_ = cli.ContainerStop(ctx, m.cname(), container.StopOptions{Timeout: &timeout})
 	_ = cli.ContainerRemove(ctx, m.cname(), container.RemoveOptions{Force: true})
+
+	mtu := mtuFromCmdArgs(cmdArgs)
+	if err := ensureNetwork(ctx, cli, m.nname(), mtu); err != nil {
+		return err
+	}
 
 	// Pull image, streaming meaningful status lines to zerolog.
 	log.Info().Msgf("pulling %s...", img)
@@ -119,6 +208,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 			Binds:         []string{m.vname() + ":/var/lib/kubesolo"},
 			PortBindings:  portBindings,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
+			NetworkMode:   container.NetworkMode(m.nname()),
 		},
 		nil, nil, m.cname(),
 	)
@@ -148,6 +238,12 @@ func (m *containerManager) Uninstall() error {
 	log.Info().Msgf("removing container %q...", m.cname())
 	if err := cli.ContainerRemove(ctx, m.cname(), container.RemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
 		return fmt.Errorf("failed to remove container %q: %w", m.cname(), err)
+	}
+
+	nname := m.nname()
+	log.Info().Msgf("removing network %q...", nname)
+	if err := cli.NetworkRemove(ctx, nname); err != nil && !cerrdefs.IsNotFound(err) {
+		log.Warn().Msgf("could not remove network %q: %v", nname, err)
 	}
 	return nil
 }
@@ -217,6 +313,12 @@ func ResetContainer(name string) error {
 	log.Info().Msgf("removing container %q...", cname)
 	_ = cli.ContainerRemove(ctx, cname, container.RemoveOptions{Force: true})
 
+	nname := networkNameFor(name)
+	mtu := mtuFromCmdArgs(cmdArgs)
+	if err := ensureNetwork(ctx, cli, nname, mtu); err != nil {
+		return err
+	}
+
 	// Remove the data volume to clear all cluster state.
 	log.Info().Msgf("removing volume %s...", vname)
 	_ = cli.VolumeRemove(ctx, vname, true)
@@ -235,6 +337,7 @@ func ResetContainer(name string) error {
 			Binds:         []string{vname + ":/var/lib/kubesolo"},
 			PortBindings:  portBindings,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
+			NetworkMode:   container.NetworkMode(nname),
 		},
 		nil, nil, cname,
 	)

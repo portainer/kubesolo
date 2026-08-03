@@ -425,6 +425,15 @@ func (s *kubesolo) bootstrap() {
 	// LoadBalancer EXTERNAL-IP, which may differ from the node IP on multi-NIC hosts
 	loadBalancerIP := network.ResolveLoadBalancerIP(*flags.LoadBalancerIP, nodeIP)
 
+	// Network MTU
+	mtu, mtuPinned, err := network.ResolveMTU(*flags.MTU)
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to detect network MTU, using default MTU")
+	}
+	if mtu < 1280 && !s.disableIPv6 {
+		log.Warn().Int("mtu", mtu).Msg("MTU is below the IPv6 minimum (1280); IPv6 pod traffic may fail to fragment correctly")
+	}
+
 	// Disable OpenTelemetry SDK to prevent it from interfering with the application's logging
 	_ = os.Setenv("OTEL_SDK_DISABLED", "true")
 
@@ -452,6 +461,10 @@ func (s *kubesolo) bootstrap() {
 		// System Node IP
 		NodeIP:          nodeIP,
 		NodeIPSpecified: nodeIPPinned,
+
+		// Network MTU
+		MTU:          mtu,
+		MTUSpecified: mtuPinned,
 
 		// Admin kubeconfig file
 		AdminKubeconfigFile: filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.kubeconfig"),
