@@ -50,8 +50,14 @@ func (s *Service) updateLoadBalancerStatusWithRetry(ctx context.Context, namespa
 			return false, nil
 		}
 
+		// Keep retrying rather than treating this as done
 		if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
-			return true, nil
+			log.Debug().Str("component", "webhook").
+				Str("service", name).
+				Str("namespace", namespace).
+				Str("type", string(svc.Spec.Type)).
+				Msg("service is not yet a LoadBalancer, retrying...")
+			return false, nil
 		}
 
 		if len(svc.Status.LoadBalancer.Ingress) > 0 && svc.Status.LoadBalancer.Ingress[0].IP == s.loadBalancerIP {

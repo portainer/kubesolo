@@ -1,0 +1,26 @@
+# The KS-75 repro, applied on top of lb-update.yaml: same Service, now type
+# LoadBalancer with extra ports. Applied with `kubectl apply` rather than
+# `kubectl patch` on purpose — that is an UPDATE admission request, exactly what
+# `helm upgrade` issues and what previously left EXTERNAL-IP stuck at <pending>.
+#
+# Also used with --dry-run=server to assert the webhook does not patch real
+# Service status for a dry run.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flip-me
+  namespace: tier6-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+    - name: edge
+      port: 9000
+      targetPort: 80
+    - name: edge-tls
+      port: 9443
+      targetPort: 80

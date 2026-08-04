@@ -1,0 +1,80 @@
+# Tier 6 — LoadBalancer UPDATE path [KS-75]: a Service changed to type
+# LoadBalancer *after* creation must still receive an EXTERNAL-IP. Before KS-75
+# the webhook matched CREATE only and nothing else watched Services, so this
+# case never got an IP and the only workaround was to delete and recreate.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tier6-lb
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: tier6-lb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+---
+# Deliberately born as ClusterIP: flip-to-lb.yaml later applies it as a
+# LoadBalancer, which is the UPDATE path under test.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flip-me
+  namespace: tier6-lb
+spec:
+  type: ClusterIP
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+# Control: born as LoadBalancer. Guards the CREATE path against regression and
+# gives the expected EXTERNAL-IP to compare the flipped Service against.
+apiVersion: v1
+kind: Service
+metadata:
+  name: born-lb
+  namespace: tier6-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+# Guards the rule split. KS-75 scopes UPDATE to services only, because job
+# spec.template is immutable after creation — if the webhook returned its
+# nodeSelector patch on an UPDATE, the apiserver would reject the request.
+# This Job must be mutated on CREATE and still accept metadata updates.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guard
+  namespace: tier6-lb
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: work
+          image: busybox:1.36
+          command: ["sh", "-c", "true"]
