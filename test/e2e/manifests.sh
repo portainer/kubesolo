@@ -53,8 +53,11 @@ assert_webhook_rules() {
 
   printf '%s\n' "$rules" | grep -q '^services,=CREATE,UPDATE,$' \
     || { log "rules: $rules"; dump_diagnostics; fail "services rule is not CREATE+UPDATE"; }
-  printf '%s\n' "$rules" | grep -q '^pods,.*=CREATE,$' \
-    || { log "rules: $rules"; dump_diagnostics; fail "pods/PVCs/jobs rule is not CREATE-only (immutable-field hazard)"; }
+  # Matched exactly rather than with a wildcard: a loose pattern would still
+  # pass if PVCs or jobs were dropped from the rule, which is the other half of
+  # what this guards.
+  printf '%s\n' "$rules" | grep -q '^pods,persistentvolumeclaims,jobs,=CREATE,$' \
+    || { log "rules: $rules"; dump_diagnostics; fail "pods/PVCs/jobs rule is not exactly those three, CREATE-only (immutable-field hazard)"; }
 }
 
 # tier1: a Deployment is reachable via its ClusterIP and a NodePort is allocated.

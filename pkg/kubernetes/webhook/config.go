@@ -22,7 +22,10 @@ func (w *Service) createConfiguration() (*admissionregistrationv1.MutatingWebhoo
 	}
 
 	failurePolicy := admissionregistrationv1.Ignore
-	sideEffects := admissionregistrationv1.SideEffectClassNone
+	// NoneOnDryRun, not None: the Service path patches status out of band, which
+	// is a real side effect for normal requests. processServiceMutation
+	// suppresses it for dry-run requests, which is exactly what this declares.
+	sideEffects := admissionregistrationv1.SideEffectClassNoneOnDryRun
 	timeoutSeconds := int32(30)
 
 	// Pods, PVCs and jobs are Create-only on purpose: pod spec.nodeName and job
