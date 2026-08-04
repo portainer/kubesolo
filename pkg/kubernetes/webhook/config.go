@@ -22,12 +22,44 @@ func (w *Service) createConfiguration() (*admissionregistrationv1.MutatingWebhoo
 	}
 
 	failurePolicy := admissionregistrationv1.Ignore
-	sideEffects := admissionregistrationv1.SideEffectClassNone
+	// NoneOnDryRun, not None: the Service path patches status out of band, which
+	// is a real side effect for normal requests. processServiceMutation
+	// suppresses it for dry-run requests, which is exactly what this declares.
+	sideEffects := admissionregistrationv1.SideEffectClassNoneOnDryRun
 	timeoutSeconds := int32(30)
 
-	resources := []string{"pods", "persistentvolumeclaims", "jobs"}
+	// Pods, PVCs and jobs are Create-only on purpose: pod spec.nodeName and job
+	// spec.template are immutable after creation, so returning those patches on
+	// an update would make the apiserver reject the request.
+	rules := []admissionregistrationv1.RuleWithOperations{
+		{
+			Operations: []admissionregistrationv1.OperationType{
+				admissionregistrationv1.Create,
+			},
+			Rule: admissionregistrationv1.Rule{
+				APIGroups:   []string{"", "apps", "batch"},
+				APIVersions: []string{"v1"},
+				Resources:   []string{"pods", "persistentvolumeclaims", "jobs"},
+			},
+		},
+	}
+
 	if w.loadBalancer {
-		resources = append(resources, "services")
+		// Services additionally match Update so an existing Service changed to
+		// type LoadBalancer still gets its EXTERNAL-IP set. Only the main
+		// resource is matched, not services/status, so the status patch this
+		// triggers does not re-enter the webhook.
+		rules = append(rules, admissionregistrationv1.RuleWithOperations{
+			Operations: []admissionregistrationv1.OperationType{
+				admissionregistrationv1.Create,
+				admissionregistrationv1.Update,
+			},
+			Rule: admissionregistrationv1.Rule{
+				APIGroups:   []string{""},
+				APIVersions: []string{"v1"},
+				Resources:   []string{"services"},
+			},
+		})
 	}
 
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
@@ -41,18 +73,7 @@ func (w *Service) createConfiguration() (*admissionregistrationv1.MutatingWebhoo
 					URL:      kubesolokubernetes.StringPtr("https://127.0.0.1:10443/mutate"),
 					CABundle: caCert,
 				},
-				Rules: []admissionregistrationv1.RuleWithOperations{
-					{
-						Operations: []admissionregistrationv1.OperationType{
-							admissionregistrationv1.Create,
-						},
-						Rule: admissionregistrationv1.Rule{
-							APIGroups:   []string{"", "apps", "batch"},
-							APIVersions: []string{"v1"},
-							Resources:   resources,
-						},
-					},
-				},
+				Rules:                   rules,
 				FailurePolicy:           &failurePolicy,
 				SideEffects:             &sideEffects,
 				TimeoutSeconds:          &timeoutSeconds,

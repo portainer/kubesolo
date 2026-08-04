@@ -27,6 +27,39 @@ delete_ns_wait() {
   done
 }
 
+# lb_ingress_ip <ns> <svc> — echo the assigned EXTERNAL-IP, polling until it
+# appears. Returns 1 on timeout. Same loop tier 5 uses inline, factored out
+# because tier 6 needs it for two Services.
+lb_ingress_ip() {
+  local ns="$1" svc="$2" ip="" i=0
+  while [ "$i" -lt 24 ]; do
+    ip=$(kc -n "$ns" get svc "$svc" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+    [ -n "$ip" ] && { echo "$ip"; return 0; }
+    i=$((i + 1)); sleep 5
+  done
+  return 1
+}
+
+# assert_webhook_rules checks the KS-75 rule split: services match CREATE+UPDATE
+# while pods/PVCs/jobs stay CREATE-only. The split is load-bearing, not
+# cosmetic — pod spec.nodeName and job spec.template are immutable after
+# creation, so a webhook returning those patches on an UPDATE would make the
+# apiserver reject the request. go-template rather than jq: the harness only
+# assumes kubectl and awk.
+assert_webhook_rules() {
+  local rules
+  rules=$(kc get mutatingwebhookconfiguration webhook.kubesolo.io -o go-template='{{range .webhooks}}{{range .rules}}{{range .resources}}{{.}},{{end}}={{range .operations}}{{.}},{{end}}{{"\n"}}{{end}}{{end}}') \
+    || { dump_diagnostics; fail "could not read the kubesolo MutatingWebhookConfiguration"; }
+
+  printf '%s\n' "$rules" | grep -q '^services,=CREATE,UPDATE,$' \
+    || { log "rules: $rules"; dump_diagnostics; fail "services rule is not CREATE+UPDATE"; }
+  # Matched exactly rather than with a wildcard: a loose pattern would still
+  # pass if PVCs or jobs were dropped from the rule, which is the other half of
+  # what this guards.
+  printf '%s\n' "$rules" | grep -q '^pods,persistentvolumeclaims,jobs,=CREATE,$' \
+    || { log "rules: $rules"; dump_diagnostics; fail "pods/PVCs/jobs rule is not exactly those three, CREATE-only (immutable-field hazard)"; }
+}
+
 # tier1: a Deployment is reachable via its ClusterIP and a NodePort is allocated.
 tier1_workload() {
   log "tier 1 — workload & networking"
@@ -126,10 +159,59 @@ tier5_dns_lb() {
   delete_ns_wait tier5-a tier5-b
 }
 
+# tier6: a Service changed to type LoadBalancer after creation gets an
+# EXTERNAL-IP [KS-75]; a server dry run does not mutate real state; and the
+# webhook rule split leaves pods/PVCs/jobs on CREATE only.
+tier6_lb_update() {
+  log "tier 6 — LoadBalancer UPDATE path [KS-75]"
+  kc apply -f "$MANIFESTS/06-lb-update/lb-update.yaml" >/dev/null
+  kc -n tier6-lb rollout status deployment/web --timeout="$WAIT"
+
+  # Control: the CREATE path still assigns an IP.
+  local born
+  born=$(lb_ingress_ip tier6-lb born-lb) \
+    || { dump_diagnostics; fail "born-lb (CREATE path) never got an EXTERNAL-IP"; }
+
+  # Precondition: while still ClusterIP, flip-me has no ingress IP.
+  [ -z "$(kc -n tier6-lb get svc flip-me -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)" ] \
+    || { dump_diagnostics; fail "flip-me had an EXTERNAL-IP before being flipped"; }
+
+  # A server-side dry run must not mutate real state. The Service path patches
+  # status out of band, and the webhook declares sideEffects: None, so the
+  # apiserver does invoke it for dry-run requests.
+  kc apply --dry-run=server -f "$MANIFESTS/06-lb-update/flip-to-lb.yaml" >/dev/null
+  [ "$(kc -n tier6-lb get svc flip-me -o jsonpath='{.spec.type}')" = ClusterIP ] \
+    || { dump_diagnostics; fail "server dry-run mutated spec.type"; }
+  [ -z "$(kc -n tier6-lb get svc flip-me -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)" ] \
+    || { dump_diagnostics; fail "server dry-run patched LoadBalancer status"; }
+
+  # The regression itself: ClusterIP -> LoadBalancer via apply, as helm would.
+  kc apply -f "$MANIFESTS/06-lb-update/flip-to-lb.yaml" >/dev/null
+  local flipped
+  flipped=$(lb_ingress_ip tier6-lb flip-me) \
+    || { dump_diagnostics; fail "flipped Service never got an EXTERNAL-IP [KS-75]"; }
+  [ "$flipped" = "$born" ] \
+    || { dump_diagnostics; fail "flipped IP ($flipped) does not match created IP ($born)"; }
+
+  assert_webhook_rules
+
+  # Jobs are still mutated on CREATE and still accept metadata updates.
+  kc -n tier6-lb wait --for=condition=complete job/guard --timeout="$WAIT" \
+    || { dump_diagnostics; fail "guard job did not complete"; }
+  [ -n "$(kc -n tier6-lb get job guard -o jsonpath='{.spec.template.spec.nodeSelector.kubernetes\.io/hostname}')" ] \
+    || { dump_diagnostics; fail "job nodeSelector was not injected on CREATE"; }
+  kc -n tier6-lb label job/guard ks75=touched --overwrite >/dev/null \
+    || { dump_diagnostics; fail "job UPDATE was rejected — webhook is matching job updates"; }
+
+  ok "tier 6 passed (flipped=$flipped, created=$born; rules scoped correctly)"
+  delete_ns_wait tier6-lb
+}
+
 tier1_workload
 tier2_storage
 tier3_config
 tier4_controllers
 tier5_dns_lb
+tier6_lb_update
 
 ok "all manifest tiers passed"

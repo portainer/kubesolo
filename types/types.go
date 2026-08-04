@@ -144,6 +144,10 @@ type Embedded struct {
 	// Load Balancer
 	LoadBalancer bool
 
+	// LoadBalancerIP is the IP published as the LoadBalancer EXTERNAL-IP.
+	// Defaults to NodeIP unless overridden with --load-balancer-ip.
+	LoadBalancerIP string
+
 	// Local Path Storage
 	LocalPathStorageDir string
 

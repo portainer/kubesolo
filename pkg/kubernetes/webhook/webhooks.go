@@ -196,9 +196,17 @@ func (w *Service) processJobMutation(admissionReview *admissionv1.AdmissionRevie
 
 // processServiceMutation processes the service mutation for LoadBalancer allocation
 func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionReview) []map[string]any {
-	if w.nodeIP == "" {
+	// This path patches the Service status out of band rather than returning a
+	// patch, so it must not run for a dry-run request.
+	if admissionReview.Request.DryRun != nil && *admissionReview.Request.DryRun {
+		log.Debug().Str("component", "webhook").
+			Msg("skipping LoadBalancer status update for dry-run request")
+		return nil
+	}
+
+	if w.loadBalancerIP == "" {
 		log.Warn().Str("component", "webhook").
-			Msg("skipping LoadBalancer service mutation: nodeIP is not configured")
+			Msg("skipping LoadBalancer service mutation: loadBalancerIP is not configured")
 		return nil
 	}
 
@@ -212,7 +220,7 @@ func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionR
 		log.Info().Str("component", "webhook").
 			Str("service", svc.Name).
 			Str("namespace", svc.Namespace).
-			Str("ip", w.nodeIP).
+			Str("ip", w.loadBalancerIP).
 			Msg("setting external IP for LoadBalancer service")
 
 		serviceKey := svc.Namespace + "/" + svc.Name

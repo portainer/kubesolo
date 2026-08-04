@@ -218,3 +218,24 @@ func TestGetHostResolvConf_ContainerMode(t *testing.T) {
 	// /dev/null to prevent host DNS leakage.
 	assert.Equal(t, "/dev/null", GetHostResolvConf(t.TempDir(), true))
 }
+
+func TestResolveLoadBalancerIP(t *testing.T) {
+	t.Run("falls back to the node IP when unset", func(t *testing.T) {
+		assert.Equal(t, "192.168.1.10", ResolveLoadBalancerIP("", "192.168.1.10"))
+	})
+
+	t.Run("falls back to the node IP when not a valid IPv4 address", func(t *testing.T) {
+		// Must not re-detect: a pinned --node-ip has to win over a bad override.
+		assert.Equal(t, "192.168.1.10", ResolveLoadBalancerIP("not-an-ip", "192.168.1.10"))
+		assert.Equal(t, "192.168.1.10", ResolveLoadBalancerIP("2001:db8::1", "192.168.1.10"))
+	})
+
+	t.Run("uses a valid override bound to a local interface", func(t *testing.T) {
+		// GetLocalIPs always appends 127.0.0.1, so this is local on any host.
+		assert.Equal(t, "127.0.0.1", ResolveLoadBalancerIP("127.0.0.1", "192.168.1.10"))
+	})
+
+	t.Run("uses a valid override that is not bound locally (e.g. VIP)", func(t *testing.T) {
+		assert.Equal(t, "203.0.113.9", ResolveLoadBalancerIP("203.0.113.9", "192.168.1.10"))
+	})
+}

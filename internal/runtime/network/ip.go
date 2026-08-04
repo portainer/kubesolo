@@ -61,6 +61,26 @@ func ResolveNodeIP(override string) (ip string, pinned bool, err error) {
 	return override, true, nil
 }
 
+// ResolveLoadBalancerIP returns the IP to publish as the LoadBalancer
+// EXTERNAL-IP. It falls back to nodeIP when the override is empty or not a
+// valid IPv4 address, so a bad override never silently picks a different NIC
+// than the node itself.
+func ResolveLoadBalancerIP(override, nodeIP string) string {
+	if override == "" {
+		return nodeIP
+	}
+	if !IsIPv4Address(override) {
+		log.Warn().Str("component", "network").Str("load-balancer-ip", override).
+			Msg("--load-balancer-ip is not a valid IPv4 address; falling back to the node IP")
+		return nodeIP
+	}
+	if !isLocalIP(override) {
+		log.Warn().Str("component", "network").Str("load-balancer-ip", override).
+			Msg("--load-balancer-ip is not bound to a local interface; using it anyway (e.g. VIP)")
+	}
+	return override
+}
+
 // GetNodeIP returns a non-loopback IPv4 address of the node, preferring a
 // private (RFC 1918) address over a public one. On a host with several private
 // addresses the first one encountered is returned, so the choice is not
