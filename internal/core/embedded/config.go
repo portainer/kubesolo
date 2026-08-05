@@ -3,7 +3,7 @@ package embedded
 import "github.com/portainer/kubesolo/types"
 
 // generateCNIConfigFile generates the default CNI configuration file
-func generateCNIConfigFile() map[string]any {
+func generateCNIConfigFile(mtu int) map[string]any {
 	return map[string]any{
 		"cniVersion": "1.0.0",
 		"name":       "kubesolo-net",
@@ -14,6 +14,7 @@ func generateCNIConfigFile() map[string]any {
 				"isGateway":   true,
 				"ipMasq":      false,
 				"hairpinMode": true,
+				"mtu":         mtu,
 				"capabilities": map[string]any{
 					"portMappings": true,
 					"ips":          true,

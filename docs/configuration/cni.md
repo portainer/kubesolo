@@ -4,6 +4,12 @@ KubeSolo ships with a built-in bridge CNI so a single node works out of the box.
 
 ---
 
+## Embedded bridge CNI: MTU auto-detection
+
+The embedded bridge CNI auto-detects the MTU of the host's primary network interface and applies it to the `cni0` bridge and pod veth interfaces, so pod traffic doesn't silently fragment on hosts with a reduced MTU (VPN/tunnel/PPPoE links, some cloud secondary NICs). Override auto-detection with `--mtu` if needed — see [`--mtu`](../installation/flags.md#--mtu) in the flags reference.
+
+---
+
 ## Two things every external CNI must account for
 
 KubeSolo differs from a stock Kubernetes node in two ways that affect CNI installation.

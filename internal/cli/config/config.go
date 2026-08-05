@@ -42,6 +42,12 @@ type Config struct {
 	// NodeIP optionally overrides the auto-detected node IP (useful on multi-NIC hosts)
 	NodeIP string
 
+	// MTU optionally overrides the auto-detected network MTU used by the embedded
+	// CNI bridge (cni0) and pod veth interfaces, and — in container run mode —
+	// the outer Docker network the KubeSolo container itself runs on (the two
+	// must match; see internal/cli/service/container.go). Empty means auto-detect.
+	MTU string
+
 	// PortainerEdgeID is the Portainer edge agent ID
 	PortainerEdgeID string
 
@@ -113,6 +119,10 @@ func (c *Config) CmdArgs() []string {
 
 	if c.NodeIP != "" {
 		args = append(args, "--node-ip="+c.NodeIP)
+	}
+
+	if c.MTU != "" {
+		args = append(args, "--mtu="+c.MTU)
 	}
 
 	if c.PortainerEdgeID != "" {

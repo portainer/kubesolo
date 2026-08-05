@@ -49,6 +49,12 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 		"Override the auto-detected node IP (advertise address, kubeconfig, kubelet, LoadBalancer EXTERNAL-IP).\n"+
 			"Useful on hosts with multiple NICs. Defaults to auto-detection (prefers a private address)")
 
+	f.StringVar(&cfg.MTU, "mtu",
+		os.Getenv("KUBESOLO_MTU"),
+		"Override the auto-detected network MTU for the embedded CNI bridge (e.g. 1400 for VPN/tunnel interfaces).\n"+
+			"In container mode this also sizes the outer Docker network the KubeSolo container runs on.\n"+
+			"Defaults to auto-detection")
+
 	f.StringVar(&cfg.PortainerEdgeID, "portainer-edge-id",
 		os.Getenv("KUBESOLO_PORTAINER_EDGE_ID"),
 		"Portainer edge agent ID")

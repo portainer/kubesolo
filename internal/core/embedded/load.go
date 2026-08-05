@@ -71,7 +71,7 @@ func loadCNIPlugins(containerdCNIDir, containerdCNIPluginsDir string) error {
 
 // loadCNIConfig creates the necessary directories, generates the default CNI configuration file and symlinks it
 // to the standard CNI config directory
-func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string) error {
+func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string, mtu int) error {
 	dirs := []string{
 		types.DefaultStandardCNIConfDir,
 		containerdCNIConfigDir,
@@ -83,7 +83,7 @@ func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string) error
 		}
 	}
 
-	cniConfig, err := json.Marshal(generateCNIConfigFile())
+	cniConfig, err := json.Marshal(generateCNIConfigFile(mtu))
 	if err != nil {
 		log.Error().Str("component", "embedded").Msgf("failed to marshal cni config: %v", err)
 		return err

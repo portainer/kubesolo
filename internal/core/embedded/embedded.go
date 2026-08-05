@@ -46,7 +46,7 @@ func EnsureEmbeddedDependencies(embedded types.Embedded) error {
 		return fmt.Errorf("failed to load cni plugins: %v", err)
 	}
 
-	if err := loadCNIConfig(embedded.ContainerdCNIConfigDir, embedded.ContainerdCNIConfigFile); err != nil {
+	if err := loadCNIConfig(embedded.ContainerdCNIConfigDir, embedded.ContainerdCNIConfigFile, embedded.MTU); err != nil {
 		return fmt.Errorf("failed to load cni config: %v", err)
 	}
 
