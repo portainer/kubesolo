@@ -14,14 +14,28 @@ func TestCgroupDriver(t *testing.T) {
 	assert.Contains(t, []string{"systemd", "cgroupfs"}, cgroupDriver())
 }
 
+func TestResolveCgroupDriver(t *testing.T) {
+	// A driver reported by an external container runtime always wins: the kubelet
+	// has to match whatever the runtime is actually using.
+	s := &service{runtimeCgroupDriver: "cgroupfs"}
+	assert.Equal(t, "cgroupfs", s.resolveCgroupDriver())
+
+	s = &service{runtimeCgroupDriver: "systemd"}
+	assert.Equal(t, "systemd", s.resolveCgroupDriver())
+
+	// With nothing reported, fall back to detecting the driver from the host.
+	s = &service{}
+	assert.Equal(t, cgroupDriver(), s.resolveCgroupDriver())
+}
+
 func TestGenerateKubeletConfig_Common(t *testing.T) {
 	s := &service{
-		containerdSockFile: "/run/kubesolo/containerd.sock",
-		caFile:             "/pki/ca.crt",
-		certFile:           "/pki/kubelet.crt",
-		keyFile:            "/pki/kubelet.key",
-		kubeletDir:         t.TempDir(),
-		containerMode:      true, // avoids reading the host /etc/resolv.conf
+		runtimeEndpoint: "unix:///run/kubesolo/containerd.sock",
+		caFile:          "/pki/ca.crt",
+		certFile:        "/pki/kubelet.crt",
+		keyFile:         "/pki/kubelet.key",
+		kubeletDir:      t.TempDir(),
+		containerMode:   true, // avoids reading the host /etc/resolv.conf
 	}
 	cfg := s.generateKubeletConfig()
 

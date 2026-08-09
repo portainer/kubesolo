@@ -159,6 +159,22 @@ func initControlBinary(init detect.InitSystem) string {
 	return ""
 }
 
+// removeCNIConfig deletes the CNI configuration KubeSolo writes into the standard
+// CNI directory. Left behind, a container runtime managed by the host keeps loading
+// it after KubeSolo is gone and puts pods on a bridge network nothing maintains.
+//
+// os.Remove does not follow symlinks, so this covers both forms the file takes: the
+// symlink into the data directory written when KubeSolo runs its own containerd, and
+// the regular file written when it attaches to a host-managed runtime.
+func removeCNIConfig() {
+	switch err := os.Remove(config.CNIConfigFile); {
+	case err == nil:
+		log.Info().Msgf("removed CNI configuration %s", config.CNIConfigFile)
+	case !os.IsNotExist(err):
+		log.Warn().Msgf("could not remove CNI configuration %s: %v", config.CNIConfigFile, err)
+	}
+}
+
 // restoreSELinux restores SELinux file contexts for path if restorecon exists.
 func restoreSELinux(path string) {
 	for _, dir := range []string{"/usr/sbin", "/sbin"} {

@@ -21,6 +21,19 @@ func cgroupDriver() string {
 	return "cgroupfs"
 }
 
+// resolveCgroupDriver returns the cgroup driver the kubelet must use. A container
+// runtime managed by the host reports its own driver over CRI and the kubelet has to
+// match it: a mismatch lets pods start and then evicts them with errors that never
+// name the cause. Without a reported driver, the driver is detected from the host.
+func (s *service) resolveCgroupDriver() string {
+	if s.runtimeCgroupDriver != "" {
+		log.Info().Str("component", "kubelet").Str("driver", s.runtimeCgroupDriver).Msg("using the cgroup driver reported by the container runtime")
+		return s.runtimeCgroupDriver
+	}
+
+	return cgroupDriver()
+}
+
 func (s *service) writeKubeletConfigFile() error {
 	if err := filesystem.EnsureDirectoryExists(s.kubeletConfigDir); err != nil {
 		return fmt.Errorf("failed to create kubelet directory: %v", err)
@@ -55,7 +68,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"kind":       "KubeletConfiguration",
 		"apiVersion": "kubelet.config.k8s.io/v1beta1",
 
-		"containerRuntimeEndpoint": "unix://" + s.containerdSockFile,
+		"containerRuntimeEndpoint": s.runtimeEndpoint,
 
 		"authentication": map[string]any{
 			"anonymous": map[string]any{
@@ -84,7 +97,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 
-		"cgroupDriver": cgroupDriver(),
+		"cgroupDriver": s.resolveCgroupDriver(),
 
 		"readOnlyPort":       0,
 		"rotateCertificates": true,

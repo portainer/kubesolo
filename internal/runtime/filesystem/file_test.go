@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -84,6 +85,75 @@ func makeNonWritable(t *testing.T, dir string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+}
+
+func TestRemoveIfSymlinkRemovesLinkOnly(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source")
+	if err := os.WriteFile(source, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(source, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if !RemoveIfSymlink(link) {
+		t.Fatal("RemoveIfSymlink(symlink) = false, want true")
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Fatal("symlink was not removed")
+	}
+	if _, err := os.Stat(source); err != nil {
+		t.Fatalf("the symlink's target must survive: %v", err)
+	}
+}
+
+func TestRemoveIfSymlinkPreservesRealFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if RemoveIfSymlink(file) {
+		t.Fatal("RemoveIfSymlink(regular file) = true, want false")
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("regular file must survive: %v", err)
+	}
+
+	if RemoveIfSymlink(filepath.Join(dir, "missing")) {
+		t.Fatal("RemoveIfSymlink(missing) = true, want false")
+	}
+}
+
+// TestRemoveIfSymlinkPreservesSocket is the regression this function exists for: a
+// container runtime managed by the host binds a real socket where kubesolo would
+// otherwise install its symlink, and deleting it cuts every client on the machine
+// off from that runtime.
+func TestRemoveIfSymlinkPreservesSocket(t *testing.T) {
+	// Unix socket paths are limited to ~104 bytes, so use a short directory rather
+	// than t.TempDir(), which can be long enough to exceed it.
+	dir, err := os.MkdirTemp("/tmp", "ks")
+	if err != nil {
+		t.Skipf("cannot create a short temp dir for a unix socket: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	socket := filepath.Join(dir, "s.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Skipf("cannot create a unix socket: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	if RemoveIfSymlink(socket) {
+		t.Fatal("RemoveIfSymlink(socket) = true, want false")
+	}
+	if _, err := os.Lstat(socket); err != nil {
+		t.Fatalf("a real socket must survive: %v", err)
+	}
 }
 
 func assertLink(t *testing.T, target, source string) {

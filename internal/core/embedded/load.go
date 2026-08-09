@@ -83,18 +83,29 @@ func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string, mtu i
 		}
 	}
 
+	if err := writeCNIConfigFile(containerdCNIConfigFile, mtu); err != nil {
+		return err
+	}
+
+	if err := filesystem.EnsureSymbolicLink(containerdCNIConfigFile, filepath.Join(types.DefaultStandardCNIConfDir, types.DefaultCNIConfigName)); err != nil {
+		return fmt.Errorf("failed to create symlink for CNI config %s... %v", types.DefaultCNIConfigName, err)
+	}
+
+	return nil
+}
+
+// writeCNIConfigFile generates the default CNI configuration and writes it to path.
+// Shared by the embedded containerd path and the host-managed runtime path, so that
+// both produce byte-identical configuration from the same MTU.
+func writeCNIConfigFile(path string, mtu int) error {
 	cniConfig, err := json.Marshal(generateCNIConfigFile(mtu))
 	if err != nil {
 		log.Error().Str("component", "embedded").Msgf("failed to marshal cni config: %v", err)
 		return err
 	}
 
-	if err := os.WriteFile(containerdCNIConfigFile, cniConfig, 0644); err != nil {
-		return fmt.Errorf("failed to write cni default config to %s... %v", containerdCNIConfigFile, err)
-	}
-
-	if err := filesystem.EnsureSymbolicLink(containerdCNIConfigFile, filepath.Join(types.DefaultStandardCNIConfDir, types.DefaultCNIConfigName)); err != nil {
-		return fmt.Errorf("failed to create symlink for CNI config %s... %v", types.DefaultCNIConfigName, err)
+	if err := os.WriteFile(path, cniConfig, 0644); err != nil {
+		return fmt.Errorf("failed to write cni default config to %s... %v", path, err)
 	}
 
 	return nil
