@@ -78,6 +78,7 @@ func runReset(name, dataPath string, force bool) error {
 	if err := os.RemoveAll(dataPath); err != nil {
 		return p.Fail("removing data directory", err)
 	}
+	removeCNIConfig()
 	p.OK("Cluster state cleared", dataPath)
 
 	p.Step("Starting fresh cluster")

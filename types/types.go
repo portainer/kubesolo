@@ -118,6 +118,20 @@ type Embedded struct {
 	// Crun binary
 	CrunBinaryFile string
 
+	// Container runtime. RuntimeExternal is true when KubeSolo attaches to a
+	// host-managed CRI runtime given with --container-runtime-endpoint instead of
+	// starting its own embedded containerd. RuntimeEndpoint is populated in both
+	// cases — for the embedded containerd it is "unix://" + ContainerdSocketFile —
+	// so consumers need only one code path. RuntimeSocketPath is the filesystem
+	// path of RuntimeEndpoint.
+	// RuntimeCgroupDriver is the cgroup driver reported by an external runtime over
+	// CRI, which the kubelet must match. Empty when the runtime does not report one,
+	// in which case the kubelet detects the driver from the host instead.
+	RuntimeExternal     bool
+	RuntimeEndpoint     string
+	RuntimeSocketPath   string
+	RuntimeCgroupDriver string
+
 	// Kubelet directories
 	KubeletDir            string
 	KubeletConfigDir      string
