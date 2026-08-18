@@ -12,6 +12,8 @@ import "github.com/alecthomas/kingpin/v2"
 // LocalStorageSharedPath is the path to the shared file system for the local storage
 // Debug is the flag to enable debug logging
 // PprofServer is the flag to enable the pprof server
+// MetricsServer is the flag to enable the kubesolo Prometheus metrics endpoint
+// MetricsBindAddress is the host:port the metrics endpoint binds to
 var (
 	Application              = kingpin.New("kubesolo", "Ultra-lightweight, OCI-compliant, single-node Kubernetes built for constrained environments such as IoT or IIoT devices running in embedded environments.")
 	Version                  = Application.Flag("version", "Show the version and exit.").Short('v').Bool()
@@ -37,4 +39,6 @@ var (
 	D2K                      = Application.Flag("d2k", "Enable d2k integration. When set, kubesolo deploys the Portainer d2k Docker-to-Kubernetes translator into the target namespace and exposes a Docker-compatible API endpoint over mTLS on port 2376. Defaults to false.").Envar("KUBESOLO_D2K").Default("false").Bool()
 	D2KNamespace             = Application.Flag("d2k-namespace", "Single namespace into which d2k is deployed and against which it translates Docker API calls. Only honoured when --d2k is set. Defaults to d2k.").Envar("KUBESOLO_D2K_NAMESPACE").Default("d2k").String()
 	ContainerRuntimeEndpoint = Application.Flag("container-runtime-endpoint", "CRI endpoint of a host-managed container runtime, for example unix:///run/containerd/containerd.sock or unix:///run/crio/crio.sock. When set, KubeSolo does not start its own embedded containerd and instead attaches to the given runtime; the host is then responsible for the runtime itself, the OCI runtime, the CNI plugin binaries and the sandbox image. When unset, KubeSolo runs its own embedded containerd.").Envar("KUBESOLO_CONTAINER_RUNTIME_ENDPOINT").Default("").String()
+	MetricsServer            = Application.Flag("metrics-server", "Enable the kubesolo Prometheus metrics endpoint. Exposes a /metrics HTTP endpoint with control plane health gauges. Defaults to false.").Envar("KUBESOLO_METRICS_SERVER").Default("false").Bool()
+	MetricsBindAddress       = Application.Flag("metrics-bind-address", "Host:port the kubesolo metrics endpoint binds to. Defaults to 127.0.0.1:9105.").Envar("KUBESOLO_METRICS_BIND_ADDRESS").Default("127.0.0.1:9105").String()
 )

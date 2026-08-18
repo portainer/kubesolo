@@ -186,6 +186,17 @@ type Embedded struct {
 	D2K          bool
 	D2KNamespace string
 	D2KCerts     D2KCertificatePaths
+
+	// Metrics endpoint configuration
+	Metrics MetricsConfig
+}
+
+// MetricsConfig contains configuration for the kubesolo Prometheus metrics endpoint.
+// When Enabled is true, kubesolo serves a /metrics HTTP endpoint exposing
+// control plane health gauges, kine DB size, and build info.
+type MetricsConfig struct {
+	Enabled     bool
+	BindAddress string
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent

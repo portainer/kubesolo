@@ -14,6 +14,7 @@ require (
 	github.com/klauspost/compress v1.18.6
 	github.com/mattn/go-sqlite3 v1.14.47
 	github.com/pelletier/go-toml v1.9.5
+	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -193,7 +194,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
-	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
