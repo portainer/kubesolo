@@ -105,6 +105,11 @@ func runUninstall(name string, purge, removeKubeconfig bool) error {
 		p.Warn("could not remove binary: " + err.Error())
 	}
 
+	// Always removed, regardless of --purge: the CNI configuration is not cluster
+	// state — KubeSolo regenerates it from --mtu on every start — and a runtime
+	// managed by the host would keep loading it once KubeSolo is gone.
+	removeCNIConfig()
+
 	// ── Purge data directory ──────────────────────────────────────────────────
 	if purge {
 		p.Step("Removing data directory")

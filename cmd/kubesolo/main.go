@@ -17,6 +17,8 @@ import (
 	"github.com/portainer/kubesolo/internal/core/embedded"
 	"github.com/portainer/kubesolo/internal/core/pki"
 	"github.com/portainer/kubesolo/internal/logging"
+	"github.com/portainer/kubesolo/internal/runtime/cri"
+	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
@@ -28,7 +30,7 @@ import (
 	"github.com/portainer/kubesolo/pkg/kubernetes/controller"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubelet"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubeproxy"
-	"github.com/portainer/kubesolo/pkg/runtime/containerd"
+	kubesoloruntime "github.com/portainer/kubesolo/pkg/runtime"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
@@ -57,12 +59,13 @@ type kubesolo struct {
 	dbWALRepair            bool
 	d2k                    bool
 	d2kNamespace           string
+	runtimeEndpoint        cri.Endpoint
 	embedded               types.Embedded
 }
 
 // the channels for the kubesolo application
 var (
-	containerdReadyCh = make(chan struct{})
+	runtimeReadyCh    = make(chan struct{})
 	kineReadyCh       = make(chan struct{})
 	apiServerReadyCh  = make(chan struct{})
 	kubeletReadyCh    = make(chan struct{})
@@ -86,6 +89,11 @@ func service() (*kubesolo, error) {
 		return nil, err
 	}
 
+	runtimeEndpoint, err := cri.Resolve(*flags.ContainerRuntimeEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
 	return &kubesolo{
 		hostName:               system.GetHostname(),
 		extraSANs:              *flags.APIServerExtraSANs,
@@ -102,6 +110,7 @@ func service() (*kubesolo, error) {
 		dbWALRepair:            *flags.DBWALRepair,
 		d2k:                    d2kEnabled,
 		d2kNamespace:           *flags.D2KNamespace,
+		runtimeEndpoint:        runtimeEndpoint,
 	}, nil
 }
 
@@ -194,14 +203,14 @@ func (s *kubesolo) run() {
 	// infraServices must be fully ready before pod masquerade is set up.
 	infraServices := []service{
 		{
-			name: "containerd",
+			name: "container runtime",
 			start: func() {
-				containerdService := containerd.NewService(ctx, cancel, containerdReadyCh, &s.embedded)
+				runtimeService := kubesoloruntime.NewService(ctx, cancel, runtimeReadyCh, &s.embedded)
 				s.wg.Go(func() {
-					_ = containerdService.Run()
+					_ = runtimeService.Run()
 				})
 			},
-			readyCh: containerdReadyCh,
+			readyCh: runtimeReadyCh,
 		},
 		{
 			name: "kine",
@@ -339,9 +348,19 @@ func (s *kubesolo) run() {
 // image archives (images/). These are re-imported by importImages() on every
 // startup, so no data is lost. This gives containerd a clean slate while
 // preserving the kine database (Kubernetes state) and PKI certificates.
-func cleanStaleState(basePath string) {
-	// Stale system containerd socket symlink
-	if err := os.Remove(types.DefaultSystemContainerdSock); err == nil {
+//
+// Nothing is cleaned when the container runtime is managed by the host: the socket
+// and every directory below belong to that runtime, not to kubesolo.
+func cleanStaleState(basePath string, runtimeExternal bool) {
+	if runtimeExternal {
+		log.Debug().Str("component", "kubesolo").Msg("container runtime is managed by the host, leaving its state alone")
+		return
+	}
+
+	// Stale system containerd socket symlink. Only a symlink is ever removed: that is
+	// what kubesolo installs here, whereas a containerd managed by the host binds a
+	// real socket at the same path.
+	if filesystem.RemoveIfSymlink(types.DefaultSystemContainerdSock) {
 		log.Info().Str("component", "kubesolo").Msgf("removed stale system containerd socket: %s", types.DefaultSystemContainerdSock)
 	}
 
@@ -452,10 +471,18 @@ func (s *kubesolo) bootstrap() {
 		}
 	}
 
+	// Container runtime endpoint. Without --container-runtime-endpoint KubeSolo
+	// starts its own containerd and talks to it over the socket under --path.
+	containerdSocketFile := filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket)
+	runtimeEndpoint := s.runtimeEndpoint
+	if !runtimeEndpoint.External {
+		runtimeEndpoint = cri.Embedded(containerdSocketFile)
+	}
+
 	// Clean stale runtime state from previous runs (e.g., after reboot)
 	// This removes stale sockets and containerd runtime state that reference
 	// dead processes, while preserving images, kine database, and PKI certs.
-	cleanStaleState(basePath)
+	cleanStaleState(basePath, runtimeEndpoint.External)
 
 	s.embedded = types.Embedded{
 		// System Node IP
@@ -528,7 +555,7 @@ func (s *kubesolo) bootstrap() {
 
 		// Containerd paths
 		ContainerdDir:               filepath.Join(basePath, types.DefaultContainerdDir),
-		ContainerdSocketFile:        filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket),
+		ContainerdSocketFile:        containerdSocketFile,
 		ContainerdBinaryFile:        filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
 		ContainerdImagesDir:         filepath.Join(basePath, types.DefaultContainerdDir, "images"),
 		ContainerdShimBinaryFile:    filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
@@ -545,6 +572,11 @@ func (s *kubesolo) bootstrap() {
 
 		// Crun binary
 		CrunBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "crun"),
+
+		// Container runtime
+		RuntimeExternal:   runtimeEndpoint.External,
+		RuntimeEndpoint:   runtimeEndpoint.URL,
+		RuntimeSocketPath: runtimeEndpoint.SocketPath,
 
 		// Kubelet paths
 		KubeletDir:            filepath.Join(basePath, types.DefaultKubeletDir),

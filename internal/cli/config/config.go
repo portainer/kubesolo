@@ -9,6 +9,13 @@ const (
 	PIDFile            = "/var/run/kubesolo.pid"
 	LogFile            = "/var/log/kubesolo.log"
 
+	// CNIConfigFile is the CNI configuration KubeSolo drops into the standard CNI
+	// directory, as a symlink when it runs its own containerd and as a regular file
+	// when it attaches to a host-managed runtime. Mirrors
+	// types.DefaultStandardCNIConfDir + types.DefaultCNIConfigName in the kubesolo
+	// binary, the same way DefaultPath mirrors its --path default.
+	CNIConfigFile = "/etc/cni/net.d/10-bridge.conflist"
+
 	// MinD2KVersion is the first KubeSolo release whose binary understands the
 	// --d2k / --d2k-namespace flags (d2k integration landed after v1.1.5).
 	// The installer refuses to pass --d2k to an older binary, which would crash-loop.

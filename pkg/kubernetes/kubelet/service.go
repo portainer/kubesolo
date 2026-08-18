@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	client "github.com/containerd/containerd/v2/client"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/types"
 )
@@ -12,7 +11,6 @@ import (
 // service is the service for the kubelet
 type service struct {
 	wg                    sync.WaitGroup
-	client                *client.Client
 	ctx                   context.Context
 	cancel                context.CancelFunc
 	kubeletReady          chan<- struct{}
@@ -20,7 +18,9 @@ type service struct {
 	kubeletConfigDir      string
 	kubeletConfigFile     string
 	kubeletKubeConfigFile string
-	containerdSockFile    string
+	runtimeEndpoint       string
+	runtimeSocketPath     string
+	runtimeCgroupDriver   string
 	caFile                string
 	certFile              string
 	keyFile               string
@@ -32,12 +32,16 @@ type service struct {
 	disableIPv6           bool
 }
 
-// NewService creates a new kubelet service
+// NewService creates a new kubelet service.
+//
+// RuntimeCgroupDriver is read here rather than at Run time on purpose: an external
+// container runtime discovers it and writes it before closing its readiness channel,
+// and kubesolo starts the kubelet only after that channel is closed, so the value is
+// already settled and the channel provides the synchronisation.
 func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady chan<- struct{}, embedded *types.Embedded) *service {
 	return &service{
 		ctx:                   ctx,
 		cancel:                cancel,
-		client:                nil,
 		kubeletReady:          kubeletReady,
 		kubeletDir:            embedded.KubeletDir,
 		kubeletConfigDir:      embedded.KubeletConfigDir,
@@ -45,7 +49,9 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		kubeletCertPath:       embedded.PKIAdminDir,
 		kubeletConfigFile:     embedded.KubeletConfigFile,
 		kubeletKubeConfigFile: embedded.KubeletKubeConfigFile,
-		containerdSockFile:    embedded.ContainerdSocketFile,
+		runtimeEndpoint:       embedded.RuntimeEndpoint,
+		runtimeSocketPath:     embedded.RuntimeSocketPath,
+		runtimeCgroupDriver:   embedded.RuntimeCgroupDriver,
 		caFile:                embedded.KubeletCerts.CACert,
 		certFile:              embedded.KubeletCerts.Cert,
 		keyFile:               embedded.KubeletCerts.Key,

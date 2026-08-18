@@ -21,6 +21,22 @@ func EnsureDirectoryExists(path string) error {
 	return nil
 }
 
+// RemoveIfSymlink removes path only when it is a symlink, and reports whether it
+// did. A regular file, directory or socket at that path is left untouched.
+//
+// This guards the shared paths kubesolo publishes itself into, such as the standard
+// containerd socket: kubesolo installs a symlink there, whereas a container runtime
+// managed by the host binds a real socket at the same path. os.Stat follows symlinks
+// and so cannot tell the two apart; os.Lstat does not.
+func RemoveIfSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+
+	return os.Remove(path) == nil
+}
+
 // EnsureSymbolicLink preserves a correct link and replaces any other target.
 func EnsureSymbolicLink(source, target string) error {
 	if destination, err := os.Readlink(target); err == nil && destination == source {
