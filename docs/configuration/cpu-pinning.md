@@ -11,17 +11,17 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- \
   --reserved-cpus=0
 ```
 
-> Exclusive cores stop *other pods* interfering. They do nothing about kernel threads, interrupts, or KubeSolo itself. Deterministic latency also needs [host tuning](#host-tuning), which KubeSolo cannot do for you.
+> Exclusive cores stop _other pods_ interfering. They do nothing about kernel threads, interrupts, or KubeSolo itself. Deterministic latency also needs [host tuning](#host-tuning), which KubeSolo cannot do for you.
 
 ---
 
 ## Flags
 
-| Flag | Env var | Default |
-|---|---|---|
-| `--cpu-manager-policy` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` |
-| `--cpu-manager-policy-options` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(empty)_ |
-| `--reserved-cpus` | `KUBESOLO_RESERVED_CPUS` | `0` when the static policy is used |
+| Flag                           | Env var                               | Default                            |
+| ------------------------------ | ------------------------------------- | ---------------------------------- |
+| `--cpu-manager-policy`         | `KUBESOLO_CPU_MANAGER_POLICY`         | `none`                             |
+| `--cpu-manager-policy-options` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(empty)_                          |
+| `--reserved-cpus`              | `KUBESOLO_RESERVED_CPUS`              | `0` when the static policy is used |
 
 `--reserved-cpus` is held back for the host and KubeSolo, and never handed out as an exclusive core. The static policy refuses to start without a reservation, so KubeSolo defaults it to CPU `0` and logs that it did. Naming the CPU is more predictable than letting the kubelet pick one.
 
@@ -41,7 +41,7 @@ Two requirements, for **every** container in the pod:
 ```yaml
 resources:
   requests: { cpu: "2", memory: "512Mi" }
-  limits:   { cpu: "2", memory: "512Mi" }
+  limits: { cpu: "2", memory: "512Mi" }
 ```
 
 Guaranteed QoS is what makes exclusive cores safe: the pod is capped at exactly what it asked for, so it can never want more than the cores it owns. Burstable pods request less than their ceiling precisely so they can burst, which is incompatible with owning a fixed set of cores — they stay in the shared pool.
@@ -52,13 +52,13 @@ Kubernetes also disables CFS quota throttling for containers holding exclusive C
 
 A pod that does not qualify **still runs** — it just shares the pool. No error, no warning, so it can look healthy while getting none of the isolation it was deployed for.
 
-| Written | QoS | Exclusive cores? |
-|---|---|---|
-| `requests` = `limits` = `cpu: "2"`, `memory` set | Guaranteed | Yes |
-| `limits` only: `cpu: "1"`, `memory` set | Guaranteed | Yes — requests default to limits |
-| `requests` = `limits` = `cpu: "1500m"`, `memory` set | Guaranteed | **No** — not a whole number |
-| `cpu: "1"`, no `memory` | Burstable | **No** |
-| One sidecar breaking any of the above | Burstable | **No** — for the whole pod |
+| Written                                              | QoS        | Exclusive cores?                 |
+| ---------------------------------------------------- | ---------- | -------------------------------- |
+| `requests` = `limits` = `cpu: "2"`, `memory` set     | Guaranteed | Yes                              |
+| `limits` only: `cpu: "1"`, `memory` set              | Guaranteed | Yes — requests default to limits |
+| `requests` = `limits` = `cpu: "1500m"`, `memory` set | Guaranteed | **No** — not a whole number      |
+| `cpu: "1"`, no `memory`                              | Burstable  | **No**                           |
+| One sidecar breaking any of the above                | Burstable  | **No** — for the whole pod       |
 
 Row three is the trap: a fractional value stays Guaranteed and looks correct, but half a CPU cannot be a dedicated core. Verify rather than assume.
 
@@ -88,12 +88,12 @@ The kubelet's podresources API at `/var/lib/kubesolo/kubelet/pod-resources/kubel
 
 Comma-separated `key=value`, static policy only.
 
-| Option | What it does |
-|---|---|
-| `full-pcpus-only` | Allocate whole physical cores, never single hyperthread siblings, so a sibling thread cannot steal cache and pipeline capacity. No-op on hosts without SMT. |
-| `strict-cpu-reservation` | Keep pods entirely off the reserved CPUs. Without it, shared-pool pods may still run there. |
-| `distribute-cpus-across-numa` | Spread an allocation evenly across NUMA nodes when it needs more than one. |
-| `prefer-align-cpus-by-uncorecache` | Prefer cores sharing a last-level cache, reducing cache latency and cross-cache contention. Best effort — pods are still admitted if it cannot be met. |
+| Option                             | What it does                                                                                                                                                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `full-pcpus-only`                  | Allocate whole physical cores, never single hyperthread siblings, so a sibling thread cannot steal cache and pipeline capacity. No-op on hosts without SMT. |
+| `strict-cpu-reservation`           | Keep pods entirely off the reserved CPUs. Without it, shared-pool pods may still run there.                                                                 |
+| `distribute-cpus-across-numa`      | Spread an allocation evenly across NUMA nodes when it needs more than one.                                                                                  |
+| `prefer-align-cpus-by-uncorecache` | Prefer cores sharing a last-level cache, reducing cache latency and cross-cache contention. Best effort — pods are still admitted if it cannot be met.      |
 
 `prefer-align-cpus-by-uncorecache` and `distribute-cpus-across-numa` are mutually exclusive; KubeSolo rejects the pair at startup. The upstream alpha options `align-by-socket` and `distribute-cpus-across-cores` are not exposed — they need an extra feature gate and neither helps on single-socket edge hardware.
 
@@ -158,4 +158,5 @@ Without these, exclusive cores reduce jitter but do not eliminate it.
 - [Kubernetes CPU management policies](https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/)
 - [Kubernetes QoS classes](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/)
 - [Intel: CPU pinning and isolation in Kubernetes](https://www.intel.com/content/www/us/en/developer/articles/technical/cpu-management-cpu-pinning-isolation-kubernetes.html)
+- [Testing CPU pinning](cpu-pinning-testing.md) — hands-on walkthrough to verify it on a real host
 - [Container mode](container-mode.md) — CPU pinning is unsupported there
