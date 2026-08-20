@@ -23,7 +23,7 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- \
 | `--cpu-manager-policy-options` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(empty)_                          |
 | `--reserved-cpus`              | `KUBESOLO_RESERVED_CPUS`              | `0` when the static policy is used |
 
-`--reserved-cpus` is held back for the host and KubeSolo, and never handed out as an exclusive core. The static policy refuses to start without a reservation, so KubeSolo defaults it to CPU `0` and logs that it did. Naming the CPU is more predictable than letting the kubelet pick one.
+`--reserved-cpus` is held back for the host and KubeSolo, and never handed out as an exclusive core. It is a cpuset of CPU *indexes*, not a count — `0` reserves one CPU (number 0) and `0-1` reserves two, so on a 4-CPU host they leave 3 and 2 allocatable respectively. The static policy refuses to start without a reservation, so KubeSolo defaults it to CPU `0` and logs that it did. Naming the CPU is more predictable than letting the kubelet pick one.
 
 Everything left over is the **shared pool**. At least one CPU must remain, so this needs a host with 2+ CPUs.
 
