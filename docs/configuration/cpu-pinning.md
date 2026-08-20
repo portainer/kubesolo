@@ -38,7 +38,13 @@ Everything left over is the **shared pool**. At least one CPU must remain, so th
 
 **The trade-off:** you say *how many*, not *which*. The kubelet then picks the cores itself by topology — on an SMT host it takes sibling threads of one physical core (CPUs `0` and `4` on an 8-CPU box, not `0` and `1`), and the choice appears only in the kubelet log, never in the config. That means `isolcpus`, IRQ affinity, and `CPUAffinity=` cannot be aligned to it, so [host tuning](#host-tuning) is out of reach. Use `--reserved-cpus` when you need deterministic latency; `--system-reserved` when you only want the capacity withheld.
 
-Setting both `--reserved-cpus` and `--system-reserved cpu=` is rejected at startup. Upstream permits it — `--reserved-cpus` takes [documented precedence](https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/#static-policy-configuration) and the kubelet logs the override — but that log lands in the kubelet's own output where it is easy to miss, so KubeSolo asks you to set only one. Reserving other resources alongside a cpuset is fine — `--reserved-cpus=0 --system-reserved=memory=500Mi` works.
+You can set both. `--reserved-cpus` takes [documented precedence](https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/#static-policy-configuration) over the `cpu=` entry in `--system-reserved`, which the kubelet then ignores. KubeSolo follows that and warns, because the kubelet only records the override in its own log:
+
+```
+WRN --reserved-cpus "0-1" takes precedence over --system-reserved cpu=2, which is ignored
+```
+
+Other resources are unaffected, so `--reserved-cpus=0 --system-reserved=memory=500Mi` reserves CPU 0 and 500Mi of memory as written.
 
 Unsupported in [container mode](container-mode.md) — the container's own cpuset bounds what can actually be pinned, so KubeSolo refuses to start rather than pretend otherwise.
 
