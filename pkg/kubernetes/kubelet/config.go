@@ -157,6 +157,11 @@ func (s *service) generateKubeletConfig() map[string]any {
 // remedy is to drain the node and delete the file — which a single node cannot do, so
 // kubesolo removes it instead.
 //
+// Discarding the checkpoint drops the record of which cores each workload held. With
+// the embedded containerd that costs nothing, because restarting kubesolo recreates
+// every pod and the policy assigns cores afresh. With an external runtime the
+// containers outlive the restart and land back in the shared pool until restarted.
+//
 // Both sides of the comparison are read back out of the generated YAML so they cannot
 // drift from what generateKubeletConfig actually writes.
 func (s *service) invalidateCPUManagerCheckpoint(newConfig []byte) {
@@ -177,7 +182,7 @@ func (s *service) invalidateCPUManagerCheckpoint(newConfig []byte) {
 		return
 	}
 
-	log.Warn().Str("component", "kubelet").Msgf("cpu manager settings changed, removed %s. workloads holding exclusive cores return to the shared pool until they are restarted", checkpoint)
+	log.Warn().Str("component", "kubelet").Msgf("cpu manager settings changed, removed %s. exclusive cores are reassigned as pinned workloads restart; with an external container runtime, restart them yourself", checkpoint)
 }
 
 func readCPUManagerSettings(config []byte) cpuManagerSettings {
