@@ -14,6 +14,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	"github.com/portainer/kubesolo/internal/config/cpumanager"
 	"github.com/spf13/cobra"
 )
 
@@ -109,6 +110,22 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 		envOr("KUBESOLO_D2K_NAMESPACE", "d2k"),
 		"Namespace d2k is deployed into and translates Docker API calls against")
 
+	f.StringVar(&cfg.CPUManagerPolicy, "cpu-manager-policy",
+		envOr("KUBESOLO_CPU_MANAGER_POLICY", config.CPUManagerPolicyNone),
+		"CPU manager policy: none (default) or static. The static policy gives Guaranteed-QoS pods\n"+
+			"that request whole CPUs exclusive cores, for latency-sensitive workloads.\n"+
+			"Not supported in container run mode")
+
+	f.StringVar(&cfg.CPUManagerPolicyOptions, "cpu-manager-policy-options",
+		os.Getenv("KUBESOLO_CPU_MANAGER_POLICY_OPTIONS"),
+		"Comma-separated key=value options for the static CPU manager policy\n"+
+			"(e.g. full-pcpus-only=true,strict-cpu-reservation=true)")
+
+	f.StringVar(&cfg.ReservedCPUs, "reserved-cpus",
+		os.Getenv("KUBESOLO_RESERVED_CPUS"),
+		"Cpuset reserved for the host and KubeSolo itself, never given out as an exclusive core\n"+
+			"(e.g. 0 or 0-1). Defaults to 0 when the static policy is used")
+
 	f.StringVar(&cfg.ContainerImage, "image",
 		os.Getenv("KUBESOLO_IMAGE"),
 		"Container image to use in container mode (default: portainer/kubesolo:<version>).\n"+
@@ -149,6 +166,18 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 				"--d2k requires kubesolo %s or newer; %s has no d2k support — re-run with --version=%s (or later)",
 				config.MinD2KVersion, cfg.Version, config.MinD2KVersion))
 		}
+	}
+
+	// ── CPU pinning ─────────────────────────────────────────────────────────────
+	// Validated here with the same parser the kubesolo binary uses, so a bad flag
+	// fails before a service unit is written rather than crash-looping afterwards.
+	if containerMode && cfg.CPUManagerPolicy != "" && cfg.CPUManagerPolicy != config.CPUManagerPolicyNone {
+		return p.Fail("cpu pinning", fmt.Errorf(
+			"--cpu-manager-policy=%s is not supported in container run mode: exclusive cores are bounded by the container's own cpuset, which KubeSolo does not control",
+			cfg.CPUManagerPolicy))
+	}
+	if _, err := cpumanager.Parse(cfg.CPUManagerPolicy, cfg.CPUManagerPolicyOptions, cfg.ReservedCPUs, runtime.NumCPU()); err != nil {
+		return p.Fail("cpu pinning", err)
 	}
 
 	// ── Container port mappings ─────────────────────────────────────────────────

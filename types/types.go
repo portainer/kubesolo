@@ -189,6 +189,19 @@ type Embedded struct {
 
 	// Metrics endpoint configuration
 	Metrics MetricsConfig
+
+	// CPU manager configuration
+	CPUManager CPUManagerConfig
+}
+
+// CPUManagerConfig contains the kubelet CPU manager settings. With Policy set to
+// CPUManagerPolicyStatic, Guaranteed-QoS pods requesting whole CPUs are given
+// exclusive cores. ReservedCPUs is the cpuset held back for the system and
+// kubesolo itself, which the static policy requires to be non-empty.
+type CPUManagerConfig struct {
+	Policy        string
+	PolicyOptions map[string]string
+	ReservedCPUs  string
 }
 
 // MetricsConfig contains configuration for the kubesolo Prometheus metrics endpoint.

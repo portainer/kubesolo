@@ -38,6 +38,7 @@ Running a Kubernetes node inside a container means the kubelet, containerd, and 
 | CoreDNS upstream | `forward . /etc/resolv.conf` | `forward . 1.1.1.1 8.8.8.8` (since the node `resolv.conf` is empty) |
 | CoreDNS resources | memory limit `64Mi` | memory limit removed (requests retained) to avoid OOM under a constrained container memory limit |
 | kube-proxy conntrack | upstream defaults | both set to `0` — avoids writing to `/proc/sys/net/netfilter/nf_conntrack_max`, which is often read-only inside a container |
+| [CPU pinning](cpu-pinning.md) | available | unsupported — KubeSolo refuses to start with `--cpu-manager-policy=static`, since exclusive cores are bounded by the container's own cpuset, which KubeSolo does not control |
 
 > **Container mode applies the adjustments above on top of the standard upstream Kubernetes defaults.** NodeSetter is still used in place of the scheduler, as always.
 

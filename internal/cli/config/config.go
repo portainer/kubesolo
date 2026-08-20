@@ -16,6 +16,10 @@ const (
 	// binary, the same way DefaultPath mirrors its --path default.
 	CNIConfigFile = "/etc/cni/net.d/10-bridge.conflist"
 
+	// CPUManagerPolicyNone is the default kubelet CPU manager policy, in which every
+	// pod shares all CPUs. Mirrors types.CPUManagerPolicyNone in the kubesolo binary.
+	CPUManagerPolicyNone = "none"
+
 	// MinD2KVersion is the first KubeSolo release whose binary understands the
 	// --d2k / --d2k-namespace flags (d2k integration landed after v1.1.5).
 	// The installer refuses to pass --d2k to an older binary, which would crash-loop.
@@ -96,6 +100,19 @@ type Config struct {
 	// D2KNamespace is the namespace d2k is deployed into and translates against
 	D2KNamespace string
 
+	// CPUManagerPolicy selects the kubelet CPU manager policy ("none" or "static").
+	// The static policy gives Guaranteed-QoS pods requesting whole CPUs exclusive
+	// cores, and is unsupported in container run mode.
+	CPUManagerPolicy string
+
+	// CPUManagerPolicyOptions is a comma-separated list of key=value options that
+	// fine-tune the static CPU manager policy
+	CPUManagerPolicyOptions string
+
+	// ReservedCPUs is the cpuset held back for the host and KubeSolo itself, and
+	// never handed out as an exclusive core (e.g. "0" or "0-1")
+	ReservedCPUs string
+
 	// ContainerImage is the container image reference used in container run mode.
 	// If empty, defaults to DefaultContainerImage:Version.
 	// Specify a full reference (e.g. "myrepo/kubesolo:custom") to override entirely.
@@ -166,6 +183,18 @@ func (c *Config) CmdArgs() []string {
 
 	if c.D2K && c.D2KNamespace != "" {
 		args = append(args, "--d2k-namespace="+c.D2KNamespace)
+	}
+
+	if c.CPUManagerPolicy != "" && c.CPUManagerPolicy != CPUManagerPolicyNone {
+		args = append(args, "--cpu-manager-policy="+c.CPUManagerPolicy)
+	}
+
+	if c.CPUManagerPolicyOptions != "" {
+		args = append(args, "--cpu-manager-policy-options="+c.CPUManagerPolicyOptions)
+	}
+
+	if c.ReservedCPUs != "" {
+		args = append(args, "--reserved-cpus="+c.ReservedCPUs)
 	}
 
 	// Proxy is intentionally omitted here: it is injected as HTTP_PROXY /

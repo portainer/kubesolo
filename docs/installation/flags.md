@@ -93,6 +93,26 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --mtu=1400
 
 ---
 
+### --cpu-manager-policy, --cpu-manager-policy-options and --reserved-cpus
+
+Give latency-sensitive workloads exclusive CPU cores instead of letting every pod share all of them. Set `--cpu-manager-policy=static` and pods that request whole CPUs under the Guaranteed QoS class get cores no other pod may run on. Useful for audio processing, motion control, machine vision and similar workloads that must not be preempted by neighbours.
+
+`--reserved-cpus` is the cpuset held back for the host and KubeSolo itself, and is never handed out as an exclusive core. The static policy requires a non-empty reservation, so it defaults to CPU `0`.
+
+| Flag | Env var | Default |
+|---|---|---|
+| `--cpu-manager-policy=POLICY` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` |
+| `--cpu-manager-policy-options=OPTS` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(empty)_ |
+| `--reserved-cpus=CPUSET` | `KUBESOLO_RESERVED_CPUS` | `0` when the static policy is used |
+
+```bash
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --cpu-manager-policy=static --reserved-cpus=0
+```
+
+Not supported in container mode. See the [CPU pinning guide](../configuration/cpu-pinning.md) for the pod requirements, how to verify pinning took effect, and the host-level tuning that deterministic latency also needs.
+
+---
+
 ### --portainer-edge-id and --portainer-edge-key
 
 Connect KubeSolo to a Portainer server as a Portainer Edge Agent. Both flags must be supplied together.

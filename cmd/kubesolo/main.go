@@ -13,6 +13,7 @@ import (
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/distribution/reference"
+	"github.com/portainer/kubesolo/internal/config/cpumanager"
 	"github.com/portainer/kubesolo/internal/config/flags"
 	"github.com/portainer/kubesolo/internal/core/embedded"
 	"github.com/portainer/kubesolo/internal/core/pki"
@@ -63,6 +64,7 @@ type kubesolo struct {
 	runtimeEndpoint        cri.Endpoint
 	metricsServer          bool
 	metricsBindAddress     string
+	cpuManager             types.CPUManagerConfig
 	embedded               types.Embedded
 }
 
@@ -98,6 +100,11 @@ func service() (*kubesolo, error) {
 		return nil, err
 	}
 
+	cpuManagerConfig, err := cpumanager.Parse(*flags.CPUManagerPolicy, *flags.CPUManagerPolicyOptions, *flags.ReservedCPUs, runtime.NumCPU())
+	if err != nil {
+		return nil, err
+	}
+
 	return &kubesolo{
 		hostName:               system.GetHostname(),
 		extraSANs:              *flags.APIServerExtraSANs,
@@ -117,6 +124,7 @@ func service() (*kubesolo, error) {
 		runtimeEndpoint:        runtimeEndpoint,
 		metricsServer:          *flags.MetricsServer,
 		metricsBindAddress:     *flags.MetricsBindAddress,
+		cpuManager:             cpuManagerConfig,
 	}, nil
 }
 
@@ -507,6 +515,9 @@ func (s *kubesolo) bootstrap() {
 	// Setup paths
 	basePath := *flags.Path
 	containerMode := *flags.ContainerMode || system.IsRunningInContainer()
+	if containerMode && s.cpuManager.Policy == types.CPUManagerPolicyStatic {
+		log.Fatal().Str("component", "kubesolo").Msg("--cpu-manager-policy=static is not supported in container mode: exclusive cores are bounded by the container's own cpuset, which kubesolo does not control")
+	}
 	if containerMode {
 		log.Info().Str("component", "kubesolo").Msg("container mode detected, using cgroupfs driver and relaxed eviction thresholds")
 
@@ -683,6 +694,9 @@ func (s *kubesolo) bootstrap() {
 			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
 		},
 		D2KImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
+
+		// CPU manager
+		CPUManager: s.cpuManager,
 
 		// Metrics endpoint
 		Metrics: types.MetricsConfig{

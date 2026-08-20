@@ -30,6 +30,7 @@ type service struct {
 	adminKubeconfig       string
 	containerMode         bool
 	disableIPv6           bool
+	cpuManager            types.CPUManagerConfig
 }
 
 // NewService creates a new kubelet service.
@@ -59,5 +60,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		adminKubeconfig:       embedded.AdminKubeconfigFile,
 		containerMode:         embedded.ContainerMode,
 		disableIPv6:           embedded.DisableIPv6,
+		cpuManager:            embedded.CPUManager,
 	}
 }

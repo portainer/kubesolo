@@ -3,6 +3,8 @@ package kubelet
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"reflect"
 
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/internal/runtime/network"
@@ -10,6 +12,18 @@ import (
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 )
+
+// cpuManagerCheckpointFile is where the kubelet records the CPU manager policy and
+// the shared CPU pool, under the kubelet root directory.
+const cpuManagerCheckpointFile = "cpu_manager_state"
+
+// cpuManagerSettings are the kubelet config fields that invalidate the CPU manager
+// checkpoint when they change.
+type cpuManagerSettings struct {
+	Policy       string            `yaml:"cpuManagerPolicy"`
+	Options      map[string]string `yaml:"cpuManagerPolicyOptions"`
+	ReservedCPUs string            `yaml:"reservedSystemCPUs"`
+}
 
 // cgroupDriver returns "systemd" only when systemd is the active init system,
 // otherwise "cgroupfs". Alpine Linux uses OpenRC and has no systemd even when
@@ -44,6 +58,8 @@ func (s *service) writeKubeletConfigFile() error {
 		log.Error().Str("component", "kubelet").Msgf("failed to marshal kubelet config: %v", err)
 		return err
 	}
+
+	s.invalidateCPUManagerCheckpoint(yamlConfig)
 
 	configFile, err := os.Create(s.kubeletConfigFile)
 	if err != nil {
@@ -105,6 +121,14 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"failSwapOn": false,
 	}
 
+	if s.cpuManager.Policy == types.CPUManagerPolicyStatic {
+		config["cpuManagerPolicy"] = s.cpuManager.Policy
+		config["reservedSystemCPUs"] = s.cpuManager.ReservedCPUs
+		if len(s.cpuManager.PolicyOptions) > 0 {
+			config["cpuManagerPolicyOptions"] = s.cpuManager.PolicyOptions
+		}
+	}
+
 	if s.containerMode {
 		// In a container cgroupv2 domain controllers block creating the
 		// kubepods/system/kube cgroup hierarchies required for QoS management.
@@ -125,4 +149,39 @@ func (s *service) generateKubeletConfig() map[string]any {
 	}
 
 	return config
+}
+
+// invalidateCPUManagerCheckpoint removes the CPU manager checkpoint when the CPU
+// manager settings differ from the config written on the previous start. The kubelet
+// refuses to start against a checkpoint that disagrees with its config, and upstream's
+// remedy is to drain the node and delete the file — which a single node cannot do, so
+// kubesolo removes it instead.
+//
+// Both sides of the comparison are read back out of the generated YAML so they cannot
+// drift from what generateKubeletConfig actually writes.
+func (s *service) invalidateCPUManagerCheckpoint(newConfig []byte) {
+	previous, err := os.ReadFile(s.kubeletConfigFile)
+	if err != nil {
+		return
+	}
+
+	if reflect.DeepEqual(readCPUManagerSettings(previous), readCPUManagerSettings(newConfig)) {
+		return
+	}
+
+	checkpoint := filepath.Join(s.kubeletDir, cpuManagerCheckpointFile)
+	if err := os.Remove(checkpoint); err != nil {
+		if !os.IsNotExist(err) {
+			log.Error().Str("component", "kubelet").Msgf("failed to remove stale cpu manager checkpoint %s: %v", checkpoint, err)
+		}
+		return
+	}
+
+	log.Warn().Str("component", "kubelet").Msgf("cpu manager settings changed, removed %s. workloads holding exclusive cores return to the shared pool until they are restarted", checkpoint)
+}
+
+func readCPUManagerSettings(config []byte) cpuManagerSettings {
+	var settings cpuManagerSettings
+	_ = yaml.Unmarshal(config, &settings)
+	return settings
 }

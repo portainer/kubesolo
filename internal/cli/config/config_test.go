@@ -115,3 +115,44 @@ func TestCmdArgs_EmptyStringsOmitted(t *testing.T) {
 		}
 	}
 }
+
+func TestCmdArgs_CPUManagerStatic(t *testing.T) {
+	cfg := &Config{
+		Path:                    "/var/lib/kubesolo",
+		CPUManagerPolicy:        "static",
+		CPUManagerPolicyOptions: "full-pcpus-only=true",
+		ReservedCPUs:            "0-1",
+	}
+	args := cfg.CmdArgs()
+
+	for _, want := range []string{
+		"--cpu-manager-policy=static",
+		"--cpu-manager-policy-options=full-pcpus-only=true",
+		"--reserved-cpus=0-1",
+	} {
+		found := false
+		for _, a := range args {
+			if a == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %q in args, got: %v", want, args)
+		}
+	}
+}
+
+func TestCmdArgs_CPUManagerOmittedWhenUnset(t *testing.T) {
+	// The default policy and an unset policy must both leave the CPU manager flags
+	// off entirely, so an older kubesolo binary is never handed a flag it cannot parse.
+	for _, policy := range []string{"", CPUManagerPolicyNone} {
+		cfg := &Config{Path: "/var/lib/kubesolo", CPUManagerPolicy: policy}
+		for _, a := range cfg.CmdArgs() {
+			switch a {
+			case "--cpu-manager-policy=", "--cpu-manager-policy=none":
+				t.Errorf("policy %q should be omitted, got: %q", policy, a)
+			}
+		}
+	}
+}
