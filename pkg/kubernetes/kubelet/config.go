@@ -129,6 +129,10 @@ func (s *service) generateKubeletConfig() map[string]any {
 		}
 	}
 
+	if len(s.systemReserved) > 0 {
+		config["systemReserved"] = s.systemReserved
+	}
+
 	if s.containerMode {
 		// In a container cgroupv2 domain controllers block creating the
 		// kubepods/system/kube cgroup hierarchies required for QoS management.
@@ -143,7 +147,9 @@ func (s *service) generateKubeletConfig() map[string]any {
 			"nodefs.inodesFree": "0%",
 			"imagefs.available": "0%",
 		}
-		config["systemReserved"] = map[string]string{}
+		if _, ok := config["systemReserved"]; !ok {
+			config["systemReserved"] = map[string]string{}
+		}
 		config["kubeReserved"] = map[string]string{}
 		return config
 	}

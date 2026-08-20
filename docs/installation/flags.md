@@ -104,12 +104,15 @@ Give latency-sensitive workloads exclusive CPU cores instead of letting every po
 | `--cpu-manager-policy=POLICY` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` |
 | `--cpu-manager-policy-options=OPTS` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(empty)_ |
 | `--reserved-cpus=CPUSET` | `KUBESOLO_RESERVED_CPUS` | `0` when the static policy is used |
+| `--system-reserved=LIST` | `KUBESOLO_SYSTEM_RESERVED` | _(empty)_ |
 
 ```bash
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --cpu-manager-policy=static --reserved-cpus=0
 ```
 
-Not supported in container mode. See the [CPU pinning guide](../configuration/cpu-pinning.md) for the pod requirements, how to verify pinning took effect, and the host-level tuning that deterministic latency also needs.
+`--system-reserved` takes quantities instead of CPU indexes (`cpu=1,memory=500Mi`, also `ephemeral-storage` and `pid`). Its `cpu=` entry can stand in for `--reserved-cpus`, but the kubelet then chooses which cores to hold back, so host-level isolation cannot be aligned to them. Setting both is rejected.
+
+CPU pinning is not supported in container mode. See the [CPU pinning guide](../configuration/cpu-pinning.md) for the pod requirements, how to verify pinning took effect, and the host-level tuning that deterministic latency also needs.
 
 ---
 

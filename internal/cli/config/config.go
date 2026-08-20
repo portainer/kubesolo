@@ -113,6 +113,10 @@ type Config struct {
 	// never handed out as an exclusive core (e.g. "0" or "0-1")
 	ReservedCPUs string
 
+	// SystemReserved is a comma-separated ResourceName=Quantity list withheld from
+	// node allocatable for the host (e.g. "cpu=1,memory=500Mi")
+	SystemReserved string
+
 	// ContainerImage is the container image reference used in container run mode.
 	// If empty, defaults to DefaultContainerImage:Version.
 	// Specify a full reference (e.g. "myrepo/kubesolo:custom") to override entirely.
@@ -195,6 +199,10 @@ func (c *Config) CmdArgs() []string {
 
 	if c.ReservedCPUs != "" {
 		args = append(args, "--reserved-cpus="+c.ReservedCPUs)
+	}
+
+	if c.SystemReserved != "" {
+		args = append(args, "--system-reserved="+c.SystemReserved)
 	}
 
 	// Proxy is intentionally omitted here: it is injected as HTTP_PROXY /

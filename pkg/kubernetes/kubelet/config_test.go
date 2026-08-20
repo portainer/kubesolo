@@ -217,3 +217,35 @@ func TestInvalidateCPUManagerCheckpoint_FirstStart(t *testing.T) {
 	_, err := os.Stat(filepath.Join(dir, "config", "config.yaml"))
 	assert.NoError(t, err)
 }
+
+func TestGenerateKubeletConfig_SystemReserved(t *testing.T) {
+	s := &service{
+		kubeletDir:     t.TempDir(),
+		systemReserved: map[string]string{"cpu": "1", "memory": "500Mi"},
+	}
+	cfg := s.generateKubeletConfig()
+
+	assert.Equal(t, map[string]string{"cpu": "1", "memory": "500Mi"}, cfg["systemReserved"])
+}
+
+func TestGenerateKubeletConfig_SystemReservedOmittedWhenUnset(t *testing.T) {
+	s := &service{kubeletDir: t.TempDir()}
+	cfg := s.generateKubeletConfig()
+
+	_, ok := cfg["systemReserved"]
+	assert.False(t, ok, "an empty reservation must be omitted rather than written as an empty map")
+}
+
+func TestGenerateKubeletConfig_ContainerModeKeepsSystemReserved(t *testing.T) {
+	// Container mode blanks systemReserved by default, but must not discard a
+	// reservation the operator asked for.
+	s := &service{
+		kubeletDir:     t.TempDir(),
+		containerMode:  true,
+		systemReserved: map[string]string{"memory": "500Mi"},
+	}
+	cfg := s.generateKubeletConfig()
+
+	assert.Equal(t, map[string]string{"memory": "500Mi"}, cfg["systemReserved"])
+	assert.Equal(t, map[string]string{}, cfg["kubeReserved"])
+}

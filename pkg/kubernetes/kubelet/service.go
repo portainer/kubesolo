@@ -31,6 +31,7 @@ type service struct {
 	containerMode         bool
 	disableIPv6           bool
 	cpuManager            types.CPUManagerConfig
+	systemReserved        map[string]string
 }
 
 // NewService creates a new kubelet service.
@@ -61,5 +62,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		containerMode:         embedded.ContainerMode,
 		disableIPv6:           embedded.DisableIPv6,
 		cpuManager:            embedded.CPUManager,
+		systemReserved:        embedded.SystemReserved,
 	}
 }

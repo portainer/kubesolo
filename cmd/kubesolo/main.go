@@ -65,6 +65,7 @@ type kubesolo struct {
 	metricsServer          bool
 	metricsBindAddress     string
 	cpuManager             types.CPUManagerConfig
+	systemReserved         map[string]string
 	embedded               types.Embedded
 }
 
@@ -100,7 +101,7 @@ func service() (*kubesolo, error) {
 		return nil, err
 	}
 
-	cpuManagerConfig, err := cpumanager.Parse(*flags.CPUManagerPolicy, *flags.CPUManagerPolicyOptions, *flags.ReservedCPUs, runtime.NumCPU())
+	cpuManagerConfig, systemReserved, err := cpumanager.Parse(*flags.CPUManagerPolicy, *flags.CPUManagerPolicyOptions, *flags.ReservedCPUs, *flags.SystemReserved, runtime.NumCPU())
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +126,7 @@ func service() (*kubesolo, error) {
 		metricsServer:          *flags.MetricsServer,
 		metricsBindAddress:     *flags.MetricsBindAddress,
 		cpuManager:             cpuManagerConfig,
+		systemReserved:         systemReserved,
 	}, nil
 }
 
@@ -696,7 +698,8 @@ func (s *kubesolo) bootstrap() {
 		D2KImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
 
 		// CPU manager
-		CPUManager: s.cpuManager,
+		CPUManager:     s.cpuManager,
+		SystemReserved: s.systemReserved,
 
 		// Metrics endpoint
 		Metrics: types.MetricsConfig{

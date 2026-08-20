@@ -121,6 +121,12 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 		"Comma-separated key=value options for the static CPU manager policy\n"+
 			"(e.g. full-pcpus-only=true,strict-cpu-reservation=true)")
 
+	f.StringVar(&cfg.SystemReserved, "system-reserved",
+		os.Getenv("KUBESOLO_SYSTEM_RESERVED"),
+		"Comma-separated ResourceName=Quantity pairs withheld from node allocatable for the host\n"+
+			"(e.g. cpu=1,memory=500Mi). Supports cpu, memory, ephemeral-storage and pid.\n"+
+			"With the static policy, cpu= lets the kubelet choose which cores are held back")
+
 	f.StringVar(&cfg.ReservedCPUs, "reserved-cpus",
 		os.Getenv("KUBESOLO_RESERVED_CPUS"),
 		"Cpuset reserved for the host and KubeSolo itself, never given out as an exclusive core\n"+
@@ -176,7 +182,7 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 			"--cpu-manager-policy=%s is not supported in container run mode: exclusive cores are bounded by the container's own cpuset, which KubeSolo does not control",
 			cfg.CPUManagerPolicy))
 	}
-	if _, err := cpumanager.Parse(cfg.CPUManagerPolicy, cfg.CPUManagerPolicyOptions, cfg.ReservedCPUs, runtime.NumCPU()); err != nil {
+	if _, _, err := cpumanager.Parse(cfg.CPUManagerPolicy, cfg.CPUManagerPolicyOptions, cfg.ReservedCPUs, cfg.SystemReserved, runtime.NumCPU()); err != nil {
 		return p.Fail("cpu pinning", err)
 	}
 

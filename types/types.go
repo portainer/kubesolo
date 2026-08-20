@@ -192,6 +192,10 @@ type Embedded struct {
 
 	// CPU manager configuration
 	CPUManager CPUManagerConfig
+
+	// SystemReserved is the resource list withheld from node allocatable for the
+	// host, e.g. {"cpu": "1", "memory": "500Mi"}
+	SystemReserved map[string]string
 }
 
 // CPUManagerConfig contains the kubelet CPU manager settings. With Policy set to
