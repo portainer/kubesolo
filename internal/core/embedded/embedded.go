@@ -1,4 +1,4 @@
-//go:build (linux && amd64) || (linux && arm64) || (linux && arm)
+//go:build !external_deps && linux && (amd64 || arm64 || arm)
 
 package embedded
 

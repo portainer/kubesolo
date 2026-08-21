@@ -1,4 +1,4 @@
-//go:build linux && riscv64
+//go:build !external_deps && linux && riscv64
 
 package embedded
 
