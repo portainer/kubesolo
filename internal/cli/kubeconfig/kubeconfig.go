@@ -233,15 +233,17 @@ func mergeIntoUserConfig(kubectlPath, realUser, realHome string, realUID, realGI
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // resolveRealUser returns the real user's name, home directory, UID, and GID.
-// It tries four strategies in order so that the kubeconfig ends up in the
-// invoking user's home directory regardless of how privilege was escalated:
+// It tries three strategies in order so that the kubeconfig ends up in the
+// invoking user's home directory when privilege was explicitly escalated via
+// sudo/doas, and in root's own home otherwise — deliberately not guessing
+// based on who originally logged into the session (e.g. via a `sudo su -`
+// root shell): if the process is running as root with no explicit sudo/doas
+// target, attribution is root, full stop:
 //
 //  1. sudo  — SUDO_USER / SUDO_UID / SUDO_GID environment variables
 //  2. doas  — DOAS_USER environment variable (set by some doas builds)
-//  3. loginuid — /proc/self/loginuid records the UID of the user who
-//     originally authenticated; the kernel preserves it across sudo/doas/su
-//  4. fallback — current process environment ($HOME / $USER), which will be
-//     root when none of the above applies
+//  3. fallback — current process environment ($HOME / $USER), which will be
+//     root when neither of the above applies
 func resolveRealUser() (name, home string, uid, gid int) {
 	// 1. sudo
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && sudoUser != "root" {
@@ -261,22 +263,8 @@ func resolveRealUser() (name, home string, uid, gid int) {
 		return doasUser, "/home/" + doasUser, -1, -1
 	}
 
-	// 3. /proc/self/loginuid — the kernel sets this to the UID of the user
-	// who originally logged in (via PAM) and it is preserved across privilege
-	// escalation.  The sentinel value 4294967295 (^uint32(0)) means "not set".
-	// Parse as uint64 with a 32-bit cap so the constant is safe on 32-bit
-	// architectures (arm) where int overflows at 2147483647.
-	if data, err := os.ReadFile("/proc/self/loginuid"); err == nil {
-		const unsetLoginUID uint64 = 4294967295
-		if loginUID, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 32); err == nil &&
-			loginUID > 0 && loginUID != unsetLoginUID {
-			if e := passwdByUID(int(loginUID)); e != nil && e.name != "root" {
-				return e.name, e.home, e.uid, e.gid
-			}
-		}
-	}
-
-	// 4. Fallback: already running as root with no detectable original user
+	// 3. Fallback: already running as root (or an unrecognized escalation
+	// tool) with no explicit sudo/doas target
 	home = os.Getenv("HOME")
 	if home == "" {
 		home = "/root"
@@ -299,11 +287,6 @@ type passwdEntry struct {
 // passwdByName looks up a user by name in /etc/passwd.
 func passwdByName(username string) *passwdEntry {
 	return scanPasswd(func(e *passwdEntry) bool { return e.name == username })
-}
-
-// passwdByUID looks up a user by numeric UID in /etc/passwd.
-func passwdByUID(uid int) *passwdEntry {
-	return scanPasswd(func(e *passwdEntry) bool { return e.uid == uid })
 }
 
 // scanPasswd parses /etc/passwd and returns the first entry for which match
