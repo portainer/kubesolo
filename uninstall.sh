@@ -460,6 +460,16 @@ if [ -f "$LOGFILE" ]; then
     rm -f "$LOGFILE"
 fi
 
+# Remove the CNI configuration KubeSolo writes into the standard CNI directory.
+# Left behind, a container runtime managed by the host keeps loading it after
+# KubeSolo is gone. Not cluster state, so it goes regardless of --remove-data.
+# -e is false for a dangling symlink, so test for a symlink as well.
+CNI_CONFIG_FILE="/etc/cni/net.d/10-bridge.conflist"
+if [ -e "$CNI_CONFIG_FILE" ] || [ -L "$CNI_CONFIG_FILE" ]; then
+    echo "🗑️  Removing CNI configuration..."
+    rm -f "$CNI_CONFIG_FILE"
+fi
+
 # Remove configuration and data directory if requested
 if [ "$REMOVE_DATA" = "true" ]; then
     if [ -d "$CONFIG_PATH" ]; then

@@ -3,6 +3,8 @@ package kubelet
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"reflect"
 
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/internal/runtime/network"
@@ -10,6 +12,18 @@ import (
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 )
+
+// cpuManagerCheckpointFile is where the kubelet records the CPU manager policy and
+// the shared CPU pool, under the kubelet root directory.
+const cpuManagerCheckpointFile = "cpu_manager_state"
+
+// cpuManagerSettings are the kubelet config fields that invalidate the CPU manager
+// checkpoint when they change.
+type cpuManagerSettings struct {
+	Policy       string            `yaml:"cpuManagerPolicy"`
+	Options      map[string]string `yaml:"cpuManagerPolicyOptions"`
+	ReservedCPUs string            `yaml:"reservedSystemCPUs"`
+}
 
 // cgroupDriver returns "systemd" only when systemd is the active init system,
 // otherwise "cgroupfs". Alpine Linux uses OpenRC and has no systemd even when
@@ -19,6 +33,19 @@ func cgroupDriver() string {
 		return "systemd"
 	}
 	return "cgroupfs"
+}
+
+// resolveCgroupDriver returns the cgroup driver the kubelet must use. A container
+// runtime managed by the host reports its own driver over CRI and the kubelet has to
+// match it: a mismatch lets pods start and then evicts them with errors that never
+// name the cause. Without a reported driver, the driver is detected from the host.
+func (s *service) resolveCgroupDriver() string {
+	if s.runtimeCgroupDriver != "" {
+		log.Info().Str("component", "kubelet").Str("driver", s.runtimeCgroupDriver).Msg("using the cgroup driver reported by the container runtime")
+		return s.runtimeCgroupDriver
+	}
+
+	return cgroupDriver()
 }
 
 func (s *service) writeKubeletConfigFile() error {
@@ -31,6 +58,8 @@ func (s *service) writeKubeletConfigFile() error {
 		log.Error().Str("component", "kubelet").Msgf("failed to marshal kubelet config: %v", err)
 		return err
 	}
+
+	s.invalidateCPUManagerCheckpoint(yamlConfig)
 
 	configFile, err := os.Create(s.kubeletConfigFile)
 	if err != nil {
@@ -55,7 +84,7 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"kind":       "KubeletConfiguration",
 		"apiVersion": "kubelet.config.k8s.io/v1beta1",
 
-		"containerRuntimeEndpoint": "unix://" + s.containerdSockFile,
+		"containerRuntimeEndpoint": s.runtimeEndpoint,
 
 		"authentication": map[string]any{
 			"anonymous": map[string]any{
@@ -84,12 +113,24 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"tlsCertFile":       s.certFile,
 		"tlsPrivateKeyFile": s.keyFile,
 
-		"cgroupDriver": cgroupDriver(),
+		"cgroupDriver": s.resolveCgroupDriver(),
 
 		"readOnlyPort":       0,
 		"rotateCertificates": true,
 
 		"failSwapOn": false,
+	}
+
+	if s.cpuManager.Policy == types.CPUManagerPolicyStatic {
+		config["cpuManagerPolicy"] = s.cpuManager.Policy
+		config["reservedSystemCPUs"] = s.cpuManager.ReservedCPUs
+		if len(s.cpuManager.PolicyOptions) > 0 {
+			config["cpuManagerPolicyOptions"] = s.cpuManager.PolicyOptions
+		}
+	}
+
+	if len(s.systemReserved) > 0 {
+		config["systemReserved"] = s.systemReserved
 	}
 
 	if s.containerMode {
@@ -106,10 +147,52 @@ func (s *service) generateKubeletConfig() map[string]any {
 			"nodefs.inodesFree": "0%",
 			"imagefs.available": "0%",
 		}
-		config["systemReserved"] = map[string]string{}
+		if _, ok := config["systemReserved"]; !ok {
+			config["systemReserved"] = map[string]string{}
+		}
 		config["kubeReserved"] = map[string]string{}
 		return config
 	}
 
 	return config
+}
+
+// invalidateCPUManagerCheckpoint removes the CPU manager checkpoint when the CPU
+// manager settings differ from the config written on the previous start. The kubelet
+// refuses to start against a checkpoint that disagrees with its config, and upstream's
+// remedy is to drain the node and delete the file — which a single node cannot do, so
+// kubesolo removes it instead.
+//
+// Discarding the checkpoint drops the record of which cores each workload held. With
+// the embedded containerd that costs nothing, because restarting kubesolo recreates
+// every pod and the policy assigns cores afresh. With an external runtime the
+// containers outlive the restart and land back in the shared pool until restarted.
+//
+// Both sides of the comparison are read back out of the generated YAML so they cannot
+// drift from what generateKubeletConfig actually writes.
+func (s *service) invalidateCPUManagerCheckpoint(newConfig []byte) {
+	previous, err := os.ReadFile(s.kubeletConfigFile)
+	if err != nil {
+		return
+	}
+
+	if reflect.DeepEqual(readCPUManagerSettings(previous), readCPUManagerSettings(newConfig)) {
+		return
+	}
+
+	checkpoint := filepath.Join(s.kubeletDir, cpuManagerCheckpointFile)
+	if err := os.Remove(checkpoint); err != nil {
+		if !os.IsNotExist(err) {
+			log.Error().Str("component", "kubelet").Msgf("failed to remove stale cpu manager checkpoint %s: %v", checkpoint, err)
+		}
+		return
+	}
+
+	log.Warn().Str("component", "kubelet").Msgf("cpu manager settings changed, removed %s. exclusive cores are reassigned as pinned workloads restart; with an external container runtime, restart them yourself", checkpoint)
+}
+
+func readCPUManagerSettings(config []byte) cpuManagerSettings {
+	var settings cpuManagerSettings
+	_ = yaml.Unmarshal(config, &settings)
+	return settings
 }

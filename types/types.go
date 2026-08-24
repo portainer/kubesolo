@@ -118,6 +118,20 @@ type Embedded struct {
 	// Crun binary
 	CrunBinaryFile string
 
+	// Container runtime. RuntimeExternal is true when KubeSolo attaches to a
+	// host-managed CRI runtime given with --container-runtime-endpoint instead of
+	// starting its own embedded containerd. RuntimeEndpoint is populated in both
+	// cases — for the embedded containerd it is "unix://" + ContainerdSocketFile —
+	// so consumers need only one code path. RuntimeSocketPath is the filesystem
+	// path of RuntimeEndpoint.
+	// RuntimeCgroupDriver is the cgroup driver reported by an external runtime over
+	// CRI, which the kubelet must match. Empty when the runtime does not report one,
+	// in which case the kubelet detects the driver from the host instead.
+	RuntimeExternal     bool
+	RuntimeEndpoint     string
+	RuntimeSocketPath   string
+	RuntimeCgroupDriver string
+
 	// Kubelet directories
 	KubeletDir            string
 	KubeletConfigDir      string
@@ -172,6 +186,34 @@ type Embedded struct {
 	D2K          bool
 	D2KNamespace string
 	D2KCerts     D2KCertificatePaths
+
+	// Metrics endpoint configuration
+	Metrics MetricsConfig
+
+	// CPU manager configuration
+	CPUManager CPUManagerConfig
+
+	// SystemReserved is the resource list withheld from node allocatable for the
+	// host, e.g. {"cpu": "1", "memory": "500Mi"}
+	SystemReserved map[string]string
+}
+
+// CPUManagerConfig contains the kubelet CPU manager settings. With Policy set to
+// CPUManagerPolicyStatic, Guaranteed-QoS pods requesting whole CPUs are given
+// exclusive cores. ReservedCPUs is the cpuset held back for the system and
+// kubesolo itself, which the static policy requires to be non-empty.
+type CPUManagerConfig struct {
+	Policy        string
+	PolicyOptions map[string]string
+	ReservedCPUs  string
+}
+
+// MetricsConfig contains configuration for the kubesolo Prometheus metrics endpoint.
+// When Enabled is true, kubesolo serves a /metrics HTTP endpoint exposing
+// control plane health gauges, kine DB size, and build info.
+type MetricsConfig struct {
+	Enabled     bool
+	BindAddress string
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent

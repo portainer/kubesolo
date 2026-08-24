@@ -1,4 +1,4 @@
-//go:build offline && (amd64 || arm64)
+//go:build !external_deps && offline && (amd64 || arm64)
 
 package embedded
 

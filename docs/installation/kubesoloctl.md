@@ -107,6 +107,12 @@ Common flags:
 | `--portainer-edge-image` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | `docker.io/portainer/agent:lts` | Image deployed for the Portainer edge agent |
 | `--offline-install` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ | Install from a local tarball/binary instead of downloading |
 | `--proxy` | `KUBESOLO_PROXY` | _(none)_ | HTTP/HTTPS proxy injected into the service environment |
+| `--cpu-manager-policy` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` | `static` gives Guaranteed-QoS pods exclusive cores (not supported in container mode) |
+| `--cpu-manager-policy-options` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(none)_ | Comma-separated `key=value` options for the static policy |
+| `--reserved-cpus` | `KUBESOLO_RESERVED_CPUS` | `0` when the static policy is used | Cpuset reserved for the host and KubeSolo itself |
+| `--system-reserved` | `KUBESOLO_SYSTEM_RESERVED` | _(none)_ | Resources withheld from allocatable, e.g. `cpu=1,memory=500Mi` |
+
+CPU pinning flags are validated before anything is installed, so a bad cpuset or an unsupported policy option fails immediately rather than crash-looping the service. See the [CPU pinning guide](../configuration/cpu-pinning.md).
 
 ### kubeconfig
 

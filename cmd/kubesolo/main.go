@@ -13,22 +13,26 @@ import (
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/distribution/reference"
+	"github.com/portainer/kubesolo/internal/config/cpumanager"
 	"github.com/portainer/kubesolo/internal/config/flags"
 	"github.com/portainer/kubesolo/internal/core/embedded"
 	"github.com/portainer/kubesolo/internal/core/pki"
 	"github.com/portainer/kubesolo/internal/logging"
+	"github.com/portainer/kubesolo/internal/runtime/cri"
+	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/d2k"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
+	"github.com/portainer/kubesolo/pkg/components/metrics"
 	"github.com/portainer/kubesolo/pkg/components/portainer"
 	"github.com/portainer/kubesolo/pkg/kine"
 	"github.com/portainer/kubesolo/pkg/kubernetes/apiserver"
 	"github.com/portainer/kubesolo/pkg/kubernetes/controller"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubelet"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubeproxy"
-	"github.com/portainer/kubesolo/pkg/runtime/containerd"
+	kubesoloruntime "github.com/portainer/kubesolo/pkg/runtime"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
@@ -57,17 +61,23 @@ type kubesolo struct {
 	dbWALRepair            bool
 	d2k                    bool
 	d2kNamespace           string
+	runtimeEndpoint        cri.Endpoint
+	metricsServer          bool
+	metricsBindAddress     string
+	cpuManager             types.CPUManagerConfig
+	systemReserved         map[string]string
 	embedded               types.Embedded
 }
 
 // the channels for the kubesolo application
 var (
-	containerdReadyCh = make(chan struct{})
+	runtimeReadyCh    = make(chan struct{})
 	kineReadyCh       = make(chan struct{})
 	apiServerReadyCh  = make(chan struct{})
 	kubeletReadyCh    = make(chan struct{})
 	controllerReadyCh = make(chan struct{})
 	kubeproxyReadyCh  = make(chan struct{})
+	metricsReadyCh    = make(chan struct{})
 )
 
 // service creates a new kubesolo application
@@ -82,6 +92,16 @@ func service() (*kubesolo, error) {
 	}
 
 	portainerEdgeImage, err := normaliseImageRef(*flags.PortainerEdgeImage)
+	if err != nil {
+		return nil, err
+	}
+
+	runtimeEndpoint, err := cri.Resolve(*flags.ContainerRuntimeEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	cpuManagerConfig, systemReserved, err := cpumanager.Parse(*flags.CPUManagerPolicy, *flags.CPUManagerPolicyOptions, *flags.ReservedCPUs, *flags.SystemReserved, runtime.NumCPU())
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +122,11 @@ func service() (*kubesolo, error) {
 		dbWALRepair:            *flags.DBWALRepair,
 		d2k:                    d2kEnabled,
 		d2kNamespace:           *flags.D2KNamespace,
+		runtimeEndpoint:        runtimeEndpoint,
+		metricsServer:          *flags.MetricsServer,
+		metricsBindAddress:     *flags.MetricsBindAddress,
+		cpuManager:             cpuManagerConfig,
+		systemReserved:         systemReserved,
 	}, nil
 }
 
@@ -194,14 +219,14 @@ func (s *kubesolo) run() {
 	// infraServices must be fully ready before pod masquerade is set up.
 	infraServices := []service{
 		{
-			name: "containerd",
+			name: "container runtime",
 			start: func() {
-				containerdService := containerd.NewService(ctx, cancel, containerdReadyCh, &s.embedded)
+				runtimeService := kubesoloruntime.NewService(ctx, cancel, runtimeReadyCh, &s.embedded)
 				s.wg.Go(func() {
-					_ = containerdService.Run()
+					_ = runtimeService.Run()
 				})
 			},
-			readyCh: containerdReadyCh,
+			readyCh: runtimeReadyCh,
 		},
 		{
 			name: "kine",
@@ -264,6 +289,13 @@ func (s *kubesolo) run() {
 		svc.start()
 		if !waitForService(ctx, svc.name, svc.readyCh) {
 			return
+		}
+
+		// Start the optional metrics endpoint as soon as kine is ready, so the
+		// kine_db_size_bytes collector has a real path to stat. The metrics
+		// service does not block any other component on its own readiness.
+		if svc.name == "kine" && s.embedded.Metrics.Enabled {
+			s.startMetricsService(ctx, cancel)
 		}
 	}
 
@@ -339,9 +371,19 @@ func (s *kubesolo) run() {
 // image archives (images/). These are re-imported by importImages() on every
 // startup, so no data is lost. This gives containerd a clean slate while
 // preserving the kine database (Kubernetes state) and PKI certificates.
-func cleanStaleState(basePath string) {
-	// Stale system containerd socket symlink
-	if err := os.Remove(types.DefaultSystemContainerdSock); err == nil {
+//
+// Nothing is cleaned when the container runtime is managed by the host: the socket
+// and every directory below belong to that runtime, not to kubesolo.
+func cleanStaleState(basePath string, runtimeExternal bool) {
+	if runtimeExternal {
+		log.Debug().Str("component", "kubesolo").Msg("container runtime is managed by the host, leaving its state alone")
+		return
+	}
+
+	// Stale system containerd socket symlink. Only a symlink is ever removed: that is
+	// what kubesolo installs here, whereas a containerd managed by the host binds a
+	// real socket at the same path.
+	if filesystem.RemoveIfSymlink(types.DefaultSystemContainerdSock) {
 		log.Info().Str("component", "kubesolo").Msgf("removed stale system containerd socket: %s", types.DefaultSystemContainerdSock)
 	}
 
@@ -372,6 +414,41 @@ func cleanStaleState(basePath string) {
 			log.Info().Str("component", "kubesolo").Msgf("cleaned stale containerd artifact: %s", target)
 		}
 	}
+}
+
+// startMetricsService starts the optional kubesolo metrics endpoint and
+// passes in every component readiness channel so per-component up gauges
+// can flip in real time as services come online. It does not block on its
+// own readiness — the metrics endpoint failing must not stop kubesolo.
+func (s *kubesolo) startMetricsService(ctx context.Context, cancel context.CancelFunc) {
+	log.Info().
+		Str("component", "kubesolo").
+		Str("bind-address", s.embedded.Metrics.BindAddress).
+		Msg("starting metrics endpoint...")
+
+	metricsService := metrics.NewService(
+		ctx,
+		cancel,
+		metricsReadyCh,
+		s.embedded,
+		metrics.BuildInfo{Version: Version, Commit: Commit, BuildDate: BuildDate},
+		map[string]<-chan struct{}{
+			metrics.ComponentRuntime:    runtimeReadyCh,
+			metrics.ComponentKine:       kineReadyCh,
+			metrics.ComponentAPIServer:  apiServerReadyCh,
+			metrics.ComponentController: controllerReadyCh,
+			metrics.ComponentKubelet:    kubeletReadyCh,
+			metrics.ComponentKubeProxy:  kubeproxyReadyCh,
+		},
+	)
+	s.wg.Go(func() {
+		if err := metricsService.Run(); err != nil {
+			log.Error().
+				Str("component", "kubesolo").
+				Err(err).
+				Msg("metrics endpoint exited with error")
+		}
+	})
 }
 
 // waitForService waits for a service to be ready
@@ -440,6 +517,9 @@ func (s *kubesolo) bootstrap() {
 	// Setup paths
 	basePath := *flags.Path
 	containerMode := *flags.ContainerMode || system.IsRunningInContainer()
+	if containerMode && s.cpuManager.Policy == types.CPUManagerPolicyStatic {
+		log.Fatal().Str("component", "kubesolo").Msg("--cpu-manager-policy=static is not supported in container mode: exclusive cores are bounded by the container's own cpuset, which kubesolo does not control")
+	}
 	if containerMode {
 		log.Info().Str("component", "kubesolo").Msg("container mode detected, using cgroupfs driver and relaxed eviction thresholds")
 
@@ -452,10 +532,18 @@ func (s *kubesolo) bootstrap() {
 		}
 	}
 
+	// Container runtime endpoint. Without --container-runtime-endpoint KubeSolo
+	// starts its own containerd and talks to it over the socket under --path.
+	containerdSocketFile := filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket)
+	runtimeEndpoint := s.runtimeEndpoint
+	if !runtimeEndpoint.External {
+		runtimeEndpoint = cri.Embedded(containerdSocketFile)
+	}
+
 	// Clean stale runtime state from previous runs (e.g., after reboot)
 	// This removes stale sockets and containerd runtime state that reference
 	// dead processes, while preserving images, kine database, and PKI certs.
-	cleanStaleState(basePath)
+	cleanStaleState(basePath, runtimeEndpoint.External)
 
 	s.embedded = types.Embedded{
 		// System Node IP
@@ -528,7 +616,7 @@ func (s *kubesolo) bootstrap() {
 
 		// Containerd paths
 		ContainerdDir:               filepath.Join(basePath, types.DefaultContainerdDir),
-		ContainerdSocketFile:        filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket),
+		ContainerdSocketFile:        containerdSocketFile,
 		ContainerdBinaryFile:        filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
 		ContainerdImagesDir:         filepath.Join(basePath, types.DefaultContainerdDir, "images"),
 		ContainerdShimBinaryFile:    filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
@@ -545,6 +633,11 @@ func (s *kubesolo) bootstrap() {
 
 		// Crun binary
 		CrunBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "crun"),
+
+		// Container runtime
+		RuntimeExternal:   runtimeEndpoint.External,
+		RuntimeEndpoint:   runtimeEndpoint.URL,
+		RuntimeSocketPath: runtimeEndpoint.SocketPath,
 
 		// Kubelet paths
 		KubeletDir:            filepath.Join(basePath, types.DefaultKubeletDir),
@@ -603,5 +696,15 @@ func (s *kubesolo) bootstrap() {
 			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
 		},
 		D2KImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
+
+		// CPU manager
+		CPUManager:     s.cpuManager,
+		SystemReserved: s.systemReserved,
+
+		// Metrics endpoint
+		Metrics: types.MetricsConfig{
+			Enabled:     s.metricsServer,
+			BindAddress: s.metricsBindAddress,
+		},
 	}
 }

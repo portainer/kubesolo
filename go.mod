@@ -14,6 +14,7 @@ require (
 	github.com/klauspost/compress v1.18.6
 	github.com/mattn/go-sqlite3 v1.14.47
 	github.com/pelletier/go-toml v1.9.5
+	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -25,7 +26,10 @@ require (
 	k8s.io/apiserver v0.35.7
 	k8s.io/client-go v0.35.7
 	k8s.io/component-base v0.35.7
+	k8s.io/cri-api v0.35.6
+	k8s.io/cri-client v0.33.6
 	k8s.io/kubernetes v1.35.7
+	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 )
 
 require (
@@ -191,7 +195,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
-	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
@@ -268,8 +271,6 @@ require (
 	k8s.io/cluster-bootstrap v0.0.0 // indirect
 	k8s.io/component-helpers v0.33.6 // indirect
 	k8s.io/controller-manager v0.32.2 // indirect
-	k8s.io/cri-api v0.35.6 // indirect
-	k8s.io/cri-client v0.33.6 // indirect
 	k8s.io/csi-translation-lib v0.0.0 // indirect
 	k8s.io/dynamic-resource-allocation v0.0.0 // indirect
 	k8s.io/endpointslice v0.32.0 // indirect
@@ -286,7 +287,6 @@ require (
 	k8s.io/metrics v0.32.2 // indirect
 	k8s.io/mount-utils v0.33.6 // indirect
 	k8s.io/pod-security-admission v0.0.0 // indirect
-	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

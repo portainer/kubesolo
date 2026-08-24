@@ -14,12 +14,17 @@ import (
 	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
+	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/rs/zerolog/log"
 )
 
 // KubeSoloPorts are the TCP ports KubeSolo opens; processes holding any of
 // these are candidates for termination if they are a KubeSolo process.
 var KubeSoloPorts = []int{2379, 6443, 10443, 6060}
+
+// systemContainerdSocket is the standard containerd socket path. KubeSolo symlinks
+// it to its own containerd; a containerd managed by the host binds it directly.
+const systemContainerdSocket = "/run/containerd/containerd.sock"
 
 // StopAll gracefully stops all running KubeSolo processes: first via the
 // installed service manager (if available), then by PID. After SIGTERM it
@@ -145,7 +150,6 @@ func CleanupFileConflicts(dataPath string) {
 	socketPaths := []string{
 		filepath.Join(dataPath, "containerd", "containerd.sock"),
 		filepath.Join(dataPath, "kine", "socket"),
-		"/run/containerd/containerd.sock",
 	}
 	for _, s := range socketPaths {
 		if fi, err := os.Stat(s); err == nil && fi.Mode()&os.ModeSocket != 0 {
@@ -153,6 +157,15 @@ func CleanupFileConflicts(dataPath string) {
 			_ = os.Remove(s)
 		}
 	}
+
+	// /run/containerd/containerd.sock is only KubeSolo's when it is the symlink
+	// KubeSolo installs there. A containerd managed by the host binds a real socket at
+	// that path, and the os.Stat test above follows symlinks, so it cannot tell the
+	// two apart and would delete the host's live socket.
+	if filesystem.RemoveIfSymlink(systemContainerdSocket) {
+		log.Debug().Msgf("removed stale containerd socket symlink: %s", systemContainerdSocket)
+	}
+
 	cleanupPIDFile()
 }
 

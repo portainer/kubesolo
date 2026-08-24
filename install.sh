@@ -1088,6 +1088,10 @@ LOCAL_STORAGE="${KUBESOLO_LOCAL_STORAGE:-true}"
 LOCAL_STORAGE_SHARED_PATH="${KUBESOLO_LOCAL_STORAGE_SHARED_PATH:-}"
 DB_WAL_REPAIR="${KUBESOLO_DB_WAL_REPAIR:-false}"
 DISABLE_IPV6="${KUBESOLO_DISABLE_IPV6:-false}"
+CPU_MANAGER_POLICY="${KUBESOLO_CPU_MANAGER_POLICY:-none}"
+CPU_MANAGER_POLICY_OPTIONS="${KUBESOLO_CPU_MANAGER_POLICY_OPTIONS:-}"
+RESERVED_CPUS="${KUBESOLO_RESERVED_CPUS:-}"
+SYSTEM_RESERVED="${KUBESOLO_SYSTEM_RESERVED:-}"
 STARTUP_TIMEOUT="${KUBESOLO_STARTUP_TIMEOUT:-600}"
 D2K="${KUBESOLO_D2K:-false}"
 D2K_NAMESPACE="${KUBESOLO_D2K_NAMESPACE:-d2k}"
@@ -1139,6 +1143,18 @@ for arg in "$@"; do
     --pprof-server=*)
       PPROF_SERVER="${arg#*=}"
       ;;
+    --cpu-manager-policy=*)
+      CPU_MANAGER_POLICY="${arg#*=}"
+      ;;
+    --cpu-manager-policy-options=*)
+      CPU_MANAGER_POLICY_OPTIONS="${arg#*=}"
+      ;;
+    --reserved-cpus=*)
+      RESERVED_CPUS="${arg#*=}"
+      ;;
+    --system-reserved=*)
+      SYSTEM_RESERVED="${arg#*=}"
+      ;;
     --run-mode=*)
       RUN_MODE="${arg#*=}"
       ;;
@@ -1175,6 +1191,10 @@ for arg in "$@"; do
       echo "  --d2k-namespace=NAMESPACE    Namespace into which d2k is deployed (default: $D2K_NAMESPACE)"
       echo "  --debug=true|false           Enable debug logging (default: $DEBUG)"
       echo "  --pprof-server=true|false    Enable pprof server (default: $PPROF_SERVER)"
+      echo "  --cpu-manager-policy=POLICY  none or static; static gives Guaranteed pods exclusive cores (default: $CPU_MANAGER_POLICY)"
+      echo "  --cpu-manager-policy-options=OPTS   Comma-separated key=value options for the static policy"
+      echo "  --reserved-cpus=CPUSET       CPUs reserved for the host, e.g. 0 or 0-1 (default: 0 when the static policy is used)"
+      echo "  --system-reserved=LIST       Resources withheld from allocatable, e.g. cpu=1,memory=500Mi"
       echo "  --run-mode=MODE              Run mode: service, foreground, or daemon (default: $RUN_MODE)"
       echo "  --proxy=URL                  Set proxy for HTTP/HTTPS requests"
       echo "  --offline                    Download the offline build (all images embedded, for air-gapped environments)"
@@ -1331,6 +1351,22 @@ fi
 
 if [ "$DISABLE_IPV6" = "true" ]; then
   CMD_ARGS="$CMD_ARGS --disable-ipv6=true"
+fi
+
+if [ "$CPU_MANAGER_POLICY" != "none" ]; then
+  CMD_ARGS="$CMD_ARGS --cpu-manager-policy=$CPU_MANAGER_POLICY"
+fi
+
+if [ -n "$CPU_MANAGER_POLICY_OPTIONS" ]; then
+  CMD_ARGS="$CMD_ARGS --cpu-manager-policy-options=$CPU_MANAGER_POLICY_OPTIONS"
+fi
+
+if [ -n "$RESERVED_CPUS" ]; then
+  CMD_ARGS="$CMD_ARGS --reserved-cpus=$RESERVED_CPUS"
+fi
+
+if [ -n "$SYSTEM_RESERVED" ]; then
+  CMD_ARGS="$CMD_ARGS --system-reserved=$SYSTEM_RESERVED"
 fi
 
 if [ "$STARTUP_TIMEOUT" != "600" ]; then
