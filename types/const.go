@@ -45,3 +45,10 @@ const (
 	DefaultMetricsProbeInterval      = 15 * time.Second
 	DefaultKineDBFile                = "state.db"
 )
+
+// CPU manager policies. With the static policy, Guaranteed-QoS pods that request
+// whole CPUs get exclusive cores instead of sharing the CFS quota pool.
+const (
+	CPUManagerPolicyNone   = "none"
+	CPUManagerPolicyStatic = "static"
+)

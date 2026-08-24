@@ -29,6 +29,7 @@ require (
 	k8s.io/cri-api v0.35.6
 	k8s.io/cri-client v0.33.6
 	k8s.io/kubernetes v1.35.7
+	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 )
 
 require (
@@ -286,7 +287,6 @@ require (
 	k8s.io/metrics v0.32.2 // indirect
 	k8s.io/mount-utils v0.33.6 // indirect
 	k8s.io/pod-security-admission v0.0.0 // indirect
-	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
