@@ -127,7 +127,7 @@ kubesoloctl kubeconfig fetch      # merge it into ~/.kube/config
 ### upgrade / reset / uninstall
 
 ```bash
-kubesoloctl upgrade --version=v1.1.9   # preserves your original flags
+kubesoloctl upgrade --version=v1.2.0   # preserves your original flags
 kubesoloctl reset                      # wipe cluster state, keep the install (--force to skip the prompt)
 kubesoloctl uninstall                  # remove KubeSolo; --purge also deletes data; container mode also cleans kubeconfig + Docker context
 ```
@@ -183,8 +183,8 @@ Use `--name` to run independent KubeSolo instances side by side in container mod
 
 ```bash
 # On a connected machine (specify --arch when the target differs):
-kubesoloctl download --version=v1.1.9 --path=./bundle --arch=arm64
+kubesoloctl download --version=v1.2.0 --path=./bundle --arch=arm64
 
 # On the target machine:
-sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.1.9-linux-arm64.tar.gz
+sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.2.0-linux-arm64.tar.gz
 ```
