@@ -23,7 +23,7 @@ curl -sfL https://raw.githubusercontent.com/portainer/kubesolo/develop/install.s
 
 # With options
 curl -sfL https://get.kubesolo.io | sudo sh -s -- \
-  --version=v1.1.9 \
+  --version=v1.2.0 \
   --path=/opt/kubesolo \
   --run-mode=service
 
@@ -58,7 +58,7 @@ This script provides basic installation with minimal dependencies for the most c
 wget -O - https://raw.githubusercontent.com/portainer/kubesolo/develop/install-minimal.sh | sh
 
 # Or with environment variables
-KUBESOLO_VERSION=v1.1.9 KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
+KUBESOLO_VERSION=v1.2.0 KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
 ```
 
 **Features:**
@@ -93,7 +93,7 @@ chmod +x kubesolo-service.sh
 All installers support these environment variables:
 
 ```bash
-export KUBESOLO_VERSION="v1.1.9"           # Version to install
+export KUBESOLO_VERSION="v1.2.0"           # Version to install
 export KUBESOLO_PATH="/var/lib/kubesolo"        # Installation path
 export KUBESOLO_PORTAINER_EDGE_ID="your-id"     # Portainer Edge ID
 export KUBESOLO_PORTAINER_EDGE_KEY="your-key"   # Portainer Edge Key
@@ -139,7 +139,7 @@ For air-gapped installations:
 
 ```bash
 # Pre-download the binary
-wget https://github.com/portainer/kubesolo/releases/download/v1.1.9/kubesolo-v1.1.9-linux-arm64.tar.gz
+wget https://github.com/portainer/kubesolo/releases/download/v1.2.0/kubesolo-v1.2.0-linux-arm64.tar.gz
 
 # Extract and install manually
 tar -xzf kubesolo-*.tar.gz
@@ -174,7 +174,7 @@ curl -sfL https://get.kubesolo.io | sudo sh -
 # Combined with other options
 curl -sfL https://get.kubesolo.io | sudo sh -s -- \
   --proxy=http://proxy.company.com:8080 \
-  --version=v1.1.9 \
+  --version=v1.2.0 \
   --path=/opt/kubesolo
 ```
 

@@ -7,7 +7,7 @@
 #   curl -sfL https://get.kubesolo.io | sudo sh
 #
 # Pin a specific version:
-#   curl -sfL https://get.kubesolo.io | KUBESOLO_VERSION=v1.1.9 sudo sh
+#   curl -sfL https://get.kubesolo.io | KUBESOLO_VERSION=v1.2.0 sudo sh
 #
 # Pass flags to kubesoloctl (note the -s -- separator):
 #   curl -sfL https://get.kubesolo.io | sudo sh -s -- --install-prereqs
@@ -23,7 +23,7 @@
 #   flat (KUBESOLO_FLAT_URLS=1): <base>/kubesoloctl-linux-<arch>
 set -e
 
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.1.9}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.2.0}"
 DEFAULT_BASE_URL="https://github.com/portainer/kubesolo/releases/download"
 BASE_URL="${KUBESOLO_INSTALLER_BASE_URL:-$DEFAULT_BASE_URL}"
 FLAT_URLS="${KUBESOLO_FLAT_URLS:-0}"
