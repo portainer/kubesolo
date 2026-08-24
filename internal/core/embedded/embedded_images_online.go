@@ -1,4 +1,4 @@
-//go:build !offline
+//go:build !external_deps && !offline
 
 package embedded
 

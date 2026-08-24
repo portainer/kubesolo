@@ -1,4 +1,4 @@
-//go:build offline && riscv64
+//go:build !external_deps && offline && riscv64
 
 package embedded
 
