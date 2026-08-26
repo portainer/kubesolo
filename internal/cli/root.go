@@ -66,6 +66,7 @@ Examples:
 		uninstallCmd(),
 		upgradeCmd(&cfg),
 		kubeconfigCmd(),
+		configCmd(),
 		d2kCmd(),
 		downloadCmd(&cfg),
 		checkCmd(&cfg),
