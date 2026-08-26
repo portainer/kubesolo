@@ -2,18 +2,15 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"syscall"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/distribution/reference"
-	"github.com/portainer/kubesolo/internal/config/cpumanager"
+	"github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/config/flags"
 	"github.com/portainer/kubesolo/internal/core/embedded"
 	"github.com/portainer/kubesolo/internal/core/pki"
@@ -22,6 +19,7 @@ import (
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
+	"github.com/portainer/kubesolo/pkg/components/configapi"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/d2k"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
@@ -35,6 +33,7 @@ import (
 	kubesoloruntime "github.com/portainer/kubesolo/pkg/runtime"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
+	"sigs.k8s.io/yaml"
 )
 
 var (
@@ -45,28 +44,18 @@ var (
 
 // the main struct for the kubesolo application
 type kubesolo struct {
-	wg                     sync.WaitGroup
-	hostName               string
-	extraSANs              string
-	debug                  bool
-	pprofServer            bool
-	portainerEdgeID        string
-	portainerEdgeKey       string
-	portainerEdgeAsync     bool
-	portainerEdgeImage     string
-	loadBalancer           bool
-	localStorage           bool
-	localStorageSharedPath string
-	disableIPv6            bool
-	dbWALRepair            bool
-	d2k                    bool
-	d2kNamespace           string
-	runtimeEndpoint        cri.Endpoint
-	metricsServer          bool
-	metricsBindAddress     string
-	cpuManager             types.CPUManagerConfig
-	systemReserved         map[string]string
-	embedded               types.Embedded
+	wg       sync.WaitGroup
+	hostName string
+
+	// cfg is the resolved configuration: defaults, overlaid by the config file,
+	// then the environment, then the command line.
+	cfg *types.Config
+
+	// runtimeEndpoint is cfg.Runtime.Endpoint parsed. Empty means the embedded
+	// containerd, whose socket lives under cfg.Path.
+	runtimeEndpoint cri.Endpoint
+
+	embedded types.Embedded
 }
 
 // the channels for the kubesolo application
@@ -78,69 +67,46 @@ var (
 	controllerReadyCh = make(chan struct{})
 	kubeproxyReadyCh  = make(chan struct{})
 	metricsReadyCh    = make(chan struct{})
+	configAPIReadyCh  = make(chan struct{})
 )
 
-// service creates a new kubesolo application
+// service resolves the configuration and builds the application from it.
+//
+// Every check that used to live here now lives in config.Validate, which returns
+// errors instead of exiting so that the config API can reject a bad payload
+// without taking the cluster down.
 func service() (*kubesolo, error) {
-	d2kEnabled := *flags.D2K
-	if d2kEnabled && (runtime.GOARCH == "arm" || runtime.GOARCH == "riscv64") {
-		log.Warn().Str("component", "kubesolo").Str("arch", runtime.GOARCH).Msg("d2k is not supported on this architecture, disabling")
-		d2kEnabled = false
-	}
-	if d2kEnabled && !*flags.LoadBalancer {
-		log.Fatal().Str("component", "kubesolo").Msg("--d2k requires --load-balancer: the d2k Service endpoint is populated by the LoadBalancer webhook")
-	}
-
-	portainerEdgeImage, err := normaliseImageRef(*flags.PortainerEdgeImage)
+	cfg, warnings, err := config.Load(*flags.Config, config.FlagValues{
+		Values:    flags.Values(),
+		SetByUser: flags.SetByUser(),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	runtimeEndpoint, err := cri.Resolve(*flags.ContainerRuntimeEndpoint)
+	validationWarnings, err := config.Validate(cfg, config.Host{
+		NumCPU:        runtime.NumCPU(),
+		GOARCH:        runtime.GOARCH,
+		ContainerMode: system.IsRunningInContainer(),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	cpuManagerConfig, systemReserved, err := cpumanager.Parse(*flags.CPUManagerPolicy, *flags.CPUManagerPolicyOptions, *flags.ReservedCPUs, *flags.SystemReserved, runtime.NumCPU())
+	for _, w := range append(warnings, validationWarnings...) {
+		log.Warn().Str("component", "kubesolo").Msg(w.String())
+	}
+
+	runtimeEndpoint, err := cri.Resolve(cfg.Runtime.Endpoint)
 	if err != nil {
 		return nil, err
 	}
 
 	return &kubesolo{
-		hostName:               system.GetHostname(),
-		extraSANs:              *flags.APIServerExtraSANs,
-		debug:                  *flags.Debug,
-		pprofServer:            *flags.PprofServer,
-		portainerEdgeID:        *flags.PortainerEdgeID,
-		portainerEdgeKey:       *flags.PortainerEdgeKey,
-		portainerEdgeAsync:     *flags.PortainerEdgeAsync,
-		portainerEdgeImage:     portainerEdgeImage,
-		loadBalancer:           *flags.LoadBalancer,
-		localStorage:           *flags.LocalStorage,
-		localStorageSharedPath: *flags.LocalStorageSharedPath,
-		disableIPv6:            *flags.DisableIPv6,
-		dbWALRepair:            *flags.DBWALRepair,
-		d2k:                    d2kEnabled,
-		d2kNamespace:           *flags.D2KNamespace,
-		runtimeEndpoint:        runtimeEndpoint,
-		metricsServer:          *flags.MetricsServer,
-		metricsBindAddress:     *flags.MetricsBindAddress,
-		cpuManager:             cpuManagerConfig,
-		systemReserved:         systemReserved,
+		hostName:        system.GetHostname(),
+		cfg:             cfg,
+		runtimeEndpoint: runtimeEndpoint,
 	}, nil
-}
-
-// normaliseImageRef expands a short image reference such as portainerci/agent:develop
-// into a fully qualified one (docker.io/portainerci/agent:develop). The containerd
-// client, unlike the Docker CLI, applies no Docker Hub defaults and would otherwise
-// treat the first component as a registry host and fail to resolve it.
-func normaliseImageRef(image string) (string, error) {
-	named, err := reference.ParseNormalizedNamed(image)
-	if err != nil {
-		return "", fmt.Errorf("invalid image reference %q: %v", image, err)
-	}
-
-	return reference.TagNameOnly(named).String(), nil
 }
 
 // main is the entry point for the kubesolo application
@@ -160,17 +126,37 @@ func main() {
 		log.Warn().Str("component", "kubesolo").Msg("the --full flag (KUBESOLO_FULL) is deprecated and has no effect; KubeSolo always uses upstream Kubernetes defaults")
 	}
 
-	if *flags.StartupTimeout > 0 {
-		types.DefaultRetryCount = *flags.StartupTimeout / int(types.DefaultComponentSleep.Seconds())
-	}
-
 	service, err := service()
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create service. check the logs for more information. exiting...")
 	}
 
+	// --print-config is answered before anything is touched. It is the migration
+	// path off flags: run the binary with the flags an existing service unit
+	// passes and save the result as the config file.
+	if *flags.PrintConfig {
+		if err := printConfig(service.cfg); err != nil {
+			log.Fatal().Err(err).Msg("failed to print configuration")
+		}
+		os.Exit(0)
+	}
+
+	if service.cfg.Kubernetes.APIServer.StartupTimeoutSeconds > 0 {
+		types.DefaultRetryCount = service.cfg.Kubernetes.APIServer.StartupTimeoutSeconds / int(types.DefaultComponentSleep.Seconds())
+	}
+
 	service.bootstrap()
 	service.run()
+}
+
+// printConfig writes the resolved configuration to stdout.
+func printConfig(cfg *types.Config) error {
+	raw, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(raw)
+	return err
 }
 
 // run is the main function for the kubesolo application
@@ -231,7 +217,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kine",
 			start: func() {
-				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.dbWALRepair)
+				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.cfg.Storage.DBWALRepair)
 				s.wg.Go(func() {
 					_ = kineService.Run()
 				})
@@ -297,6 +283,13 @@ func (s *kubesolo) run() {
 		if svc.name == "kine" && s.embedded.Metrics.Enabled {
 			s.startMetricsService(ctx, cancel)
 		}
+
+		// The configuration API has no dependency on kine either; this is simply
+		// the point at which the control plane is far enough along to be worth
+		// exposing.
+		if svc.name == "kine" && s.cfg.API.Enabled {
+			s.startConfigAPIService(ctx, cancel)
+		}
 	}
 
 	// Ensure pod→external masquerade (SNAT) is in place before kubelet starts.
@@ -320,30 +313,30 @@ func (s *kubesolo) run() {
 		log.Fatal().Err(err).Msg("failed to deploy coredns")
 	}
 
-	if s.localStorage {
+	if s.cfg.Storage.LocalPath.Enabled {
 		log.Info().Str("component", "kubesolo").Msg("deploying local path...")
-		if err := localpath.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.LocalPathStorageDir, s.localStorageSharedPath); err != nil {
+		if err := localpath.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.LocalPathStorageDir, s.cfg.Storage.LocalPath.SharedPath); err != nil {
 			log.Error().Err(err).Msg("failed to deploy local path, continuing without it")
 		}
 	}
 
-	if s.portainerEdgeID != "" && s.portainerEdgeKey != "" {
+	if s.cfg.Portainer.EdgeID != "" && s.cfg.Portainer.EdgeKey != "" {
 		log.Info().Str("component", "kubesolo").Msg("deploying portainer edge agent...")
 		if err := portainer.DeployEdgeAgent(s.embedded.AdminKubeconfigFile, types.EdgeAgentConfig{
-			Image:            s.portainerEdgeImage,
-			EdgeID:           s.portainerEdgeID,
-			EdgeKey:          s.portainerEdgeKey,
-			EdgeAsync:        s.portainerEdgeAsync,
+			Image:            s.cfg.Portainer.Image,
+			EdgeID:           s.cfg.Portainer.EdgeID,
+			EdgeKey:          s.cfg.Portainer.EdgeKey,
+			EdgeAsync:        s.cfg.Portainer.Async,
 			EdgeInsecurePoll: "true",
 		}); err != nil {
 			log.Error().Err(err).Msg("failed to deploy portainer edge agent, continuing without it")
 		}
 	}
 
-	if s.d2k {
-		log.Info().Str("component", "kubesolo").Str("namespace", s.d2kNamespace).Msg("deploying d2k...")
+	if s.cfg.D2K.Enabled {
+		log.Info().Str("component", "kubesolo").Str("namespace", s.cfg.D2K.Namespace).Msg("deploying d2k...")
 		if err := d2k.Deploy(s.embedded.AdminKubeconfigFile, d2k.Config{
-			Namespace: s.d2kNamespace,
+			Namespace: s.cfg.D2K.Namespace,
 			Image:     types.DefaultD2KImage,
 			Certs:     s.embedded.D2KCerts,
 		}); err != nil {
@@ -451,6 +444,34 @@ func (s *kubesolo) startMetricsService(ctx context.Context, cancel context.Cance
 	})
 }
 
+// startConfigAPIService starts the optional configuration API on its unix
+// socket. Like the metrics endpoint it does not block startup: the API failing
+// must not stop KubeSolo from running.
+func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.CancelFunc) {
+	log.Info().
+		Str("component", "kubesolo").
+		Str("socket", s.cfg.API.SocketPath).
+		Msg("starting configuration API...")
+
+	configAPIService := configapi.NewService(ctx, cancel, configAPIReadyCh, configapi.Options{
+		SocketPath: s.cfg.API.SocketPath,
+		ConfigPath: *flags.Config,
+		Host: config.Host{
+			NumCPU:        runtime.NumCPU(),
+			GOARCH:        runtime.GOARCH,
+			ContainerMode: s.embedded.ContainerMode,
+		},
+	})
+	s.wg.Go(func() {
+		if err := configAPIService.Run(); err != nil {
+			log.Error().
+				Str("component", "kubesolo").
+				Err(err).
+				Msg("configuration API exited with error")
+		}
+	})
+}
+
 // waitForService waits for a service to be ready
 // it returns true if the service is ready
 // it returns false if the service is not ready and the shutdown signal has been received
@@ -469,12 +490,12 @@ func waitForService(ctx context.Context, name string, readyCh chan struct{}) boo
 // it sets up the logging, pprof server, and garbage collection
 // it also sets up all required paths for the application
 func (s *kubesolo) bootstrap() {
-	if s.debug {
+	if s.cfg.Logging.Debug {
 		log.Info().Msg("debug mode enabled")
 		logging.SetLoggingLevel("DEBUG")
 	}
 
-	if s.pprofServer {
+	if s.cfg.Logging.Pprof {
 		system.StartMonitoring()
 	}
 
@@ -487,27 +508,30 @@ func (s *kubesolo) bootstrap() {
 	// Load required kernel modules before any networking setup
 	system.LoadRequiredModules()
 
-	if s.disableIPv6 {
+	if s.cfg.Network.DisableIPv6 {
 		if err := network.DisableIPv6Sysctls(); err != nil {
 			log.Warn().Err(err).Msg("failed to disable ipv6 sysctls")
 		}
 	}
 
 	// System Node IP
-	nodeIP, nodeIPPinned, err := network.ResolveNodeIP(*flags.NodeIP)
+	nodeIP, nodeIPPinned, err := network.ResolveNodeIP(s.cfg.Network.NodeIP)
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to get node IP address, using default loopback IP address")
 	}
 
 	// LoadBalancer EXTERNAL-IP, which may differ from the node IP on multi-NIC hosts
-	loadBalancerIP := network.ResolveLoadBalancerIP(*flags.LoadBalancerIP, nodeIP)
+	loadBalancerIP := network.ResolveLoadBalancerIP(s.cfg.Network.LoadBalancer.IP, nodeIP)
 
 	// Network MTU
-	mtu, mtuPinned, err := network.ResolveMTU(*flags.MTU)
+	mtu, mtuPinned, err := network.ResolveMTU(s.cfg.Network.MTU)
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to detect network MTU, using default MTU")
 	}
-	if mtu < 1280 && !s.disableIPv6 {
+	// config.Validate already raises this for a configured MTU, so only the
+	// auto-detected case is left to report here — otherwise a user who
+	// configured a low MTU would be told about it twice.
+	if !mtuPinned && mtu < 1280 && !s.cfg.Network.DisableIPv6 {
 		log.Warn().Int("mtu", mtu).Msg("MTU is below the IPv6 minimum (1280); IPv6 pod traffic may fail to fragment correctly")
 	}
 
@@ -515,11 +539,8 @@ func (s *kubesolo) bootstrap() {
 	_ = os.Setenv("OTEL_SDK_DISABLED", "true")
 
 	// Setup paths
-	basePath := *flags.Path
-	containerMode := *flags.ContainerMode || system.IsRunningInContainer()
-	if containerMode && s.cpuManager.Policy == types.CPUManagerPolicyStatic {
-		log.Fatal().Str("component", "kubesolo").Msg("--cpu-manager-policy=static is not supported in container mode: exclusive cores are bounded by the container's own cpuset, which kubesolo does not control")
-	}
+	basePath := s.cfg.Path
+	containerMode := config.ResolveContainerMode(s.cfg, system.IsRunningInContainer())
 	if containerMode {
 		log.Info().Str("component", "kubesolo").Msg("container mode detected, using cgroupfs driver and relaxed eviction thresholds")
 
@@ -532,179 +553,22 @@ func (s *kubesolo) bootstrap() {
 		}
 	}
 
-	// Container runtime endpoint. Without --container-runtime-endpoint KubeSolo
-	// starts its own containerd and talks to it over the socket under --path.
-	containerdSocketFile := filepath.Join(basePath, types.DefaultContainerdDir, types.DefaultContainerdSocket)
-	runtimeEndpoint := s.runtimeEndpoint
-	if !runtimeEndpoint.External {
-		runtimeEndpoint = cri.Embedded(containerdSocketFile)
-	}
-
 	// Clean stale runtime state from previous runs (e.g., after reboot)
 	// This removes stale sockets and containerd runtime state that reference
 	// dead processes, while preserving images, kine database, and PKI certs.
-	cleanStaleState(basePath, runtimeEndpoint.External)
+	//
+	// s.runtimeEndpoint.External is used rather than the endpoint BuildEmbedded
+	// resolves: substituting the embedded endpoint never changes External, since
+	// cri.Embedded leaves it false.
+	cleanStaleState(basePath, s.runtimeEndpoint.External)
 
-	s.embedded = types.Embedded{
-		// System Node IP
+	s.embedded = config.BuildEmbedded(s.cfg, config.Probe{
 		NodeIP:          nodeIP,
-		NodeIPSpecified: nodeIPPinned,
-
-		// Network MTU
-		MTU:          mtu,
-		MTUSpecified: mtuPinned,
-
-		// Admin kubeconfig file
-		AdminKubeconfigFile: filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.kubeconfig"),
-
-		// PKI paths
-		PKIDir:              filepath.Join(basePath, types.DefaultPKIDir),
-		PKICADir:            filepath.Join(basePath, types.DefaultPKIDir, "ca"),
-		PKIAdminDir:         filepath.Join(basePath, types.DefaultPKIDir, "admin"),
-		PKIAPIServerDir:     filepath.Join(basePath, types.DefaultPKIDir, "apiserver"),
-		PKIControllerDir:    filepath.Join(basePath, types.DefaultPKIDir, "controller-manager"),
-		PKIKubeletDir:       filepath.Join(basePath, types.DefaultPKIDir, "kubelet"),
-		PKIWebhookDir:       filepath.Join(basePath, types.DefaultPKIDir, "webhook"),
-		PKIRequestHeaderDir: filepath.Join(basePath, types.DefaultPKIDir, "request-header"),
-
-		// Certificate paths
-		KubeletCerts: types.KubeletCertificatePaths{
-			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
-				Cert:   filepath.Join(basePath, types.DefaultPKIDir, "kubelet", "kubelet.crt"),
-				Key:    filepath.Join(basePath, types.DefaultPKIDir, "kubelet", "kubelet.key"),
-			},
-		},
-		APIServerCerts: types.APIServerCertificatePaths{
-			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
-				Cert:   filepath.Join(basePath, types.DefaultPKIDir, "apiserver", "apiserver.crt"),
-				Key:    filepath.Join(basePath, types.DefaultPKIDir, "apiserver", "apiserver.key"),
-			},
-		},
-		ControllerManagerCerts: types.ControllerManagerCertificatePaths{
-			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
-				Cert:   filepath.Join(basePath, types.DefaultPKIDir, "controller-manager", "controller-manager.crt"),
-				Key:    filepath.Join(basePath, types.DefaultPKIDir, "controller-manager", "controller-manager.key"),
-			},
-		},
-		AdminCerts: types.AdminCertificatePaths{
-			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
-				Cert:   filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.crt"),
-				Key:    filepath.Join(basePath, types.DefaultPKIDir, "admin", "admin.key"),
-			},
-		},
-		WebhookCerts: types.WebhookCertificatePaths{
-			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
-				Cert:   filepath.Join(basePath, types.DefaultPKIDir, "webhook", "webhook.crt"),
-				Key:    filepath.Join(basePath, types.DefaultPKIDir, "webhook", "webhook.key"),
-			},
-		},
-		CACerts: types.CACertificatePaths{
-			Cert: filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
-			Key:  filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.key"),
-		},
-		RequestHeaderCerts: types.RequestHeaderCertificatePaths{
-			CACert:     filepath.Join(basePath, types.DefaultPKIDir, "request-header", "request-header-ca.crt"),
-			CAKey:      filepath.Join(basePath, types.DefaultPKIDir, "request-header", "request-header-ca.key"),
-			ClientCert: filepath.Join(basePath, types.DefaultPKIDir, "request-header", "request-header-client.crt"),
-			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, "request-header", "request-header-client.key"),
-		},
-
-		// Containerd paths
-		ContainerdDir:               filepath.Join(basePath, types.DefaultContainerdDir),
-		ContainerdSocketFile:        containerdSocketFile,
-		ContainerdBinaryFile:        filepath.Join(basePath, types.DefaultContainerdDir, "containerd"),
-		ContainerdImagesDir:         filepath.Join(basePath, types.DefaultContainerdDir, "images"),
-		ContainerdShimBinaryFile:    filepath.Join(basePath, types.DefaultContainerdDir, "containerd-shim-runc-v2"),
-		ContainerdConfigFile:        filepath.Join(basePath, types.DefaultContainerdDir, "config.toml"),
-		ContainerdRootDir:           filepath.Join(basePath, types.DefaultContainerdDir, "root"),
-		ContainerdStateDir:          filepath.Join(basePath, types.DefaultContainerdDir, "state"),
-		ContainerdRegistryConfigDir: filepath.Join(basePath, types.DefaultContainerdDir, "registry"),
-
-		// CNI paths
-		ContainerdCNIDir:        filepath.Join(basePath, types.DefaultContainerdDir, "cni"),
-		ContainerdCNIPluginsDir: filepath.Join(basePath, types.DefaultContainerdDir, "cni", "plugins"),
-		ContainerdCNIConfigDir:  filepath.Join(basePath, types.DefaultContainerdDir, "cni", "conf"),
-		ContainerdCNIConfigFile: filepath.Join(basePath, types.DefaultContainerdDir, "cni", "conf", types.DefaultCNIConfigName),
-
-		// Crun binary
-		CrunBinaryFile: filepath.Join(basePath, types.DefaultContainerdDir, "crun"),
-
-		// Container runtime
-		RuntimeExternal:   runtimeEndpoint.External,
-		RuntimeEndpoint:   runtimeEndpoint.URL,
-		RuntimeSocketPath: runtimeEndpoint.SocketPath,
-
-		// Kubelet paths
-		KubeletDir:            filepath.Join(basePath, types.DefaultKubeletDir),
-		KubeletConfigDir:      filepath.Join(basePath, types.DefaultKubeletDir, "config"),
-		KubeletConfigFile:     filepath.Join(basePath, types.DefaultKubeletDir, "config", "config.yaml"),
-		KubeletKubeConfigFile: filepath.Join(basePath, types.DefaultPKIDir, "kubelet", "kubelet.kubeconfig"),
-		KubeletPluginsDir:     filepath.Join(basePath, types.DefaultKubeletDir, "volumeplugins"),
-
-		// API Server paths
-		APIServerDir:          filepath.Join(basePath, types.DefaultAPIServerDir),
-		ServiceAccountKeyFile: filepath.Join(basePath, types.DefaultPKIDir, "apiserver", "service-account.key"),
-		// API Server extra SANs
-		APIServerExtraSANs: strings.Split(s.extraSANs, ","),
-
-		// Kine paths
-		KineDir:        filepath.Join(basePath, types.KubesoloKineDir),
-		KineSocketFile: filepath.Join(basePath, types.KubesoloKineDir, "socket"),
-
-		// Controller manager paths
-		ControllerDir: filepath.Join(basePath, types.KubesoloControllerManagerDir),
-
-		// Webhook paths
-		WebhookDir: filepath.Join(basePath, types.KubesoloWebhookDir),
-
-		// Image paths
-		PortainerEdgeImageFile:        filepath.Join(basePath, types.DefaultContainerdDir, "images", "portainer-agent.tar.gz"),
-		CorednsImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "coredns.tar.gz"),
-		SandboxImageFile:              filepath.Join(basePath, types.DefaultContainerdDir, "images", "pause.tar.gz"),
-		LocalPathProvisionerImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "local-path-provisioner.tar.gz"),
-
-		// Load Balancer
-		LoadBalancer:   s.loadBalancer,
-		LoadBalancerIP: loadBalancerIP,
-
-		// Local Path Storage
-		LocalPathStorageDir: filepath.Join(basePath, types.DefaultLocalPathStorageDir),
-
-		// Portainer Edge
-		IsPortainerEdge:    s.portainerEdgeID != "" && s.portainerEdgeKey != "",
-		PortainerEdgeImage: s.portainerEdgeImage,
-
-		// Container Mode
-		ContainerMode: containerMode,
-
-		// IPv6
-		DisableIPv6: s.disableIPv6,
-
-		// d2k integration
-		D2K:          s.d2k,
-		D2KNamespace: s.d2kNamespace,
-		D2KCerts: types.D2KCertificatePaths{
-			CACert:     filepath.Join(basePath, types.DefaultPKIDir, "ca", "ca.crt"),
-			ServerCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.crt"),
-			ServerKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "server.key"),
-			ClientCert: filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.crt"),
-			ClientKey:  filepath.Join(basePath, types.DefaultPKIDir, types.DefaultD2KDir, "client.key"),
-		},
-		D2KImageFile: filepath.Join(basePath, types.DefaultContainerdDir, "images", "d2k.tar.gz"),
-
-		// CPU manager
-		CPUManager:     s.cpuManager,
-		SystemReserved: s.systemReserved,
-
-		// Metrics endpoint
-		Metrics: types.MetricsConfig{
-			Enabled:     s.metricsServer,
-			BindAddress: s.metricsBindAddress,
-		},
-	}
+		NodeIPPinned:    nodeIPPinned,
+		LoadBalancerIP:  loadBalancerIP,
+		MTU:             mtu,
+		MTUPinned:       mtuPinned,
+		ContainerMode:   containerMode,
+		RuntimeEndpoint: s.runtimeEndpoint,
+	})
 }
