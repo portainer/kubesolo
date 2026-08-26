@@ -1,5 +1,13 @@
 package config
 
+import (
+	"runtime"
+	"strings"
+
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
+	"github.com/portainer/kubesolo/types"
+)
+
 const (
 	DefaultVersion     = "v1.1.8"
 	DefaultPath        = "/var/lib/kubesolo"
@@ -19,6 +27,11 @@ const (
 	// CPUManagerPolicyNone is the default kubelet CPU manager policy, in which every
 	// pod shares all CPUs. Mirrors types.CPUManagerPolicyNone in the kubesolo binary.
 	CPUManagerPolicyNone = "none"
+
+	// MinConfigFileVersion is the first KubeSolo release whose binary understands
+	// --config. Older binaries are installed with the full flag list instead:
+	// passing them --config would abort the service on every start.
+	MinConfigFileVersion = "v1.3.0"
 
 	// MinD2KVersion is the first KubeSolo release whose binary understands the
 	// --d2k / --d2k-namespace flags (d2k integration landed after v1.1.5).
@@ -127,19 +140,33 @@ type Config struct {
 	// ports and ranges map host==container. It is a container-runtime concern and
 	// is deliberately NOT passed to the kubesolo binary via CmdArgs.
 	ContainerPorts string
+
+	// ConfigFile is where the KubeSolo configuration document is written, and
+	// the only flag passed to the binary once it is. Empty means the target
+	// binary predates the configuration file and must be given flags instead.
+	ConfigFile string
 }
 
-// CmdArgs builds the argument list that will be passed to the kubesolo binary
-// when constructing service files or launching in daemon/foreground mode.
+// CmdArgs builds the argument list passed to the kubesolo binary when
+// constructing service files or launching in daemon/foreground mode.
+//
+// When the target binary understands --config, that is the whole command line:
+// every setting lives in the configuration file instead. Older binaries predate
+// the file and still get the full flag list, so kubesoloctl can install them.
 func (c *Config) CmdArgs() []string {
-	args := []string{"--path=" + c.Path}
-
-	// Container mode targets CI/developer environments where memory is not
-	// constrained, so always run with upstream Kubernetes defaults (--full)
-	// instead of the edge memory-saving overrides.
-	if c.RunMode == RunModeContainer {
-		args = append(args, "--full")
+	if c.ConfigFile != "" {
+		return []string{"--config=" + c.ConfigFile}
 	}
+	return c.kubesoloFlags()
+}
+
+// kubesoloFlags renders the KubeSolo settings as flags.
+//
+// It remains the single description of how an installer setting maps onto a
+// KubeSolo one: ToKubeSoloConfig resolves these same flags through the loader
+// the binary itself uses, so the two cannot drift.
+func (c *Config) kubesoloFlags() []string {
+	args := []string{"--path=" + c.Path}
 
 	if c.APIServerExtraSANs != "" {
 		args = append(args, "--apiserver-extra-sans="+c.APIServerExtraSANs)
@@ -211,4 +238,55 @@ func (c *Config) CmdArgs() []string {
 	// transport reads those variables automatically, so no --proxy flag is
 	// needed on the kubesolo command line.
 	return args
+}
+
+// ToKubeSoloConfig resolves the installer's settings into the KubeSolo
+// configuration document that will be written to ConfigFile.
+//
+// The mapping is not written out a second time here. kubesoloFlags renders the
+// settings as flags, and those flags are resolved through the same loader the
+// kubesolo binary uses, against the same field registry. A setting can therefore
+// not mean one thing to the installer and another to KubeSolo.
+//
+// The environment is deliberately excluded: kubesoloctl's own environment is not
+// the installed service's, and folding it in would write values into the file
+// that the operator never asked for.
+func (c *Config) ToKubeSoloConfig() (*types.Config, []kubesoloconfig.Warning, error) {
+	values, setByUser := splitFlagArgs(c.kubesoloFlags())
+
+	cfg, warnings, err := kubesoloconfig.LoadWithoutEnv("", kubesoloconfig.FlagValues{
+		Values:    values,
+		SetByUser: setByUser,
+	})
+	if err != nil {
+		return nil, warnings, err
+	}
+
+	validationWarnings, err := kubesoloconfig.Validate(cfg, kubesoloconfig.Host{
+		NumCPU: runtime.NumCPU(),
+		GOARCH: runtime.GOARCH,
+
+		// kubesoloctl cannot know whether the installed KubeSolo will run inside
+		// a container, so it reports the answer it does know. Container run mode
+		// is rejected separately in runInstall, before this is reached.
+		ContainerMode: c.RunMode == RunModeContainer,
+	})
+	return cfg, append(warnings, validationWarnings...), err
+}
+
+// splitFlagArgs turns "--name=value" and bare "--name" into the two maps the
+// loader consumes. A bare flag is boolean and means true.
+func splitFlagArgs(args []string) (values map[string]string, setByUser map[string]bool) {
+	values, setByUser = map[string]string{}, map[string]bool{}
+
+	for _, arg := range args {
+		name, value, hasValue := strings.Cut(strings.TrimPrefix(arg, "--"), "=")
+		if !hasValue {
+			value = "true"
+		}
+		values[name] = value
+		setByUser[name] = true
+	}
+
+	return values, setByUser
 }

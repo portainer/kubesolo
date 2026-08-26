@@ -69,18 +69,15 @@ func TestCmdArgs_FalseFieldsOmitted(t *testing.T) {
 	}
 }
 
-func TestCmdArgs_ContainerModeAddsFull(t *testing.T) {
-	cfg := &Config{Path: "/var/lib/kubesolo", RunMode: RunModeContainer}
-	if !hasArg(cfg.CmdArgs(), "--full") {
-		t.Errorf("container mode must always pass --full, got: %v", cfg.CmdArgs())
-	}
-}
-
-func TestCmdArgs_NonContainerModeOmitsFull(t *testing.T) {
-	for _, mode := range []string{"", RunModeService, RunModeDaemon, RunModeForeground} {
+// TestCmdArgs_NeverPassesFull covers every run mode. --full has had no effect
+// for several releases and is not represented in the configuration document, so
+// it is no longer passed at all; the flag remains on the binary, still warning,
+// for anyone who set it by hand.
+func TestCmdArgs_NeverPassesFull(t *testing.T) {
+	for _, mode := range []string{"", RunModeService, RunModeDaemon, RunModeForeground, RunModeContainer} {
 		cfg := &Config{Path: "/var/lib/kubesolo", RunMode: mode}
 		if hasArg(cfg.CmdArgs(), "--full") {
-			t.Errorf("run mode %q must not pass --full, got: %v", mode, cfg.CmdArgs())
+			t.Errorf("run mode %q must not pass the deprecated --full, got: %v", mode, cfg.CmdArgs())
 		}
 	}
 }

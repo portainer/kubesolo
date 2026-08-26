@@ -1,7 +1,12 @@
 package cli
 
 import (
+	"errors"
+	"io/fs"
+	"path/filepath"
+
 	"fmt"
+	"github.com/portainer/kubesolo/types"
 	"os"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
@@ -18,6 +23,7 @@ func uninstallCmd() *cobra.Command {
 	var purge bool
 	var removeKubeconfig bool
 	var name string
+	var keepConfig bool
 
 	cmd := &cobra.Command{
 		Use:   "uninstall",
@@ -27,7 +33,7 @@ func uninstallCmd() *cobra.Command {
 By default the data directory (` + config.DefaultPath + `) is left intact so that
 cluster state is preserved. Use --purge to also remove it.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUninstall(name, purge, removeKubeconfig)
+			return runUninstall(name, purge, removeKubeconfig, keepConfig)
 		},
 	}
 
@@ -37,10 +43,12 @@ cluster state is preserved. Use --purge to also remove it.`,
 		"Also remove the data directory ("+config.DefaultPath+") — this deletes all cluster state")
 	cmd.Flags().BoolVar(&removeKubeconfig, "remove-kubeconfig", false,
 		"Remove the KubeSolo context, cluster, and user entries from ~/.kube/config")
+	cmd.Flags().BoolVar(&keepConfig, "keep-config", false,
+		"Leave the configuration file ("+types.DefaultConfigFile+") in place, so a reinstall reuses these settings")
 	return cmd
 }
 
-func runUninstall(name string, purge, removeKubeconfig bool) error {
+func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	p := ui.New()
 	p.Header("uninstall")
 
@@ -123,6 +131,16 @@ func runUninstall(name string, purge, removeKubeconfig bool) error {
 		p.Info("Data directory preserved: " + config.DefaultPath + " (use --purge to remove)")
 	}
 
+	// ── Remove configuration ──────────────────────────────────────────────────
+	// The configuration is removed by default even without --purge: unlike the
+	// data directory it holds no cluster state, only settings, and leaving a
+	// stale file behind would silently configure a later reinstall.
+	if keepConfig {
+		p.Info("Configuration preserved: " + types.DefaultConfigFile)
+	} else {
+		removeConfigFile(p)
+	}
+
 	// ── Clean kubeconfig ──────────────────────────────────────────────────────
 	if removeKubeconfig {
 		p.Step("Cleaning kubeconfig")
@@ -193,4 +211,25 @@ func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig b
 		p.Done("KubeSolo uninstalled.")
 	}
 	return nil
+}
+
+// removeConfigFile deletes the configuration file and its backup, and the
+// directory holding them if nothing else is left there.
+func removeConfigFile(p *ui.Printer) {
+	dir := filepath.Dir(types.DefaultConfigFile)
+
+	for _, path := range []string{types.DefaultConfigFile, types.DefaultConfigFile + ".bak"} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			p.Warn("could not remove " + path + ": " + err.Error())
+			return
+		}
+	}
+
+	// Only remove the directory if it is now empty: an operator may keep other
+	// files alongside it.
+	if entries, err := os.ReadDir(dir); err == nil && len(entries) == 0 {
+		_ = os.Remove(dir)
+	}
+
+	p.OK("Configuration removed", types.DefaultConfigFile)
 }

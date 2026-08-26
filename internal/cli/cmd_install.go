@@ -14,7 +14,10 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/config/cpumanager"
+	"github.com/portainer/kubesolo/types"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -246,6 +249,13 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	} else {
 		p.Step(fmt.Sprintf("Configuring %s service", info.InitSystem))
 	}
+	// ── Configuration file ────────────────────────────────────────────────────
+	// Written before the service is defined, so its command line can be the
+	// single --config flag. Container mode is excluded — see writeConfigFile.
+	if err := writeConfigFile(p, cfg, containerMode); err != nil {
+		return p.Fail("configuration", err)
+	}
+
 	mgr, err := service.New(info, cfg.RunMode, cfg.Name)
 	if err != nil {
 		return p.Fail("service setup", err)
@@ -330,5 +340,46 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		}
 	}
 
+	return nil
+}
+
+// writeConfigFile renders the installer's settings into the KubeSolo
+// configuration document and saves it, then points cfg at it so the service
+// command line collapses to a single --config flag.
+//
+// Two cases keep their flags instead.
+//
+// Older binaries predate --config entirely; passing it would abort the service
+// on every start, so kubesoloctl can still install them the old way.
+//
+// Container run mode stores KubeSolo's state in a Docker named volume rather
+// than on the host, so there is no host directory to write the file into and
+// bind-mount back. /etc is also not shared into Docker Desktop on macOS by
+// default, where container mode is the only supported mode. Container mode is a
+// developer and CI convenience, so it keeps the flag-based command line.
+func writeConfigFile(p *ui.Printer, cfg *config.Config, containerMode bool) error {
+	if containerMode {
+		return nil
+	}
+	if cmp, ok := compareVersions(cfg.Version, config.MinConfigFileVersion); ok && cmp < 0 {
+		log.Info().Msgf("kubesolo %s predates the configuration file; installing with flags instead", cfg.Version)
+		return nil
+	}
+
+	cfg.ConfigFile = types.DefaultConfigFile
+
+	doc, warnings, err := cfg.ToKubeSoloConfig()
+	for _, w := range warnings {
+		p.Warn(w.String())
+	}
+	if err != nil {
+		return err
+	}
+
+	if err := kubesoloconfig.Write(cfg.ConfigFile, doc); err != nil {
+		return err
+	}
+
+	p.OK("Configuration written", cfg.ConfigFile)
 	return nil
 }

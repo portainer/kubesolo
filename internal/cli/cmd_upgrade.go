@@ -73,6 +73,11 @@ func runUpgrade(cfg *config.Config) error {
 	restoreSELinux(config.DefaultInstallPath)
 	p.OK(fmt.Sprintf("KubeSolo %s installed", cfg.Version), config.DefaultInstallPath)
 
+	// ── Move flags into a configuration file ──────────────────────────────────
+	// Runs after the binary is replaced, so the conversion is performed by the
+	// version that will actually read the result. A no-op once migrated.
+	migrateToConfigFile(p, cfg, info)
+
 	// ── Restart service ───────────────────────────────────────────────────────
 	p.Step(fmt.Sprintf("Restarting %s service", info.InitSystem))
 	if err := runServiceAction(info.InitSystem, "start"); err != nil {
