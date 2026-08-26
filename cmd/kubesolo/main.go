@@ -200,7 +200,7 @@ func (s *kubesolo) run() {
 	}
 
 	log.Info().Str("component", "kubesolo").Msg("checking PKI validity against current node IPs...")
-	if err := pki.InvalidateIfIPChanged(s.embedded); err != nil {
+	if err := pki.InvalidateIfStale(s.embedded); err != nil {
 		log.Fatal().Err(err).Msg("failed to invalidate PKI directory")
 	}
 

@@ -24,7 +24,7 @@ type trackedCertificate struct {
 //
 // Certificates are read and parsed at scrape time rather than cached at
 // startup: kubesolo re-signs its leaf certificates when the node IP changes or
-// an existing cert has expired (see pki.InvalidateIfIPChanged), so a cached
+// an existing cert has expired (see pki.InvalidateIfStale), so a cached
 // value would keep reporting the pre-rotation expiry until the next restart.
 // The cost is a handful of small file reads per scrape.
 type certificateCollector struct {
