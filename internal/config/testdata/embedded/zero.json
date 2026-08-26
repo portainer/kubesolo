@@ -1,0 +1,110 @@
+{
+  "NodeIP": "",
+  "NodeIPSpecified": false,
+  "MTU": 0,
+  "MTUSpecified": false,
+  "PKIDir": "pki",
+  "PKICADir": "pki/ca",
+  "PKIAdminDir": "pki/admin",
+  "PKIAPIServerDir": "pki/apiserver",
+  "PKIControllerDir": "pki/controller-manager",
+  "PKIKubeletDir": "pki/kubelet",
+  "PKIWebhookDir": "pki/webhook",
+  "PKIRequestHeaderDir": "pki/request-header",
+  "AdminKubeconfigFile": "pki/admin/admin.kubeconfig",
+  "KubeletCerts": {
+    "CACert": "pki/ca/ca.crt",
+    "Cert": "pki/kubelet/kubelet.crt",
+    "Key": "pki/kubelet/kubelet.key"
+  },
+  "APIServerCerts": {
+    "CACert": "pki/ca/ca.crt",
+    "Cert": "pki/apiserver/apiserver.crt",
+    "Key": "pki/apiserver/apiserver.key"
+  },
+  "ControllerManagerCerts": {
+    "CACert": "pki/ca/ca.crt",
+    "Cert": "pki/controller-manager/controller-manager.crt",
+    "Key": "pki/controller-manager/controller-manager.key"
+  },
+  "AdminCerts": {
+    "CACert": "pki/ca/ca.crt",
+    "Cert": "pki/admin/admin.crt",
+    "Key": "pki/admin/admin.key"
+  },
+  "WebhookCerts": {
+    "CACert": "pki/ca/ca.crt",
+    "Cert": "pki/webhook/webhook.crt",
+    "Key": "pki/webhook/webhook.key"
+  },
+  "CACerts": {
+    "Cert": "pki/ca/ca.crt",
+    "Key": "pki/ca/ca.key"
+  },
+  "RequestHeaderCerts": {
+    "CACert": "pki/request-header/request-header-ca.crt",
+    "CAKey": "pki/request-header/request-header-ca.key",
+    "ClientCert": "pki/request-header/request-header-client.crt",
+    "ClientKey": "pki/request-header/request-header-client.key"
+  },
+  "ContainerdDir": "containerd",
+  "ContainerdSocketFile": "containerd/containerd.sock",
+  "ContainerdBinaryFile": "containerd/containerd",
+  "ContainerdImagesDir": "containerd/images",
+  "ContainerdConfigFile": "containerd/config.toml",
+  "ContainerdShimBinaryFile": "containerd/containerd-shim-runc-v2",
+  "ContainerdRootDir": "containerd/root",
+  "ContainerdStateDir": "containerd/state",
+  "ContainerdRegistryConfigDir": "containerd/registry",
+  "ContainerdCNIDir": "containerd/cni",
+  "ContainerdCNIPluginsDir": "containerd/cni/plugins",
+  "ContainerdCNIConfigDir": "containerd/cni/conf",
+  "ContainerdCNIConfigFile": "containerd/cni/conf/10-bridge.conflist",
+  "CrunBinaryFile": "containerd/crun",
+  "RuntimeExternal": false,
+  "RuntimeEndpoint": "unix://containerd/containerd.sock",
+  "RuntimeSocketPath": "containerd/containerd.sock",
+  "RuntimeCgroupDriver": "",
+  "KubeletDir": "kubelet",
+  "KubeletConfigDir": "kubelet/config",
+  "KubeletConfigFile": "kubelet/config/config.yaml",
+  "KubeletKubeConfigFile": "pki/kubelet/kubelet.kubeconfig",
+  "KubeletPluginsDir": "kubelet/volumeplugins",
+  "APIServerDir": "apiserver",
+  "ServiceAccountKeyFile": "pki/apiserver/service-account.key",
+  "APIServerExtraSANs": null,
+  "KineDir": "kine/db",
+  "KineSocketFile": "kine/db/socket",
+  "ControllerDir": "controller-manager/config",
+  "WebhookDir": "pki/webhook",
+  "PortainerEdgeImageFile": "containerd/images/portainer-agent.tar.gz",
+  "CorednsImageFile": "containerd/images/coredns.tar.gz",
+  "SandboxImageFile": "containerd/images/pause.tar.gz",
+  "LocalPathProvisionerImageFile": "containerd/images/local-path-provisioner.tar.gz",
+  "D2KImageFile": "containerd/images/d2k.tar.gz",
+  "LoadBalancer": false,
+  "LoadBalancerIP": "",
+  "LocalPathStorageDir": "local-path-storage",
+  "IsPortainerEdge": false,
+  "PortainerEdgeImage": "",
+  "ContainerMode": false,
+  "DisableIPv6": false,
+  "D2K": false,
+  "D2KNamespace": "",
+  "D2KCerts": {
+    "CACert": "pki/ca/ca.crt",
+    "ServerCert": "pki/d2k/server.crt",
+    "ServerKey": "pki/d2k/server.key",
+    "ClientCert": "pki/d2k/client.crt",
+    "ClientKey": "pki/d2k/client.key"
+  },
+  "Metrics": {
+    "enabled": false,
+    "bindAddress": ""
+  },
+  "CPUManager": {
+    "policy": "",
+    "reservedCPUs": ""
+  },
+  "SystemReserved": null
+}

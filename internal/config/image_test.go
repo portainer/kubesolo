@@ -1,4 +1,4 @@
-package main
+package config
 
 import "testing"
 
@@ -16,17 +16,17 @@ func TestNormaliseImageRef(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, err := normaliseImageRef(tt.in)
+		got, err := NormaliseImageRef(tt.in)
 		if err != nil {
-			t.Errorf("normaliseImageRef(%q) returned error: %v", tt.in, err)
+			t.Errorf("NormaliseImageRef(%q) returned error: %v", tt.in, err)
 			continue
 		}
 		if got != tt.want {
-			t.Errorf("normaliseImageRef(%q) = %q, want %q", tt.in, got, tt.want)
+			t.Errorf("NormaliseImageRef(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 
-	if _, err := normaliseImageRef("NOT A REF"); err == nil {
-		t.Errorf("normaliseImageRef should reject an invalid reference")
+	if _, err := NormaliseImageRef("NOT A REF"); err == nil {
+		t.Errorf("NormaliseImageRef should reject an invalid reference")
 	}
 }
