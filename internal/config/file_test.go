@@ -210,3 +210,46 @@ func TestWriteFillsSchemaFields(t *testing.T) {
 		t.Errorf("written file should declare its schema, got %v", warnings)
 	}
 }
+
+// TestUnexpectedKindWarns covers a document copied from another tool: the schema
+// is not in doubt when the apiVersion is right, so the file is still read — but
+// accepting a foreign kind in silence hides the mistake.
+func TestUnexpectedKindWarns(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		kind        string
+		wantWarning bool
+	}{
+		{"correct kind", "kind: Config\n", false},
+		{"absent kind", "", false},
+		{"foreign kind", "kind: ClusterConfiguration\n", true},
+		{"misspelled kind", "kind: config\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			body := "apiVersion: kubesolo.io/v1alpha1\n" + tc.kind + "network:\n  nodeIP: 10.0.0.5\n"
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			cfg := Defaults()
+			_, warnings, err := Read(path, cfg)
+			if err != nil {
+				t.Fatalf("a kind mismatch must not be fatal: %v", err)
+			}
+			if cfg.Network.NodeIP != "10.0.0.5" {
+				t.Errorf("the file should still be read, nodeIP = %q", cfg.Network.NodeIP)
+			}
+
+			got := false
+			for _, w := range warnings {
+				if strings.Contains(w.Message, "kind") {
+					got = true
+				}
+			}
+			if got != tc.wantWarning {
+				t.Errorf("kind warning = %v, want %v (warnings: %v)", got, tc.wantWarning, warnings)
+			}
+		})
+	}
+}

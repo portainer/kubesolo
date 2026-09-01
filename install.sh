@@ -1184,7 +1184,7 @@ for arg in "$@"; do
       echo "  --apiserver-extra-sans=SANS  Set additional Subject Alternative Names for the API server"
       echo "  --portainer-edge-id=ID       Set Portainer Edge ID"
       echo "  --portainer-edge-key=KEY     Set Portainer Edge Key"
-      echo "  --portainer-edge-async|false   Enable Portainer Edge Async (default: $PORTAINER_EDGE_ASYNC)"
+      echo "  --portainer-edge-async=true|false  Enable Portainer Edge Async (default: $PORTAINER_EDGE_ASYNC)"
       echo "  --portainer-edge-image=IMAGE        Set the Portainer Edge Agent image (default: docker.io/portainer/agent:lts)"
       echo "  --local-storage=true|false   Enable local storage (default: $LOCAL_STORAGE)"
       echo "  --d2k=true|false             Embed d2k Docker-to-Kubernetes API translator (default: $D2K)"
@@ -1403,7 +1403,11 @@ if "$INSTALL_PATH" --help 2>&1 | grep -q -- 'print-config'; then
     # Written via a temporary file so a failure part-way through cannot leave a
     # truncated configuration in place.
     CONFIG_TMP="$CONFIG_FILE.tmp.$$"
-    if eval "\"$INSTALL_PATH\" $CMD_ARGS --print-config" > "$CONFIG_TMP" 2>/dev/null && [ -s "$CONFIG_TMP" ]; then
+    # $CMD_ARGS is deliberately unquoted so it splits into separate arguments,
+    # and deliberately not eval'd: these values come from installer flags and the
+    # environment, and eval would re-evaluate a command substitution inside one.
+    # set -f runs in a subshell so a value such as a wildcard SAN is not globbed.
+    if ( set -f; "$INSTALL_PATH" $CMD_ARGS --print-config ) > "$CONFIG_TMP" 2>/dev/null && [ -s "$CONFIG_TMP" ]; then
         chmod 600 "$CONFIG_TMP"
         mv "$CONFIG_TMP" "$CONFIG_FILE"
         CMD_ARGS="--config=$CONFIG_FILE"

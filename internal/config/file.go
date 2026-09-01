@@ -56,6 +56,7 @@ func unmarshal(raw []byte, source string, cfg *types.Config) ([]Warning, error) 
 	// file that omitted it from one that got it right.
 	var meta struct {
 		APIVersion string `json:"apiVersion"`
+		Kind       string `json:"kind"`
 	}
 	if err := yaml.Unmarshal(raw, &meta); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", source, err)
@@ -69,6 +70,21 @@ func unmarshal(raw []byte, source string, cfg *types.Config) ([]Warning, error) 
 	default:
 		return nil, fmt.Errorf("%s declares apiVersion %q, which this version of KubeSolo does not understand (expected %s)",
 			source, meta.APIVersion, types.ConfigAPIVersion)
+	}
+
+	// A wrong kind is a warning rather than an error, unlike a wrong apiVersion.
+	// An apiVersion KubeSolo does not know means the schema cannot be
+	// interpreted; a wrong kind alongside a known apiVersion is a copy-and-paste
+	// artefact from another tool, where the schema is not in doubt. Saying so
+	// beats accepting it in silence.
+	//
+	// An absent kind is not reported: Write fills it in, and a file that declares
+	// neither field has already been warned about above.
+	if meta.Kind != "" && meta.Kind != types.ConfigKind {
+		warnings = append(warnings, Warning{
+			Message: fmt.Sprintf("%s declares kind %q; KubeSolo only has %s, and read the file as one",
+				source, meta.Kind, types.ConfigKind),
+		})
 	}
 
 	// Strict decoding rejects unknown and duplicated keys; lenient decoding does

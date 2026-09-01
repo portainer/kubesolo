@@ -186,3 +186,45 @@ func TestCmdArgsCollapsesToConfigFlag(t *testing.T) {
 		t.Errorf("CmdArgs() = %v, want %v", got, want)
 	}
 }
+
+// TestInstallScriptUsageMatchesItsParser checks install.sh's own --help output
+// against the flags it actually accepts.
+//
+// This exists because a global search-and-replace over the script once rewrote
+// "--portainer-edge-async=true|false" in the usage text while fixing the value
+// passed to the binary, leaving a flag form the parser does not accept. Nothing
+// caught it: the flag tests above only read the lines that build the kubesolo
+// command line.
+func TestInstallScriptUsageMatchesItsParser(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(raw)
+
+	// The case labels of the script's own argument parser, e.g. `--path=*)`.
+	accepted := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^\s*(--[a-z0-9-]+)(=\*)?\)`).FindAllStringSubmatch(script, -1) {
+		accepted[m[1]] = true
+	}
+	if len(accepted) == 0 {
+		t.Fatal("found no argument-parser cases in install.sh; the pattern needs updating")
+	}
+
+	// The flags advertised in the usage text.
+	usage := regexp.MustCompile(`echo "\s+(--[a-z0-9-]+)(\S*)`)
+	for _, m := range usage.FindAllStringSubmatch(script, -1) {
+		flag, form := m[1], m[2]
+
+		if !accepted[flag] {
+			t.Errorf("install.sh --help advertises %s, which its parser does not accept", flag)
+			continue
+		}
+		// A flag taking a value must be shown as --flag=... or --flag[=...] for
+		// one where the value is optional. Anything else tells the reader to
+		// type something the parser will not accept.
+		if form != "" && !strings.HasPrefix(form, "=") && !strings.HasPrefix(form, "[=") {
+			t.Errorf("install.sh --help shows %s%s; the parser expects %s=<value>", flag, form, flag)
+		}
+	}
+}
