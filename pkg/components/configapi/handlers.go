@@ -70,7 +70,7 @@ func (s *Service) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/config", s.handleDelete)
 	mux.HandleFunc("POST /api/v1/config:validate", s.handleValidate)
 
-	return mux
+	return withLogging(mux)
 }
 
 // handleGet returns the stored configuration.
@@ -82,13 +82,13 @@ func (s *Service) routes() http.Handler {
 func (s *Service) handleGet(w http.ResponseWriter, r *http.Request) {
 	cfg, err := s.read()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	etag, err := etagOf(cfg)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 	w.Header().Set("ETag", etag)
@@ -126,7 +126,7 @@ func (s *Service) handlePut(w http.ResponseWriter, r *http.Request) {
 // deleting the line from the file would do.
 func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "" && !strings.HasPrefix(ct, "application/merge-patch+json") && !strings.HasPrefix(ct, "application/json") {
-		writeError(w, http.StatusUnsupportedMediaType, ErrorResponse{
+		writeErrorFor(w, r, http.StatusUnsupportedMediaType, ErrorResponse{
 			Error: fmt.Sprintf("content type %q is not supported; use application/merge-patch+json", ct),
 		})
 		return
@@ -180,13 +180,13 @@ func (s *Service) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	current, err := s.read()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	candidate := config.Defaults()
 	if err := json.Unmarshal(body, candidate); err != nil {
-		writeError(w, http.StatusBadRequest, ErrorResponse{
+		writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{
 			Error: fmt.Sprintf("body is not a valid configuration document: %v", err),
 		})
 		return
@@ -194,7 +194,7 @@ func (s *Service) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	warnings, err := config.Validate(candidate, s.opts.Host)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -232,7 +232,7 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 
 	current, err := s.read()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -244,15 +244,15 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 	if err != nil {
 		var bad badRequest
 		if errors.As(err, &bad) {
-			writeError(w, http.StatusBadRequest, ErrorResponse{Error: bad.Error()})
+			writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: bad.Error()})
 			return
 		}
-		writeError(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	if field, ok := rejectsRedactedSecret(next); ok {
-		writeError(w, http.StatusBadRequest, ErrorResponse{
+		writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{
 			Field: field,
 			Error: fmt.Sprintf("%s was sent back as %q, the placeholder a redacted read returns; send the real value or omit the setting to keep the stored one", field, redacted),
 		})
@@ -260,7 +260,7 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 	}
 
 	if field, ok := immutableChange(current, next); ok {
-		writeError(w, http.StatusConflict, ErrorResponse{
+		writeErrorFor(w, r, http.StatusConflict, ErrorResponse{
 			Field: field,
 			Error: fmt.Sprintf("%s cannot be changed on an existing installation: every certificate, the database and all container state live below it, and none of them move", field),
 		})
@@ -269,14 +269,14 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 
 	warnings, err := config.Validate(next, s.opts.Host)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	changed := changedSettings(current, next)
 
 	if err := config.Write(s.opts.ConfigPath, next); err != nil {
-		writeError(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -284,6 +284,11 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 	if err == nil {
 		w.Header().Set("ETag", etag)
 	}
+
+	record(r, func(rl *requestLog) {
+		rl.changed = changed
+		rl.restartRequired = len(changed) > 0
+	})
 
 	saved := *next
 	redactSecrets(&saved)
@@ -306,11 +311,11 @@ func (s *Service) checkPrecondition(w http.ResponseWriter, r *http.Request, curr
 
 	got, err := etagOf(current)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return false
 	}
 	if got != want {
-		writeError(w, http.StatusPreconditionFailed, ErrorResponse{
+		writeErrorFor(w, r, http.StatusPreconditionFailed, ErrorResponse{
 			Error: "the configuration changed since you read it; read it again and reapply your change",
 		})
 		return false
@@ -405,7 +410,7 @@ func warningStrings(warnings []config.Warning) []string {
 func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodySize))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, ErrorResponse{Error: "could not read the request body: " + err.Error()})
+		writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: "could not read the request body: " + err.Error()})
 		return nil, false
 	}
 	return body, true
@@ -419,4 +424,19 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 
 func writeError(w http.ResponseWriter, status int, body ErrorResponse) {
 	writeJSON(w, status, body)
+}
+
+// writeErrorFor is writeError plus the audit line, for handlers that have the
+// request to hand. The reason is the message the client was given, so the log
+// and the response cannot disagree.
+func writeErrorFor(w http.ResponseWriter, r *http.Request, status int, body ErrorResponse) {
+	record(r, func(rl *requestLog) { rl.failure = body.Error })
+	writeError(w, status, body)
+}
+
+// record adds what a handler learned to the audit line for this request.
+func record(r *http.Request, apply func(*requestLog)) {
+	if rl := requestLogFrom(r.Context()); rl != nil {
+		apply(rl)
+	}
 }

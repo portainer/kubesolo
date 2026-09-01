@@ -172,6 +172,35 @@ as it was.
 
 ---
 
+## What is logged
+
+Every request is recorded, which is the audit trail for an endpoint whose job is
+changing how KubeSolo starts.
+
+```
+info  configapi PATCH /api/v1/config status=200 changed=["network.mtu"] restart_required=true
+warn  configapi PATCH /api/v1/config status=409 reason="path cannot be changed on an existing installation..."
+debug configapi GET   /api/v1/config status=200
+```
+
+Writes are logged at **info**, rejections at **warn** with the reason the client
+was given, and reads at **debug** so a user interface polling the configuration
+does not bury the changes among its own reads. Health checks are not logged.
+
+**Only setting paths are recorded, never values.** A line says
+`changed=["portainer.edgeKey"]` — that the credential was replaced, not what it
+was replaced with.
+
+```bash
+journalctl -u kubesolo | grep configapi
+```
+
+This is also how to confirm that `kubesoloctl config set` went through the API
+rather than editing the file: a write through the API leaves a line, a direct
+file edit does not.
+
+---
+
 ## Concurrency
 
 Writes are serialised, so two simultaneous patches cannot each read the document
