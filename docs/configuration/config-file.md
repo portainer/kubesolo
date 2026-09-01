@@ -79,6 +79,10 @@ kubesoloctl config validate -f ./candidate.yaml
 kubesoloctl config schema
 ```
 
+`kubesoloctl` prints YAML throughout, matching the configuration file itself.
+The [configuration API](config-api.md) serves the same content as JSON, which is
+the convention for an HTTP API.
+
 Nothing is written until validation passes, so a rejected value leaves the
 existing configuration exactly as it was.
 

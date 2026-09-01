@@ -171,7 +171,7 @@ change takes effect on restart.
 kubesoloctl config get                              # show everything
 sudo kubesoloctl config set network.nodeIP 10.0.0.5 # change one setting
 sudo kubesoloctl config edit                        # open in $EDITOR
-kubesoloctl config schema                           # every setting and its default
+kubesoloctl config schema                           # every setting and its default (YAML)
 ```
 
 KubeSolo can also serve the file over a unix socket, so it can be managed

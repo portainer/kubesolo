@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,8 +223,10 @@ func TestConfigSchemaCoversEverySetting(t *testing.T) {
 		APIVersion string                      `json:"apiVersion"`
 		Settings   []kubesoloconfig.Descriptor `json:"settings"`
 	}
-	if err := json.Unmarshal([]byte(out), &doc); err != nil {
-		t.Fatalf("schema is not valid JSON: %v\n%s", err, out)
+	// YAML, like every other kubesoloctl output. sigs.k8s.io/yaml honours the
+	// json tags, so one set of tags serves the CLI and the HTTP API both.
+	if err := yaml.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("schema is not valid YAML: %v\n%s", err, out)
 	}
 	if doc.APIVersion != types.ConfigAPIVersion {
 		t.Errorf("apiVersion = %q", doc.APIVersion)

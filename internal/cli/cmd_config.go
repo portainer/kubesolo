@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -455,14 +454,17 @@ func configSchemaCmd() *cobra.Command {
 		Short: "List every setting, its type, default and deprecated flag",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			raw, err := json.MarshalIndent(map[string]any{
+			// YAML, like every other kubesoloctl output and like the
+			// configuration file itself. The HTTP API serves the same content as
+			// JSON, which is the convention there.
+			raw, err := yaml.Marshal(map[string]any{
 				"apiVersion": types.ConfigAPIVersion,
 				"settings":   kubesoloconfig.Describe(),
-			}, "", "  ")
+			})
 			if err != nil {
 				return err
 			}
-			fmt.Println(string(raw))
+			fmt.Print(string(raw))
 			return nil
 		},
 	}
