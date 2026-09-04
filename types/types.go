@@ -203,17 +203,17 @@ type Embedded struct {
 // exclusive cores. ReservedCPUs is the cpuset held back for the system and
 // kubesolo itself, which the static policy requires to be non-empty.
 type CPUManagerConfig struct {
-	Policy        string
-	PolicyOptions map[string]string
-	ReservedCPUs  string
+	Policy        string            `json:"policy"`
+	PolicyOptions map[string]string `json:"policyOptions,omitempty"`
+	ReservedCPUs  string            `json:"reservedCPUs"`
 }
 
 // MetricsConfig contains configuration for the kubesolo Prometheus metrics endpoint.
 // When Enabled is true, kubesolo serves a /metrics HTTP endpoint exposing
 // control plane health gauges, kine DB size, and build info.
 type MetricsConfig struct {
-	Enabled     bool
-	BindAddress string
+	Enabled     bool   `json:"enabled"`
+	BindAddress string `json:"bindAddress"`
 }
 
 // EdgeAgentConfig contains configuration for Portainer Edge Agent

@@ -1,0 +1,207 @@
+# KubeSolo configuration — every setting, at its default, bar one.
+#
+# Drop this in as /etc/kubesolo/config.yaml and restart. Every value below is
+# what KubeSolo already runs with, except that the configuration API is turned
+# on, so there is something to talk to straight away. That makes it a baseline to
+# adjust from — edit a line, restart, and check the effect.
+#
+#   sudo install -m 600 kubesolo-config.yaml /etc/kubesolo/config.yaml
+#   sudo kubesoloctl config validate          # before restarting
+#   sudo systemctl restart kubesolo
+#
+# Settings are read once at startup, so every change needs a restart.
+#
+# With the API on, you can read the live configuration without restarting:
+#   sudo curl -s --unix-socket /var/lib/kubesolo/config.sock \
+#     http://localhost/api/v1/config
+#
+# metrics.enabled is the other quick win — it binds to localhost only.
+#
+# See what KubeSolo actually resolved, without starting anything:
+#   sudo kubesolo --config=/etc/kubesolo/config.yaml --print-config
+#
+# If a change appears not to take effect, a flag in the service definition is
+# overriding the file:
+#   grep -- '--' /etc/systemd/system/kubesolo.service
+
+apiVersion: kubesolo.io/v1alpha1
+kind: Config
+
+# Where all state lives: certificates, the cluster database, container state.
+# CANNOT be changed on an existing install — nothing moves the data.
+# Verify: ls /var/lib/kubesolo
+path: /var/lib/kubesolo
+
+logging:
+  # Verbose logs.
+  # Verify: journalctl -u kubesolo | grep -c DBG
+  debug: false
+
+  # pprof profiling server on :6060.
+  # Verify: curl -s localhost:6060/debug/pprof/ | head
+  pprof: false
+
+network:
+  # Override the auto-detected node IP. Empty = auto-detect, preferring a
+  # private (RFC 1918) address.
+  # CAREFUL: an address this host does not own will break kubectl's TLS, since
+  # the API server certificate is scoped to it.
+  # Verify: kubectl get node -o wide          (INTERNAL-IP)
+  nodeIP: ""
+
+  # MTU for the cni0 bridge and pod interfaces. 0 = auto-detect.
+  # Below 1280 warns, because that is the IPv6 minimum.
+  # Verify: ip link show cni0
+  mtu: 0
+
+  # Stop CoreDNS serving ip6.arpa and make the kubelet register an IPv4 address.
+  # Verify: kubectl -n kube-system get cm coredns -o yaml | grep -c ip6.arpa   -> 0
+  disableIPv6: false
+
+  loadBalancer:
+    # Set EXTERNAL-IP on Services of type LoadBalancer.
+    # Required by d2k — turning this off with d2k on is rejected.
+    # Verify: kubectl expose deploy nginx --port=80 --type=LoadBalancer
+    #         kubectl get svc nginx           (EXTERNAL-IP, not <pending>)
+    enabled: true
+
+    # Publish a different address than the node IP. Empty = use the node IP.
+    # Set it to something clearly different, or you cannot tell it was read.
+    # Verify: kubectl get svc nginx           (EXTERNAL-IP)
+    ip: ""
+
+runtime:
+  # Attach to a container runtime the host already manages, instead of starting
+  # an embedded containerd. Empty = run our own.
+  # Must be an absolute path or a unix:// URL.
+  # Verify: journalctl -u kubesolo | grep -i runtime
+  endpoint: ""
+
+  # Three states, which is why it is a null rather than a false:
+  #   null   auto-detect
+  #   true   force container mode
+  #   false  force it off
+  # Incompatible with the static CPU manager policy.
+  # Verify: journalctl -u kubesolo | grep 'container mode'
+  containerMode: null
+
+kubernetes:
+  apiServer:
+    # Extra Subject Alternative Names for the API server certificate. IP
+    # addresses and DNS names both work; a value that is neither is ignored.
+    # Changing this re-signs the certificate on the next start — and only then,
+    # so restarting twice must NOT re-sign a second time.
+    # Verify: openssl x509 -in /var/lib/kubesolo/pki/apiserver/apiserver.crt \
+    #           -noout -text | grep -A3 'Subject Alternative'
+    # Example: [kubesolo.local, 10.0.0.4]
+    extraSANs: []
+
+    # How long each component may take to pass its health check at startup.
+    # Raise it on slow storage such as an SD card.
+    # No direct observable effect; check with --print-config.
+    startupTimeoutSeconds: 600
+
+  kubelet:
+    cpuManager:
+      # "none" shares all CPUs. "static" gives Guaranteed pods that request
+      # whole CPUs exclusive cores.
+      # NOT supported in container mode, which includes KubeSolo running in a
+      # container — so this can only be tested on a real host. Setting static
+      # also fills in reservedCPUs as "0", since the policy refuses to start
+      # without a reservation.
+      # Verify: sudo grep cpuManagerPolicy /var/lib/kubesolo/kubelet/config/config.yaml
+      policy: none
+
+      # Fine-tuning for the static policy. ONLY written when policy is static —
+      # under "none" this has no effect at all and nothing to observe.
+      # Example: {full-pcpus-only: "true"}
+      # Verify: sudo grep -A2 cpuManagerPolicyOptions /var/lib/kubesolo/kubelet/config/config.yaml
+      policyOptions: {}
+
+      # CPUs held back for the host, never handed out as exclusive cores.
+      # ONLY honoured when policy is static, where it defaults to "0" because
+      # the static policy refuses to start without a reservation.
+      # Example: "0-1"
+      # Verify: sudo grep reservedSystemCPUs /var/lib/kubesolo/kubelet/config/config.yaml
+      reservedCPUs: ""
+
+    # Resources withheld from node allocatable for the host. Accepts cpu,
+    # memory, ephemeral-storage and pid.
+    # Example: {cpu: "1", memory: 500Mi}
+    # Verify: kubectl describe node | grep -A6 Allocatable
+    systemReserved: {}
+
+storage:
+  localPath:
+    # The local-path storage provisioner.
+    # Verify: kubectl -n local-path-storage get pods
+    enabled: true
+
+    # Back volumes with a shared filesystem instead of the default directory.
+    # Example: /mnt/shared
+    # Verify: kubectl -n local-path-storage get cm local-path-config -o yaml
+    sharedPath: ""
+
+  # Check the SQLite database at startup and clear WAL artefacts if it is
+  # corrupt. Recovers from power loss.
+  # Verify: journalctl -u kubesolo | grep -i wal
+  dbWALRepair: false
+
+portainer:
+  # The Edge Agent is deployed only when BOTH edgeID and edgeKey are set.
+  # Verify: kubectl -n portainer get pods
+  edgeID: ""
+
+  # A credential. This file is written 0600 for it, and the config API returns
+  # it as "***" unless asked for explicitly.
+  # Verify: kubesoloctl config get portainer.edgeKey
+  edgeKey: ""
+
+  # Edge async mode.
+  # Verify: kubectl -n portainer get deploy portainer-agent -o yaml | grep -A2 EDGE_ASYNC
+  async: false
+
+  # Agent image. A short reference is normalised — "portainer/agent:lts" is
+  # stored as "docker.io/portainer/agent:lts". Anything other than the default
+  # is pulled rather than loaded from the embedded archive.
+  # Verify: kubectl -n portainer get deploy portainer-agent -o jsonpath='{..image}'
+  image: docker.io/portainer/agent:lts
+
+d2k:
+  # Docker-to-Kubernetes API translator, over mTLS on port 2376.
+  # Requires network.loadBalancer.enabled. Unsupported on arm and riscv64,
+  # where it disables itself with a warning rather than failing.
+  # Verify: kubectl -n d2k get pods
+  enabled: false
+
+  # Namespace d2k is deployed into and translates against.
+  # Verify: kubectl get ns
+  namespace: d2k
+
+metrics:
+  # Prometheus endpoint with control plane health gauges.
+  # Verify: curl -s 127.0.0.1:9105/metrics | grep kubesolo_component_up
+  enabled: false
+
+  # Where it listens. Use 0.0.0.0 to reach it from another machine.
+  # Verify: ss -lntp | grep 9105
+  bindAddress: 127.0.0.1:9105
+
+api:
+  # Serve this configuration over a unix socket, so it can be read and changed
+  # programmatically. The socket's 0600 permissions are the only access control:
+  # anything that can open it can change KubeSolo's configuration.
+  #
+  # The one setting below that is not at its default — off — because the API is
+  # the most useful thing here to have running.
+  # Verify: sudo curl -s --unix-socket /var/lib/kubesolo/config.sock \
+  #           http://localhost/api/v1/config
+  enabled: true
+
+  # Where the socket is created. Must stay under 107 characters.
+  #
+  # Written out here rather than left empty. Empty means "derive it from path",
+  # so if you change path above, remember to change this too — or clear it and
+  # let it follow.
+  # Verify: stat -c %a /var/lib/kubesolo/config.sock     -> 600
+  socketPath: /var/lib/kubesolo/config.sock

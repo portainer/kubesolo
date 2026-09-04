@@ -46,6 +46,8 @@ CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 # Parse command line arguments
 REMOVE_DATA=false
 REMOVE_KUBECONFIG=false
+KEEP_CONFIG=false
+CONFIG_FILE="/etc/kubesolo/config.yaml"
 
 for arg in "$@"; do
     case $arg in
@@ -58,12 +60,16 @@ for arg in "$@"; do
         --remove-kubeconfig)
             REMOVE_KUBECONFIG=true
             ;;
+        --keep-config)
+            KEEP_CONFIG=true
+            ;;
         --help)
             echo "Usage: $0 [options]"
             echo "Options:"
             echo "  --path=PATH              Set configuration path (default: $CONFIG_PATH)"
             echo "  --remove-data            Remove configuration and data directory"
             echo "  --remove-kubeconfig      Remove kubeconfig from ~/.kube/config"
+            echo "  --keep-config            Leave $CONFIG_FILE in place for a later reinstall"
             echo "  --help                   Show this help message"
             exit 0
             ;;
@@ -468,6 +474,21 @@ CNI_CONFIG_FILE="/etc/cni/net.d/10-bridge.conflist"
 if [ -e "$CNI_CONFIG_FILE" ] || [ -L "$CNI_CONFIG_FILE" ]; then
     echo "🗑️  Removing CNI configuration..."
     rm -f "$CNI_CONFIG_FILE"
+fi
+
+# Remove the configuration file.
+#
+# Removed by default, unlike the data directory: it holds settings rather than
+# cluster state, and leaving a stale one behind would silently configure a later
+# reinstall with the settings of the install just removed.
+if [ "$KEEP_CONFIG" = "true" ]; then
+    echo "ℹ️  Configuration file preserved: $CONFIG_FILE"
+elif [ -f "$CONFIG_FILE" ]; then
+    echo "🗑️  Removing configuration file: $CONFIG_FILE"
+    rm -f "$CONFIG_FILE" "$CONFIG_FILE.bak"
+    # Only if nothing else was put alongside it.
+    rmdir "$(dirname "$CONFIG_FILE")" 2>/dev/null || true
+    echo "✅ Configuration file removed"
 fi
 
 # Remove configuration and data directory if requested

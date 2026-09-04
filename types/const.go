@@ -44,6 +44,23 @@ const (
 	DefaultMetricsBindAddress        = "127.0.0.1:9105"
 	DefaultMetricsProbeInterval      = 15 * time.Second
 	DefaultKineDBFile                = "state.db"
+
+	// DefaultBasePath is the directory KubeSolo stores all of its state in, and
+	// the default for --path. Mirrored by internal/cli/config.DefaultPath.
+	DefaultBasePath = "/var/lib/kubesolo"
+
+	// DefaultConfigFile is where KubeSolo reads its configuration from. It sits
+	// outside DefaultBasePath deliberately: configuration is not cluster state, so
+	// it must survive `kubesoloctl reset`, which removes the data directory.
+	DefaultConfigFile = "/etc/kubesolo/config.yaml"
+
+	// DefaultAPISocketName is the unix socket the config API listens on, relative
+	// to the base path.
+	DefaultAPISocketName = "config.sock"
+
+	// DefaultD2KNamespace is the namespace d2k is deployed into. Distinct from
+	// DefaultD2KDir, which names a PKI subdirectory that happens to match.
+	DefaultD2KNamespace = "d2k"
 )
 
 // CPU manager policies. With the static policy, Guaranteed-QoS pods that request

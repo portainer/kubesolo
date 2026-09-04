@@ -1,0 +1,41 @@
+api:
+  enabled: false
+  socketPath: ""
+apiVersion: kubesolo.io/v1alpha1
+d2k:
+  enabled: false
+  namespace: d2k
+kind: Config
+kubernetes:
+  apiServer:
+    startupTimeoutSeconds: 600
+  kubelet:
+    cpuManager:
+      policy: none
+      reservedCPUs: ""
+logging:
+  debug: false
+  pprof: false
+metrics:
+  bindAddress: 127.0.0.1:9105
+  enabled: false
+network:
+  disableIPv6: false
+  loadBalancer:
+    enabled: true
+    ip: ""
+  mtu: 0
+  nodeIP: ""
+path: /var/lib/kubesolo
+portainer:
+  async: false
+  edgeID: ""
+  edgeKey: ""
+  image: docker.io/portainer/agent:lts
+runtime:
+  endpoint: ""
+storage:
+  dbWALRepair: false
+  localPath:
+    enabled: true
+    sharedPath: ""

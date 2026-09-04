@@ -147,9 +147,60 @@ The installation guide covers:
 - Corporate proxy support for environments behind firewalls
 - Architecture-specific installations
 
+## Configuration
+
+KubeSolo reads its settings from `/etc/kubesolo/config.yaml`:
+
+```yaml
+apiVersion: kubesolo.io/v1alpha1
+kind: Config
+
+network:
+  nodeIP: 10.0.0.5
+portainer:
+  edgeID: "..."
+  edgeKey: "..."
+d2k:
+  enabled: true
+```
+
+Anything omitted falls back to its default. Settings are read at startup, so a
+change takes effect on restart.
+
+```bash
+kubesoloctl config get                              # show everything
+sudo kubesoloctl config set network.nodeIP 10.0.0.5 # change one setting
+sudo kubesoloctl config edit                        # open in $EDITOR
+kubesoloctl config schema                           # every setting and its default (YAML)
+```
+
+KubeSolo can also serve the file over a unix socket, so it can be managed
+programmatically.
+
+- **[Configuration file](docs/configuration/config-file.md)** — every setting, precedence, migrating from flags
+- **[Configuration API](docs/configuration/config-api.md)** — managing it over a socket
+
+### Migrating from flags
+
+Run the binary with the flags your service currently passes, plus
+`--print-config`, and save the result:
+
+```bash
+sudo kubesolo <current flags> --print-config | sudo tee /etc/kubesolo/config.yaml
+```
+
+`kubesoloctl upgrade` does this for you.
+
 ## Flags
 
-KubeSolo supports the following command-line flags:
+> **Deprecated.** Every flag below still works and still overrides the
+> configuration file, so existing installs keep running — but no new flags will be
+> added, and new settings are configurable only through the file. See the
+> [flag-to-setting table](docs/configuration/config-file.md#flag-and-environment-variable-equivalents).
+
+Two flags are not settings and have no equivalent in the file: `--config`, which
+names it, and `--print-config`, which prints the resolved document and exits.
+
 
 | Flag | Environment Variable | Description | Default |
 |------|-------------|---------|---------|

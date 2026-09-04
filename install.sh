@@ -1184,7 +1184,7 @@ for arg in "$@"; do
       echo "  --apiserver-extra-sans=SANS  Set additional Subject Alternative Names for the API server"
       echo "  --portainer-edge-id=ID       Set Portainer Edge ID"
       echo "  --portainer-edge-key=KEY     Set Portainer Edge Key"
-      echo "  --portainer-edge-async=true|false   Enable Portainer Edge Async (default: $PORTAINER_EDGE_ASYNC)"
+      echo "  --portainer-edge-async=true|false  Enable Portainer Edge Async (default: $PORTAINER_EDGE_ASYNC)"
       echo "  --portainer-edge-image=IMAGE        Set the Portainer Edge Agent image (default: docker.io/portainer/agent:lts)"
       echo "  --local-storage=true|false   Enable local storage (default: $LOCAL_STORAGE)"
       echo "  --d2k=true|false             Embed d2k Docker-to-Kubernetes API translator (default: $D2K)"
@@ -1326,7 +1326,7 @@ if [ -n "$PORTAINER_EDGE_KEY" ]; then
 fi
 
 if [ "$PORTAINER_EDGE_ASYNC" = "true" ]; then
-  CMD_ARGS="$CMD_ARGS --portainer-edge-async=true"
+  CMD_ARGS="$CMD_ARGS --portainer-edge-async"
 fi
 
 if [ -n "$PORTAINER_EDGE_IMAGE" ]; then
@@ -1334,11 +1334,11 @@ if [ -n "$PORTAINER_EDGE_IMAGE" ]; then
 fi
 
 if [ "$LOAD_BALANCER" = "false" ]; then
-  CMD_ARGS="$CMD_ARGS --load-balancer=false"
+  CMD_ARGS="$CMD_ARGS --no-load-balancer"
 fi
 
 if [ "$LOCAL_STORAGE" = "false" ]; then
-  CMD_ARGS="$CMD_ARGS --local-storage=false"
+  CMD_ARGS="$CMD_ARGS --no-local-storage"
 fi
 
 if [ -n "$LOCAL_STORAGE_SHARED_PATH" ]; then
@@ -1346,11 +1346,11 @@ if [ -n "$LOCAL_STORAGE_SHARED_PATH" ]; then
 fi
 
 if [ "$DB_WAL_REPAIR" = "true" ]; then
-  CMD_ARGS="$CMD_ARGS --db-wal-repair=true"
+  CMD_ARGS="$CMD_ARGS --db-wal-repair"
 fi
 
 if [ "$DISABLE_IPV6" = "true" ]; then
-  CMD_ARGS="$CMD_ARGS --disable-ipv6=true"
+  CMD_ARGS="$CMD_ARGS --disable-ipv6"
 fi
 
 if [ "$CPU_MANAGER_POLICY" != "none" ]; then
@@ -1374,15 +1374,50 @@ if [ "$STARTUP_TIMEOUT" != "600" ]; then
 fi
 
 if [ "$D2K" = "true" ]; then
-  CMD_ARGS="$CMD_ARGS --d2k=true --d2k-namespace=$D2K_NAMESPACE"
+  CMD_ARGS="$CMD_ARGS --d2k --d2k-namespace=$D2K_NAMESPACE"
 fi
 
 if [ "$DEBUG" = "true" ]; then
-  CMD_ARGS="$CMD_ARGS --debug=$DEBUG"
+  CMD_ARGS="$CMD_ARGS --debug"
 fi
 
 if [ "$PPROF_SERVER" = "true" ]; then
-  CMD_ARGS="$CMD_ARGS --pprof-server=$PPROF_SERVER"
+  CMD_ARGS="$CMD_ARGS --pprof-server"
+fi
+
+# Write the configuration file, and reduce the command line to a single flag.
+#
+# The document is produced by the installed binary itself, via --print-config,
+# rather than assembled here. That guarantees it matches exactly what KubeSolo
+# would have resolved from these flags — a hand-written heredoc would be a second
+# implementation of the same mapping, free to drift from it.
+#
+# Support is detected from --help rather than compared against a version number,
+# so this works for any release, including "latest" and locally built binaries.
+CONFIG_FILE="/etc/kubesolo/config.yaml"
+
+if "$INSTALL_PATH" --help 2>&1 | grep -q -- 'print-config'; then
+    echo "📝 Writing configuration to $CONFIG_FILE..."
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+
+    # Written via a temporary file so a failure part-way through cannot leave a
+    # truncated configuration in place.
+    CONFIG_TMP="$CONFIG_FILE.tmp.$$"
+    # $CMD_ARGS is deliberately unquoted so it splits into separate arguments,
+    # and deliberately not eval'd: these values come from installer flags and the
+    # environment, and eval would re-evaluate a command substitution inside one.
+    # set -f runs in a subshell so a value such as a wildcard SAN is not globbed.
+    if ( set -f; "$INSTALL_PATH" $CMD_ARGS --print-config ) > "$CONFIG_TMP" 2>/dev/null && [ -s "$CONFIG_TMP" ]; then
+        chmod 600 "$CONFIG_TMP"
+        mv "$CONFIG_TMP" "$CONFIG_FILE"
+        CMD_ARGS="--config=$CONFIG_FILE"
+        echo "✅ Configuration written to $CONFIG_FILE"
+    else
+        rm -f "$CONFIG_TMP"
+        echo "⚠️  Could not generate $CONFIG_FILE; falling back to command-line flags"
+    fi
+else
+    echo "ℹ️  kubesolo $VERSION predates the configuration file; using command-line flags"
 fi
 
 # Main service creation logic

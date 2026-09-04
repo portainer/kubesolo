@@ -8,6 +8,7 @@ package service
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -157,4 +158,28 @@ func systemdEnvVal(s string) string {
 	s = strings.ReplaceAll(s, `"`, `\"`)
 	s = strings.ReplaceAll(s, `%`, `%%`)
 	return s
+}
+
+// FilePath returns the service definition an init system was installed with, or
+// empty if the init system is not one KubeSolo writes a file for.
+//
+// It exists so that an upgrade can read back the command line a previous install
+// wrote, and convert it into a configuration file.
+func FilePath(init detect.InitSystem) string {
+	switch init {
+	case detect.InitSystemd:
+		return systemdServicePath
+	case detect.InitOpenRC:
+		return openrcServicePath
+	case detect.InitSysV:
+		return sysvinitServicePath
+	case detect.InitUpstart:
+		return upstartConfPath
+	case detect.InitRunit:
+		return filepath.Join(runitServiceDir, "run")
+	case detect.InitS6:
+		return filepath.Join(s6ServiceDir, "run")
+	default:
+		return ""
+	}
 }

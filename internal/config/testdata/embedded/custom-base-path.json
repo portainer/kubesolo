@@ -1,0 +1,110 @@
+{
+  "NodeIP": "10.0.0.5",
+  "NodeIPSpecified": false,
+  "MTU": 0,
+  "MTUSpecified": false,
+  "PKIDir": "/opt/kubesolo/pki",
+  "PKICADir": "/opt/kubesolo/pki/ca",
+  "PKIAdminDir": "/opt/kubesolo/pki/admin",
+  "PKIAPIServerDir": "/opt/kubesolo/pki/apiserver",
+  "PKIControllerDir": "/opt/kubesolo/pki/controller-manager",
+  "PKIKubeletDir": "/opt/kubesolo/pki/kubelet",
+  "PKIWebhookDir": "/opt/kubesolo/pki/webhook",
+  "PKIRequestHeaderDir": "/opt/kubesolo/pki/request-header",
+  "AdminKubeconfigFile": "/opt/kubesolo/pki/admin/admin.kubeconfig",
+  "KubeletCerts": {
+    "CACert": "/opt/kubesolo/pki/ca/ca.crt",
+    "Cert": "/opt/kubesolo/pki/kubelet/kubelet.crt",
+    "Key": "/opt/kubesolo/pki/kubelet/kubelet.key"
+  },
+  "APIServerCerts": {
+    "CACert": "/opt/kubesolo/pki/ca/ca.crt",
+    "Cert": "/opt/kubesolo/pki/apiserver/apiserver.crt",
+    "Key": "/opt/kubesolo/pki/apiserver/apiserver.key"
+  },
+  "ControllerManagerCerts": {
+    "CACert": "/opt/kubesolo/pki/ca/ca.crt",
+    "Cert": "/opt/kubesolo/pki/controller-manager/controller-manager.crt",
+    "Key": "/opt/kubesolo/pki/controller-manager/controller-manager.key"
+  },
+  "AdminCerts": {
+    "CACert": "/opt/kubesolo/pki/ca/ca.crt",
+    "Cert": "/opt/kubesolo/pki/admin/admin.crt",
+    "Key": "/opt/kubesolo/pki/admin/admin.key"
+  },
+  "WebhookCerts": {
+    "CACert": "/opt/kubesolo/pki/ca/ca.crt",
+    "Cert": "/opt/kubesolo/pki/webhook/webhook.crt",
+    "Key": "/opt/kubesolo/pki/webhook/webhook.key"
+  },
+  "CACerts": {
+    "Cert": "/opt/kubesolo/pki/ca/ca.crt",
+    "Key": "/opt/kubesolo/pki/ca/ca.key"
+  },
+  "RequestHeaderCerts": {
+    "CACert": "/opt/kubesolo/pki/request-header/request-header-ca.crt",
+    "CAKey": "/opt/kubesolo/pki/request-header/request-header-ca.key",
+    "ClientCert": "/opt/kubesolo/pki/request-header/request-header-client.crt",
+    "ClientKey": "/opt/kubesolo/pki/request-header/request-header-client.key"
+  },
+  "ContainerdDir": "/opt/kubesolo/containerd",
+  "ContainerdSocketFile": "/opt/kubesolo/containerd/containerd.sock",
+  "ContainerdBinaryFile": "/opt/kubesolo/containerd/containerd",
+  "ContainerdImagesDir": "/opt/kubesolo/containerd/images",
+  "ContainerdConfigFile": "/opt/kubesolo/containerd/config.toml",
+  "ContainerdShimBinaryFile": "/opt/kubesolo/containerd/containerd-shim-runc-v2",
+  "ContainerdRootDir": "/opt/kubesolo/containerd/root",
+  "ContainerdStateDir": "/opt/kubesolo/containerd/state",
+  "ContainerdRegistryConfigDir": "/opt/kubesolo/containerd/registry",
+  "ContainerdCNIDir": "/opt/kubesolo/containerd/cni",
+  "ContainerdCNIPluginsDir": "/opt/kubesolo/containerd/cni/plugins",
+  "ContainerdCNIConfigDir": "/opt/kubesolo/containerd/cni/conf",
+  "ContainerdCNIConfigFile": "/opt/kubesolo/containerd/cni/conf/10-bridge.conflist",
+  "CrunBinaryFile": "/opt/kubesolo/containerd/crun",
+  "RuntimeExternal": false,
+  "RuntimeEndpoint": "unix:///opt/kubesolo/containerd/containerd.sock",
+  "RuntimeSocketPath": "/opt/kubesolo/containerd/containerd.sock",
+  "RuntimeCgroupDriver": "",
+  "KubeletDir": "/opt/kubesolo/kubelet",
+  "KubeletConfigDir": "/opt/kubesolo/kubelet/config",
+  "KubeletConfigFile": "/opt/kubesolo/kubelet/config/config.yaml",
+  "KubeletKubeConfigFile": "/opt/kubesolo/pki/kubelet/kubelet.kubeconfig",
+  "KubeletPluginsDir": "/opt/kubesolo/kubelet/volumeplugins",
+  "APIServerDir": "/opt/kubesolo/apiserver",
+  "ServiceAccountKeyFile": "/opt/kubesolo/pki/apiserver/service-account.key",
+  "APIServerExtraSANs": null,
+  "KineDir": "/opt/kubesolo/kine/db",
+  "KineSocketFile": "/opt/kubesolo/kine/db/socket",
+  "ControllerDir": "/opt/kubesolo/controller-manager/config",
+  "WebhookDir": "/opt/kubesolo/pki/webhook",
+  "PortainerEdgeImageFile": "/opt/kubesolo/containerd/images/portainer-agent.tar.gz",
+  "CorednsImageFile": "/opt/kubesolo/containerd/images/coredns.tar.gz",
+  "SandboxImageFile": "/opt/kubesolo/containerd/images/pause.tar.gz",
+  "LocalPathProvisionerImageFile": "/opt/kubesolo/containerd/images/local-path-provisioner.tar.gz",
+  "D2KImageFile": "/opt/kubesolo/containerd/images/d2k.tar.gz",
+  "LoadBalancer": false,
+  "LoadBalancerIP": "",
+  "LocalPathStorageDir": "/opt/kubesolo/local-path-storage",
+  "IsPortainerEdge": false,
+  "PortainerEdgeImage": "",
+  "ContainerMode": false,
+  "DisableIPv6": false,
+  "D2K": false,
+  "D2KNamespace": "",
+  "D2KCerts": {
+    "CACert": "/opt/kubesolo/pki/ca/ca.crt",
+    "ServerCert": "/opt/kubesolo/pki/d2k/server.crt",
+    "ServerKey": "/opt/kubesolo/pki/d2k/server.key",
+    "ClientCert": "/opt/kubesolo/pki/d2k/client.crt",
+    "ClientKey": "/opt/kubesolo/pki/d2k/client.key"
+  },
+  "Metrics": {
+    "enabled": false,
+    "bindAddress": ""
+  },
+  "CPUManager": {
+    "policy": "",
+    "reservedCPUs": ""
+  },
+  "SystemReserved": null
+}

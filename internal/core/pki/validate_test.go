@@ -74,6 +74,11 @@ func writeAPIServerCert(t *testing.T, nodeIP string, certPEM []byte) types.Embed
 
 func selfSignedCert(t *testing.T, notAfter time.Time, ips []net.IP) []byte {
 	t.Helper()
+	return selfSignedCertWithNames(t, notAfter, ips, nil)
+}
+
+func selfSignedCertWithNames(t *testing.T, notAfter time.Time, ips []net.IP, dnsNames []string) []byte {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	tmpl := &x509.Certificate{
@@ -82,13 +87,14 @@ func selfSignedCert(t *testing.T, notAfter time.Time, ips []net.IP) []byte {
 		NotBefore:    notAfter.Add(-2 * time.Hour),
 		NotAfter:     notAfter,
 		IPAddresses:  ips,
+		DNSNames:     dnsNames,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	require.NoError(t, err)
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
-func TestInvalidateIfIPChanged(t *testing.T) {
+func TestInvalidateIfStale(t *testing.T) {
 	// assertRegenerated asserts the apiserver leaf cert was removed while the CA
 	// was preserved, so GenerateAllCertificates re-signs with the existing CA.
 	assertRegenerated := func(t *testing.T, e types.Embedded) {
@@ -99,27 +105,27 @@ func TestInvalidateIfIPChanged(t *testing.T) {
 
 	t.Run("missing cert is a no-op", func(t *testing.T) {
 		e := writeAPIServerCert(t, "10.0.0.5", nil)
-		require.NoError(t, InvalidateIfIPChanged(e))
+		require.NoError(t, InvalidateIfStale(e))
 		assert.DirExists(t, e.PKIDir, "PKI dir must be left intact when no cert exists yet")
 	})
 
 	t.Run("corrupt PEM regenerates leaf certs but keeps the CA", func(t *testing.T) {
 		e := writeAPIServerCert(t, "10.0.0.5", []byte("this is not a certificate"))
-		require.NoError(t, InvalidateIfIPChanged(e))
+		require.NoError(t, InvalidateIfStale(e))
 		assertRegenerated(t, e)
 	})
 
 	t.Run("expired cert regenerates leaf certs but keeps the CA", func(t *testing.T) {
 		expired := selfSignedCert(t, time.Now().Add(-1*time.Hour), []net.IP{net.ParseIP("10.0.0.5")})
 		e := writeAPIServerCert(t, "10.0.0.5", expired)
-		require.NoError(t, InvalidateIfIPChanged(e))
+		require.NoError(t, InvalidateIfStale(e))
 		assertRegenerated(t, e)
 	})
 
 	t.Run("node IP covered by cert is a no-op", func(t *testing.T) {
 		valid := selfSignedCert(t, time.Now().Add(24*time.Hour), []net.IP{net.ParseIP("10.0.0.5")})
 		e := writeAPIServerCert(t, "10.0.0.5", valid)
-		require.NoError(t, InvalidateIfIPChanged(e))
+		require.NoError(t, InvalidateIfStale(e))
 		assert.FileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"), "cert covering the node IP must be kept")
 	})
 
@@ -127,7 +133,7 @@ func TestInvalidateIfIPChanged(t *testing.T) {
 		// Cert only covers a stale IP; the current node IP is different.
 		valid := selfSignedCert(t, time.Now().Add(24*time.Hour), []net.IP{net.ParseIP("10.0.0.5")})
 		e := writeAPIServerCert(t, "192.168.1.10", valid)
-		require.NoError(t, InvalidateIfIPChanged(e))
+		require.NoError(t, InvalidateIfStale(e))
 		assertRegenerated(t, e)
 	})
 
@@ -136,7 +142,104 @@ func TestInvalidateIfIPChanged(t *testing.T) {
 		// interfaces (public NIC, cni0) — those must not trigger regeneration.
 		valid := selfSignedCert(t, time.Now().Add(24*time.Hour), []net.IP{net.ParseIP("10.0.0.5")})
 		e := writeAPIServerCert(t, "10.0.0.5", valid)
-		require.NoError(t, InvalidateIfIPChanged(e))
+		require.NoError(t, InvalidateIfStale(e))
 		assert.FileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"), "unrelated local IPs must not trigger regeneration")
+	})
+}
+
+// TestInvalidateIfStaleExtraSANs covers the case that previously went unnoticed:
+// adding a SAN to the configuration re-signs nothing, so the new name stays
+// unusable until the certificate expires or the node IP moves.
+func TestInvalidateIfStaleExtraSANs(t *testing.T) {
+	const nodeIP = "10.0.0.5"
+
+	// withSANs builds a valid cert covering the node IP plus the given extras,
+	// and an Embedded configured to want wantSANs.
+	withSANs := func(t *testing.T, certIPs []net.IP, certNames []string, wantSANs []string) types.Embedded {
+		t.Helper()
+		ips := append([]net.IP{net.ParseIP(nodeIP)}, certIPs...)
+		cert := selfSignedCertWithNames(t, time.Now().Add(24*time.Hour), ips, certNames)
+		e := writeAPIServerCert(t, nodeIP, cert)
+		e.APIServerExtraSANs = wantSANs
+		return e
+	}
+
+	certKept := func(t *testing.T, e types.Embedded) {
+		t.Helper()
+		assert.FileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"))
+	}
+	certRegenerated := func(t *testing.T, e types.Embedded) {
+		t.Helper()
+		assert.NoFileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"), "stale leaf cert must be removed")
+		assert.FileExists(t, filepath.Join(e.PKIDir, "ca", "ca.crt"), "CA must be preserved")
+	}
+
+	t.Run("no extra SANs configured is a no-op", func(t *testing.T) {
+		e := withSANs(t, nil, nil, nil)
+		require.NoError(t, InvalidateIfStale(e))
+		certKept(t, e)
+	})
+
+	t.Run("cert covers every configured SAN", func(t *testing.T) {
+		e := withSANs(t,
+			[]net.IP{net.ParseIP("10.0.0.4")},
+			[]string{"kubesolo.local"},
+			[]string{"10.0.0.4", "kubesolo.local"})
+		require.NoError(t, InvalidateIfStale(e))
+		certKept(t, e)
+	})
+
+	t.Run("newly configured DNS SAN regenerates", func(t *testing.T) {
+		e := withSANs(t, nil, nil, []string{"kubesolo.local"})
+		require.NoError(t, InvalidateIfStale(e))
+		certRegenerated(t, e)
+	})
+
+	t.Run("newly configured IP SAN regenerates", func(t *testing.T) {
+		e := withSANs(t, nil, nil, []string{"10.0.0.4"})
+		require.NoError(t, InvalidateIfStale(e))
+		certRegenerated(t, e)
+	})
+
+	t.Run("one of several SANs missing regenerates", func(t *testing.T) {
+		e := withSANs(t, nil, []string{"kubesolo.local"}, []string{"kubesolo.local", "other.local"})
+		require.NoError(t, InvalidateIfStale(e))
+		certRegenerated(t, e)
+	})
+
+	t.Run("DNS SAN comparison ignores case", func(t *testing.T) {
+		// TLS itself matches case-insensitively, so the certificate is already
+		// usable and re-signing would achieve nothing.
+		e := withSANs(t, nil, []string{"kubesolo.local"}, []string{"KubeSolo.Local"})
+		require.NoError(t, InvalidateIfStale(e))
+		certKept(t, e)
+	})
+
+	t.Run("blank and whitespace SANs are ignored", func(t *testing.T) {
+		e := withSANs(t, nil, nil, []string{"", "   "})
+		require.NoError(t, InvalidateIfStale(e))
+		certKept(t, e)
+	})
+
+	// This is the failure mode the classification exists to prevent. addExtraSANs
+	// discards a SAN that is neither an IPv4 address nor a DNS name, so it never
+	// reaches the certificate. Treating it as missing would destroy and re-sign
+	// the leaf certificates on every single boot, forever.
+	t.Run("SAN that generation would discard does not regenerate", func(t *testing.T) {
+		for _, bad := range []string{"not a san", "http://kubesolo.local", "2001:db8::1"} {
+			t.Run(bad, func(t *testing.T) {
+				e := withSANs(t, nil, nil, []string{bad})
+				require.NoError(t, InvalidateIfStale(e))
+				certKept(t, e)
+			})
+		}
+	})
+
+	t.Run("extra SANs are checked even when the node IP is loopback", func(t *testing.T) {
+		cert := selfSignedCertWithNames(t, time.Now().Add(24*time.Hour), nil, nil)
+		e := writeAPIServerCert(t, "127.0.0.1", cert)
+		e.APIServerExtraSANs = []string{"kubesolo.local"}
+		require.NoError(t, InvalidateIfStale(e))
+		certRegenerated(t, e)
 	})
 }

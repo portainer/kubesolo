@@ -8,24 +8,31 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
 
-// InvalidateIfIPChanged checks whether the existing apiserver certificate covers the
-// advertised node IP. If not, it removes the leaf certificates so that
-// GenerateAllCertificates will re-sign fresh certificates on the next call.
+// InvalidateIfStale checks whether the existing apiserver certificate still
+// matches the configuration. If it does not, it removes the leaf certificates so
+// that GenerateAllCertificates will re-sign fresh ones on the next call.
 //
-// This handles DHCP address changes between restarts: the old certs embed the
+// Two things can make it stale. The advertised node IP may have moved, which
+// handles DHCP address changes between restarts: the old certs embed the
 // previous IP in their SANs, causing TLS failures until the PKI is regenerated.
+// The configured extra SANs may also have changed — adding one to the
+// configuration has no other trigger to re-sign, so without this the new name is
+// silently rejected by TLS until the certificate expires or the node IP moves.
 //
 // The CA is deliberately preserved (see removeLeafCerts): regenerating it on
 // every IP change would rotate the cluster's trust anchor and force every
 // previously distributed kubeconfig to be updated. Keeping the CA stable lets
 // re-signed leaf certs (and existing client certs) keep validating.
-func InvalidateIfIPChanged(embedded types.Embedded) error {
+func InvalidateIfStale(embedded types.Embedded) error {
 	certPath := filepath.Join(embedded.PKIAPIServerDir, "apiserver.crt")
 
 	certPEM, err := os.ReadFile(certPath)
@@ -60,23 +67,73 @@ func InvalidateIfIPChanged(embedded types.Embedded) error {
 	// cert SANs are scoped to this IP (plus the service IP and localhost), so
 	// comparing against every local IP would wrongly fire on unrelated
 	// interfaces (public NIC, cni0) and regenerate on every boot.
-	nodeIP := net.ParseIP(embedded.NodeIP)
-	if nodeIP == nil || nodeIP.IsLoopback() {
-		return nil
+	//
+	// A loopback or unparseable node IP is not checked: it is not embedded as a
+	// distinguishing SAN, so there is nothing to compare against.
+	if nodeIP := net.ParseIP(embedded.NodeIP); nodeIP != nil && !nodeIP.IsLoopback() && !containsIP(cert.IPAddresses, nodeIP) {
+		log.Warn().
+			Str("component", "pki").
+			Str("missing_ip", nodeIP.String()).
+			Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
+			Msg("node IP not found in existing certificate SANs — regenerating leaf certificates")
+		return removeLeafCerts(embedded.PKIDir)
 	}
 
-	for _, san := range cert.IPAddresses {
-		if nodeIP.Equal(san) {
-			return nil
+	if missing := missingExtraSANs(cert, embedded.APIServerExtraSANs); len(missing) > 0 {
+		log.Warn().
+			Str("component", "pki").
+			Strs("missing_sans", missing).
+			Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
+			Strs("cert_dns_names", cert.DNSNames).
+			Msg("configured extra SANs not found in existing certificate — regenerating leaf certificates")
+		return removeLeafCerts(embedded.PKIDir)
+	}
+
+	return nil
+}
+
+// missingExtraSANs reports which configured extra SANs the certificate does not
+// carry.
+//
+// Classification mirrors addExtraSANs exactly, skipping values that are neither
+// an IPv4 address nor a DNS name. That is load-bearing rather than tidiness: a
+// SAN generation discards would otherwise be reported missing on every boot, and
+// the leaf certificates would be destroyed and re-signed each time.
+func missingExtraSANs(cert *x509.Certificate, extraSANs []string) []string {
+	var missing []string
+
+	for _, san := range extraSANs {
+		san = strings.TrimSpace(san)
+		if san == "" {
+			continue
+		}
+
+		switch {
+		case network.IsIPv4Address(san):
+			if !containsIP(cert.IPAddresses, net.ParseIP(san)) {
+				missing = append(missing, san)
+			}
+		case network.IsDNSName(san):
+			if !containsDNSName(cert.DNSNames, san) {
+				missing = append(missing, san)
+			}
 		}
 	}
 
-	log.Warn().
-		Str("component", "pki").
-		Str("missing_ip", nodeIP.String()).
-		Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
-		Msg("node IP not found in existing certificate SANs — regenerating leaf certificates")
-	return removeLeafCerts(embedded.PKIDir)
+	return missing
+}
+
+func containsIP(haystack []net.IP, needle net.IP) bool {
+	return slices.ContainsFunc(haystack, needle.Equal)
+}
+
+// containsDNSName compares without regard to case, as DNS itself and Go's own
+// certificate verification both do. A configuration that only differs in case
+// still matches the certificate, so re-signing would achieve nothing.
+func containsDNSName(haystack []string, needle string) bool {
+	return slices.ContainsFunc(haystack, func(name string) bool {
+		return strings.EqualFold(name, needle)
+	})
 }
 
 // caDirNames are the PKI subdirectories preserved across regeneration. Keeping
