@@ -87,6 +87,14 @@ type RuntimeConfig struct {
 // likeliest settings to become configurable next. Everything else in this
 // document is single-purpose and stays at the top level.
 type KubernetesConfig struct {
+	// NodeName is the name of the single node this control plane manages. Empty
+	// means the hostname, which is what a KubeSolo-managed kubelet registers as.
+	//
+	// It has to be set when the kubelet is external and registers under a name
+	// this host does not share: the NodeSetter webhook pins every pod to this
+	// name, so a mismatch leaves the whole cluster Pending.
+	NodeName string `json:"nodeName,omitempty"`
+
 	APIServer APIServerConfig `json:"apiServer"`
 	Kubelet   KubeletConfig   `json:"kubelet"`
 }

@@ -17,6 +17,9 @@ import (
 // Probe carries what the host reported and BuildEmbedded cannot work out for
 // itself. Everything else it needs comes from the configuration.
 type Probe struct {
+	// Hostname is the host's name, the fallback for kubernetes.nodeName.
+	Hostname string
+
 	NodeIP         string
 	NodeIPPinned   bool
 	LoadBalancerIP string
@@ -40,7 +43,17 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		runtimeEndpoint = cri.Embedded(containerdSocketFile)
 	}
 
+	// The node this control plane manages. Configured explicitly when a
+	// host-managed kubelet registers under a name this host does not share,
+	// otherwise the hostname, which is what KubeSolo's own kubelet registers as.
+	nodeName := cfg.Kubernetes.NodeName
+	if nodeName == "" {
+		nodeName = probe.Hostname
+	}
+
 	return types.Embedded{
+		NodeName: nodeName,
+
 		// System Node IP
 		NodeIP:          probe.NodeIP,
 		NodeIPSpecified: probe.NodeIPPinned,

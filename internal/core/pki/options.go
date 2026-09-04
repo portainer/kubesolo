@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/portainer/kubesolo/internal/runtime/network"
-	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
@@ -53,11 +52,11 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 		opts.KeyDir = embedded.CACerts.Key
 
 	case KubeletCert:
-		hostname := system.GetHostname()
+		nodeName := embedded.NodeName
 
-		opts.CommonName = fmt.Sprintf("system:node:%s", hostname)
+		opts.CommonName = fmt.Sprintf("system:node:%s", nodeName)
 		opts.Organization = []string{"system:nodes"}
-		opts.DNSNames = []string{hostname, "localhost"}
+		opts.DNSNames = []string{nodeName, "localhost"}
 		opts.SignerCertDir = embedded.CACerts.Cert
 		opts.SignerKeyDir = embedded.CACerts.Key
 		opts.CertDir = filepath.Join(embedded.PKIKubeletDir, "kubelet.crt")

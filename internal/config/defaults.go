@@ -35,6 +35,7 @@ func Defaults() *types.Config {
 		},
 
 		Kubernetes: types.KubernetesConfig{
+			NodeName: "", // the hostname
 			APIServer: types.APIServerConfig{
 				ExtraSANs:             nil,
 				StartupTimeoutSeconds: types.DefaultStartupTimeout,

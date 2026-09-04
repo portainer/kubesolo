@@ -227,7 +227,7 @@ func (s *kubesolo) run() {
 		{
 			name: "apiserver",
 			start: func() {
-				apiserverService := apiserver.NewService(ctx, cancel, apiServerReadyCh, s.hostName, s.embedded)
+				apiserverService := apiserver.NewService(ctx, cancel, apiServerReadyCh, s.embedded.NodeName, s.embedded)
 				s.wg.Go(func() {
 					_ = apiserverService.Run(kineReadyCh)
 				})
@@ -570,5 +570,6 @@ func (s *kubesolo) bootstrap() {
 		MTUPinned:       mtuPinned,
 		ContainerMode:   containerMode,
 		RuntimeEndpoint: s.runtimeEndpoint,
+		Hostname:        s.hostName,
 	})
 }
