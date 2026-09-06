@@ -33,10 +33,16 @@ func TestContainerModeLeavesConntrackAlone(t *testing.T) {
 			t.Errorf("%s: flag not found on the kube-proxy command", name)
 			continue
 		}
-		if got := flag.Value.String(); got != "0" && got != "0s" {
+		if got := flag.Value.String(); !isZero(got) {
 			t.Errorf("%s = %q, want zero so kube-proxy leaves the kernel value alone", name, got)
 		}
 	}
+}
+
+// isZero covers both spellings: the counts render as "0" and the durations as
+// "0s".
+func isZero(value string) bool {
+	return value == "0" || value == "0s"
 }
 
 // Outside container mode kube-proxy owns the host and should tune conntrack as
@@ -45,7 +51,14 @@ func TestHostModeKeepsConntrackDefaults(t *testing.T) {
 	command := app.NewProxyCommand()
 	(&service{containerMode: false}).configureKubeProxyFlags(command)
 
-	if got := command.Flags().Lookup("conntrack-tcp-timeout-established").Value.String(); got == "0s" {
-		t.Error("conntrack-tcp-timeout-established was zeroed outside container mode")
+	const name = "conntrack-tcp-timeout-established"
+
+	flag := command.Flags().Lookup(name)
+	if flag == nil {
+		t.Fatalf("%s: flag not found on the kube-proxy command", name)
+	}
+
+	if got := flag.Value.String(); isZero(got) {
+		t.Errorf("%s = %q, want the kube-proxy default outside container mode", name, got)
 	}
 }

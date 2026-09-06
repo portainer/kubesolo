@@ -117,6 +117,13 @@ func goldenCases() []goldenCase {
 			probe: Probe{Hostname: "kubesolo-container"},
 		},
 		{
+			name: "node-name-normalised",
+			cfg: cfgWith(at(base), func(c *types.Config) {
+				c.Kubernetes.NodeName = "  Talos-CP-1  "
+			}),
+			probe: Probe{Hostname: "kubesolo-container"},
+		},
+		{
 			name:  "node-name-falls-back-to-hostname",
 			cfg:   cfgWith(at(base)),
 			probe: Probe{Hostname: "edge-box-7"},
