@@ -43,6 +43,16 @@ func ensureHostDependencies(embedded types.Embedded) error {
 	// with crictl, and it dangles once kubesolo is removed, which makes the runtime
 	// log a CNI load failure for every sandbox it creates.
 	cniConfigFile := filepath.Join(types.DefaultStandardCNIConfDir, types.DefaultCNIConfigName)
+
+	// A previous run with the embedded containerd symlinks this path into the
+	// kubesolo data directory. os.WriteFile follows that symlink, so leaving it in
+	// place would either write the config into the embedded tree or, once the
+	// target is gone, fail with ENOENT against a directory that plainly exists.
+	if filesystem.RemoveIfSymlink(cniConfigFile) {
+		log.Info().Str("component", "embedded").
+			Msgf("removed the cni config symlink at %s left by a previous run with the embedded containerd", cniConfigFile)
+	}
+
 	if err := writeCNIConfigFile(cniConfigFile, embedded.MTU); err != nil {
 		return fmt.Errorf("%v (the directory has to be writable, so on a read-only rootfs it must be mounted read-write)", err)
 	}

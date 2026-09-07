@@ -1,5 +1,5 @@
 {
-  "NodeName": "",
+  "NodeName": "talos-cp-1",
   "NodeIP": "",
   "NodeIPSpecified": false,
   "MTU": 0,
@@ -90,8 +90,8 @@
   "PortainerEdgeImage": "",
   "ContainerMode": false,
   "DisableIPv6": false,
-  "D2K": true,
-  "D2KNamespace": "workloads",
+  "D2K": false,
+  "D2KNamespace": "",
   "D2KCerts": {
     "CACert": "/var/lib/kubesolo/pki/ca/ca.crt",
     "ServerCert": "/var/lib/kubesolo/pki/d2k/server.crt",

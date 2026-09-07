@@ -9,6 +9,7 @@ package config
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/portainer/kubesolo/internal/runtime/cri"
 	"github.com/portainer/kubesolo/types"
@@ -17,6 +18,9 @@ import (
 // Probe carries what the host reported and BuildEmbedded cannot work out for
 // itself. Everything else it needs comes from the configuration.
 type Probe struct {
+	// Hostname is the host's name, the fallback for kubernetes.nodeName.
+	Hostname string
+
 	NodeIP         string
 	NodeIPPinned   bool
 	LoadBalancerIP string
@@ -40,7 +44,22 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		runtimeEndpoint = cri.Embedded(containerdSocketFile)
 	}
 
+	// The node this control plane manages, defaulting to the hostname.
+	//
+	// Trimmed and lowercased to match what the kubelet does to --hostname-override
+	// before registering. Without this a configured "Talos-CP-1" would register a
+	// node called "talos-cp-1" while the NodeSetter webhook and the kubelet's
+	// certificate subject kept the original spelling, and every pod would be
+	// pinned to a node that does not exist. probe.Hostname is already normalised
+	// by system.GetHostname.
+	nodeName := strings.ToLower(strings.TrimSpace(cfg.Kubernetes.NodeName))
+	if nodeName == "" {
+		nodeName = probe.Hostname
+	}
+
 	return types.Embedded{
+		NodeName: nodeName,
+
 		// System Node IP
 		NodeIP:          probe.NodeIP,
 		NodeIPSpecified: probe.NodeIPPinned,

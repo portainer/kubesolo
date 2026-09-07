@@ -5,5 +5,5 @@
 build/
 examples/
 assets/
-dist/
+dist/*
 !dist/kubesolo

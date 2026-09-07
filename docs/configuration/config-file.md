@@ -153,6 +153,7 @@ kind: Config
 path: /var/lib/kubesolo
 
 kubernetes:
+  nodeName: ""            # empty = the hostname
   apiServer:
     extraSANs: []
     startupTimeoutSeconds: 600
@@ -225,6 +226,7 @@ and stays at the top level.
 | `kubernetes.kubelet.cpuManager.policyOptions` | `object` | `map[]` |
 | `kubernetes.kubelet.cpuManager.reservedCPUs` | `string` | `""` |
 | `kubernetes.kubelet.systemReserved` | `object` | `map[]` |
+| `kubernetes.nodeName` | `string` | `""` |
 | `logging.debug` | `boolean` | `false` |
 | `logging.pprof` | `boolean` | `false` |
 | `metrics.bindAddress` | `string` | `127.0.0.1:9105` |

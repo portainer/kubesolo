@@ -157,10 +157,53 @@ else
 	@exit 1
 endif
 
+# ---------- Container runtime ----------
+#
+# Targets that shell out to a container engine work with either Apple
+# Containers (`container`) or Docker. The engine is auto-detected, preferring
+# `container` when it is on PATH; override with CONTAINER_RUNTIME=docker.
+CONTAINER_RUNTIME ?= $(if $(shell command -v container 2>/dev/null),container,docker)
+
+# Apple Containers points the guest at the vmnet gateway (192.168.64.1) as its
+# resolver, which refuses queries on some hosts — every `apk add` and module
+# fetch inside the container then fails with a DNS error. Pin a resolver for
+# `container` invocations. Override CONTAINER_DNS to use your own resolver
+# (needed behind a split-horizon or VPN DNS), or set it empty to fall back to
+# the engine default. Docker resolves through its own daemon, so it is left
+# alone.
+CONTAINER_DNS ?= 1.1.1.1
+
+# Apple Containers gives each container 1 GiB and 4 CPUs. That is not enough to
+# compile this tree — the Go compiler gets OOM-killed part-way through with
+# "compile: signal: killed" — so raise both. Docker shares one large VM sized by
+# the user, so it is left alone. Set either variable empty to use the engine
+# default.
+CONTAINER_MEMORY ?= 8g
+CONTAINER_CPUS ?= 8
+
+ifeq ($(CONTAINER_RUNTIME),docker)
+CONTAINER_DNS_FLAG =
+CONTAINER_RESOURCE_FLAGS =
+else
+CONTAINER_DNS_FLAG = $(if $(CONTAINER_DNS),--dns $(CONTAINER_DNS))
+CONTAINER_RESOURCE_FLAGS = $(if $(CONTAINER_MEMORY),--memory $(CONTAINER_MEMORY)) $(if $(CONTAINER_CPUS),--cpus $(CONTAINER_CPUS))
+endif
+
+CONTAINER_RUN_FLAGS = $(CONTAINER_DNS_FLAG) $(CONTAINER_RESOURCE_FLAGS)
+
+# Docker needs buildx to honour --platform; `container build` takes it
+# natively. Both engines spell the push the same way.
+ifeq ($(CONTAINER_RUNTIME),docker)
+IMAGE_BUILD = docker buildx build
+else
+IMAGE_BUILD = $(CONTAINER_RUNTIME) build $(CONTAINER_DNS_FLAG)
+endif
+IMAGE_PUSH = $(CONTAINER_RUNTIME) image push
+
 .PHONY: build-using-image
 build-using-image:
 	mkdir -p $(HOME)/.go-cache/mod $(HOME)/.go-cache/build
-	docker run --platform $(GOOS)/$(GOARCH) --workdir /app --rm \
+	$(CONTAINER_RUNTIME) run $(CONTAINER_RUN_FLAGS) --platform $(GOOS)/$(GOARCH) --workdir /app --rm \
 		-v ${PWD}:/app \
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
@@ -173,7 +216,7 @@ build-using-image:
 .PHONY: build-using-alpine
 build-using-alpine:
 	mkdir -p $(HOME)/.go-cache/mod $(HOME)/.go-cache/build
-	docker run --platform $(GOOS)/$(GOARCH) --workdir /app --rm \
+	$(CONTAINER_RUNTIME) run $(CONTAINER_RUN_FLAGS) --platform $(GOOS)/$(GOARCH) --workdir /app --rm \
 		-v ${PWD}:/app \
 		-v ${HOME}/.go-cache/mod:/go/pkg/mod \
 		-v ${HOME}/.go-cache/build:/root/.cache/go-build \
@@ -302,22 +345,44 @@ clean-kubesoloctl:
 IMAGE_NAME ?= portainer/kubesolo
 IMAGE_TAG ?= $(VERSION)
 
+# Apple Containers will not push a reference without a registry host ("could
+# not extract host from reference"); Docker assumes docker.io. Qualify
+# IMAGE_NAME for `container` when it carries no host of its own — a name whose
+# first segment holds a "." or ":" (ghcr.io/..., localhost:5000/...) already
+# does and is left as-is.
+IMAGE_NAME_HEAD = $(firstword $(subst /, ,$(IMAGE_NAME)))
+ifeq ($(CONTAINER_RUNTIME),docker)
+IMAGE_REF = $(IMAGE_NAME)
+else
+IMAGE_REF = $(if $(or $(findstring .,$(IMAGE_NAME_HEAD)),$(findstring :,$(IMAGE_NAME_HEAD))),$(IMAGE_NAME),docker.io/$(IMAGE_NAME))
+endif
+
 # Build the container image (downloads arch-specific deps, builds static binary via Alpine, then packages it)
 .PHONY: image
 image: deps build-using-alpine
-	docker buildx build \
+	$(IMAGE_BUILD) \
 		--platform $(GOOS)/$(GOARCH) \
-		-t $(IMAGE_NAME):$(IMAGE_TAG)-$(GOOS)-$(GOARCH) .
+		-t $(IMAGE_REF):$(IMAGE_TAG)-$(GOOS)-$(GOARCH) .
 
-# Build multi-arch container images using buildx
+# Build and push the container image for $(GOOS)/$(GOARCH). buildx builds and
+# pushes in one step; `container` builds one platform at a time and pushes
+# afterwards, so multi-arch manifests need one invocation per architecture.
 .PHONY: image-buildx
 image-buildx:
+ifeq ($(CONTAINER_RUNTIME),docker)
 	docker buildx build --platform $(GOOS)/$(GOARCH) \
-		-t $(IMAGE_NAME):$(IMAGE_TAG) -t $(IMAGE_NAME):latest \
+		-t $(IMAGE_REF):$(IMAGE_TAG) -t $(IMAGE_REF):latest \
 		--push .
+else
+	$(IMAGE_BUILD) --platform $(GOOS)/$(GOARCH) \
+		-t $(IMAGE_REF):$(IMAGE_TAG) .
+	$(CONTAINER_RUNTIME) image tag $(IMAGE_REF):$(IMAGE_TAG) $(IMAGE_REF):latest
+	$(IMAGE_PUSH) $(IMAGE_REF):$(IMAGE_TAG)
+	$(IMAGE_PUSH) $(IMAGE_REF):latest
+endif
 
 # Push the container image
 .PHONY: image-push
 image-push:
-	docker push $(IMAGE_NAME):$(IMAGE_TAG)
-	docker push $(IMAGE_NAME):latest
+	$(IMAGE_PUSH) $(IMAGE_REF):$(IMAGE_TAG)
+	$(IMAGE_PUSH) $(IMAGE_REF):latest

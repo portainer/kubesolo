@@ -61,6 +61,12 @@ type D2KCertificatePaths struct {
 }
 
 type Embedded struct {
+	// NodeName is the name of the single node this control plane manages. It is
+	// the kubelet's registered node name, the subject of its client certificate
+	// and its RBAC binding, and the node the NodeSetter webhook pins pods to.
+	// Resolved from kubernetes.nodeName, falling back to the hostname.
+	NodeName string
+
 	// System Node IP
 	NodeIP string
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/types"
 )
 
@@ -57,7 +56,7 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		caFile:                embedded.KubeletCerts.CACert,
 		certFile:              embedded.KubeletCerts.Cert,
 		keyFile:               embedded.KubeletCerts.Key,
-		nodeName:              system.GetHostname(),
+		nodeName:              embedded.NodeName,
 		adminKubeconfig:       embedded.AdminKubeconfigFile,
 		containerMode:         embedded.ContainerMode,
 		disableIPv6:           embedded.DisableIPv6,
