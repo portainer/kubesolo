@@ -2,7 +2,6 @@ package kubeproxy
 
 import (
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -14,25 +13,6 @@ import (
 
 	proxy "k8s.io/kubernetes/cmd/kube-proxy/app"
 )
-
-// flushNftablesNat clears any existing nftables nat table rules before
-// kube-proxy starts. This prevents conflicts between native nftables rules
-// (e.g., from Podman's netavark) and kube-proxy's iptables-nft translation
-// layer, which cannot coexist with pre-existing native nftables entries.
-func flushNftablesNat() {
-	out, err := exec.Command("nft", "flush", "table", "ip", "nat").CombinedOutput()
-	if err != nil {
-		log.Debug().Str("component", "kubeproxy").Msgf("nft flush table ip nat: %v (output: %s) — table may not exist, skipping", err, string(out))
-		return
-	}
-	log.Info().Str("component", "kubeproxy").Msg("flushed nftables ip nat table to avoid iptables-nft conflicts")
-
-	// The flush above wipes CNI masquerade rules for already-running pods.
-	// Re-add immediately so the gap where pods have no SNAT is negligible.
-	if err := network.EnsurePodMasquerade(types.DefaultPodCIDR); err != nil {
-		log.Warn().Str("component", "kubeproxy").Msgf("failed to restore pod masquerade after nat flush: %v", err)
-	}
-}
 
 // Run starts the kube proxy in the following order:
 // 1. it sets the kube proxy flags
@@ -50,12 +30,6 @@ func (s *service) Run(kubeletReadyCh chan struct{}) error {
 	time.Sleep(types.DefaultComponentSleep)
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		<-kubeletReadyCh
-		// Only flush the nat table when using iptables mode. In nftables mode
-		// kube-proxy manages its own table (kube-proxy) and never writes to
-		// table ip nat, so flushing it would wipe CNI masquerade rules.
-		if detectProxyMode() == "iptables" {
-			flushNftablesNat()
-		}
 		s.wg.Go(func() {
 			if err := command.ExecuteContext(s.ctx); err != nil {
 				log.Error().Str("component", "kubeproxy").Msgf("kubeproxy exited with error: %v", err)
@@ -90,9 +64,9 @@ func (s *service) postSetup() error {
 		s.cancelShutdown()
 		return err
 	}
-	// Re-verify masquerade is in place. flushNftablesNat may have run before
-	// kube-proxy's own chains were programmed; this ensures kubeproxyReady only
-	// fires once SNAT for pod egress is confirmed.
+	// Re-verify masquerade is in place: kube-proxy programs its own chains in
+	// the nat table on startup, so this ensures kubeproxyReady only fires once
+	// SNAT for pod egress is confirmed.
 	if err := network.EnsurePodMasquerade(types.DefaultPodCIDR); err != nil {
 		log.Error().Str("component", "kubeproxy").Msgf("failed to ensure pod masquerade: %v", err)
 	}
