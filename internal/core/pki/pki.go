@@ -1,6 +1,7 @@
 package pki
 
 import (
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -20,9 +21,17 @@ import (
 // it generates the CA certificate, kubelet certificate, apiserver certificate, controller-manager certificate, admin certificate, webhook certificate, and request header certificates
 // all certificates are generated as self-signed certificates
 func GenerateAllCertificates(embedded types.Embedded) error {
-	caOpts := defaultCertOptions(CACert, embedded)
-	if err := generateCertificate(caOpts); err != nil {
-		return fmt.Errorf("failed to generate CA certificate: %v", err)
+	// A supplied CA is verified, never generated: KubeSolo signs with it but does
+	// not own it, so it is not created, rotated or removed here.
+	if embedded.ExternalCA {
+		if err := VerifyExternalCA(embedded); err != nil {
+			return err
+		}
+	} else {
+		caOpts := defaultCertOptions(CACert, embedded)
+		if err := generateCertificate(caOpts); err != nil {
+			return fmt.Errorf("failed to generate CA certificate: %v", err)
+		}
 	}
 
 	kubeletOpts := defaultCertOptions(KubeletCert, embedded)
@@ -292,7 +301,7 @@ func writeCertificateAndKey(certPath, keyPath string, cert []byte, privateKey *r
 
 // loadCertificateAndKey loads the certificate and key from disk
 // it returns the certificate, the private key, and an error if it fails
-func loadCertificateAndKey(certPath, keyPath string) (*x509.Certificate, *rsa.PrivateKey, error) {
+func loadCertificateAndKey(certPath, keyPath string) (*x509.Certificate, crypto.Signer, error) {
 	certPEMBlock, err := os.ReadFile(certPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read certificate file: %v", err)
@@ -318,10 +327,47 @@ func loadCertificateAndKey(certPath, keyPath string) (*x509.Certificate, *rsa.Pr
 		return nil, nil, fmt.Errorf("failed to parse key PEM data")
 	}
 
-	key, err := x509.ParsePKCS1PrivateKey(keyDERBlock.Bytes)
+	key, err := parsePrivateKey(keyDERBlock.Bytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse key: %v", err)
+		return nil, nil, err
 	}
 
 	return cert, key, nil
+}
+
+// parsePrivateKey accepts any PEM encoding and key type a CA is found in, and
+// returns it as the crypto.Signer x509.CreateCertificate wants.
+//
+// KubeSolo writes PKCS#1 RSA itself and signs its own leaf keys with RSA, but a
+// CA supplied via pki.caKey was produced by something else. Talos and Omni
+// generate an ECDSA P-256 cluster CA, and openssl emits PKCS#8 by default, so
+// accepting only PKCS#1 RSA rejects most real CAs with a parse error that names
+// nothing useful.
+//
+// The signature algorithm follows from the key: an ECDSA CA signs
+// ecdsa-with-SHA256, an RSA one SHA256WithRSA. Nothing here pins it, and the
+// leaf's own key type is independent of the CA's.
+func parsePrivateKey(der []byte) (crypto.Signer, error) {
+	// Tried in order rather than switched on the PEM block type, because the
+	// label is a hint from whoever wrote the file and is not always right.
+	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
+		return key, nil
+	}
+
+	if key, err := x509.ParseECPrivateKey(der); err == nil {
+		return key, nil
+	}
+
+	parsed, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse key: not a PKCS#1, SEC1 or PKCS#8 private key")
+	}
+
+	// Ed25519 arrives here too and is a perfectly good signer.
+	signer, ok := parsed.(crypto.Signer)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse key: got a %T, which cannot sign certificates", parsed)
+	}
+
+	return signer, nil
 }

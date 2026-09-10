@@ -26,6 +26,7 @@ require (
 	k8s.io/apimachinery v0.35.7
 	k8s.io/apiserver v0.35.7
 	k8s.io/client-go v0.35.7
+	k8s.io/cluster-bootstrap v0.0.0
 	k8s.io/component-base v0.35.7
 	k8s.io/cri-api v0.35.6
 	k8s.io/cri-client v0.33.6
@@ -268,7 +269,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.33.6 // indirect
 	k8s.io/cloud-provider v0.33.6 // indirect
-	k8s.io/cluster-bootstrap v0.0.0 // indirect
 	k8s.io/component-helpers v0.33.6 // indirect
 	k8s.io/controller-manager v0.32.2 // indirect
 	k8s.io/csi-translation-lib v0.0.0 // indirect

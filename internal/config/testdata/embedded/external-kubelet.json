@@ -1,5 +1,5 @@
 {
-  "NodeName": "",
+  "NodeName": "talos-cp-1",
   "BootstrapToken": "",
   "ExternalCA": false,
   "NodeIP": "",
@@ -68,7 +68,7 @@
   "RuntimeEndpoint": "unix:///var/lib/kubesolo/containerd/containerd.sock",
   "RuntimeSocketPath": "/var/lib/kubesolo/containerd/containerd.sock",
   "RuntimeCgroupDriver": "",
-  "KubeletExternal": false,
+  "KubeletExternal": true,
   "KubeletDir": "/var/lib/kubesolo/kubelet",
   "KubeletConfigDir": "/var/lib/kubesolo/kubelet/config",
   "KubeletConfigFile": "/var/lib/kubesolo/kubelet/config/config.yaml",
@@ -114,14 +114,8 @@
     "bindAddress": ""
   },
   "CPUManager": {
-    "policy": "static",
-    "policyOptions": {
-      "full-pcpus-only": "true"
-    },
-    "reservedCPUs": "0-1"
+    "policy": "",
+    "reservedCPUs": ""
   },
-  "SystemReserved": {
-    "cpu": "1",
-    "memory": "500Mi"
-  }
+  "SystemReserved": null
 }

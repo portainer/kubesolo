@@ -128,6 +128,29 @@ func goldenCases() []goldenCase {
 			cfg:   cfgWith(at(base)),
 			probe: Probe{Hostname: "edge-box-7"},
 		},
+		{name: "external-etcd", cfg: cfgWith(at(base), func(c *types.Config) {
+			c.Storage.Etcd = types.EtcdConfig{
+				Endpoints: []string{"https://127.0.0.1:2379"},
+				CAFile:    "/etc/kubernetes/pki/etcd/ca.crt",
+				CertFile:  "/etc/kubernetes/pki/apiserver-etcd-client.crt",
+				KeyFile:   "/etc/kubernetes/pki/apiserver-etcd-client.key",
+			}
+		})},
+		{
+			name: "external-kubelet",
+			cfg: cfgWith(at(base), func(c *types.Config) {
+				c.Kubernetes.Kubelet.External = true
+				c.Kubernetes.NodeName = "talos-cp-1"
+			}),
+			probe: Probe{Hostname: "kubesolo-container"},
+		},
+		{name: "bootstrap-token", cfg: cfgWith(at(base), func(c *types.Config) {
+			c.Kubernetes.BootstrapToken = "abcdef.0123456789abcdef"
+		})},
+		{name: "external-ca", cfg: cfgWith(at(base), func(c *types.Config) {
+			c.PKI.CACert = "/etc/talos/pki/ca.crt"
+			c.PKI.CAKey = "/etc/talos/pki/ca.key"
+		})},
 		{name: "metrics-enabled", cfg: cfgWith(at(base), func(c *types.Config) {
 			c.Metrics = types.MetricsConfig{Enabled: true, BindAddress: "0.0.0.0:9105"}
 		})},

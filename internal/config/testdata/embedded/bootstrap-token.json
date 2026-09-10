@@ -1,6 +1,6 @@
 {
   "NodeName": "",
-  "BootstrapToken": "",
+  "BootstrapToken": "abcdef.0123456789abcdef",
   "ExternalCA": false,
   "NodeIP": "",
   "NodeIPSpecified": false,
@@ -114,14 +114,8 @@
     "bindAddress": ""
   },
   "CPUManager": {
-    "policy": "static",
-    "policyOptions": {
-      "full-pcpus-only": "true"
-    },
-    "reservedCPUs": "0-1"
+    "policy": "",
+    "reservedCPUs": ""
   },
-  "SystemReserved": {
-    "cpu": "1",
-    "memory": "500Mi"
-  }
+  "SystemReserved": null
 }

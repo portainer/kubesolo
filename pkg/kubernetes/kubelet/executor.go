@@ -22,6 +22,10 @@ import (
 // 5. it waits for a signal to stop the kubelet
 // 6. it logs the termination of the kubelet
 func (s *service) Run(apiServerReady chan struct{}) error {
+	if s.external {
+		return s.runExternal(apiServerReady)
+	}
+
 	log.Info().Str("component", "kubelet").Msg("starting kubelet...")
 	if err := s.validation(); err != nil {
 		s.terminate()
