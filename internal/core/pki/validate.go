@@ -1,7 +1,7 @@
 package pki
 
 import (
-	"crypto/rsa"
+	"crypto"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -202,12 +202,14 @@ func VerifyExternalCA(embedded types.Embedded) error {
 	}
 
 	// A cert and key that do not belong together produce certificates that fail
-	// verification everywhere, with errors that point at the leaf rather than here.
-	public, ok := cert.PublicKey.(*rsa.PublicKey)
+	// verification everywhere, with errors that point at the leaf rather than
+	// here. Every standard key type implements Equal, so this compares them
+	// without caring which algorithm the CA uses.
+	publicKey, ok := key.Public().(interface{ Equal(crypto.PublicKey) bool })
 	if !ok {
-		return fmt.Errorf("supplied CA %s carries a %T public key, but KubeSolo signs with RSA keys only", embedded.CACerts.Cert, cert.PublicKey)
+		return fmt.Errorf("supplied CA key %s is a %T, which cannot be compared against the certificate", embedded.CACerts.Key, key.Public())
 	}
-	if public.N.Cmp(key.N) != 0 {
+	if !publicKey.Equal(cert.PublicKey) {
 		return fmt.Errorf("supplied CA %s and key %s do not match: the key does not belong to that certificate", embedded.CACerts.Cert, embedded.CACerts.Key)
 	}
 
