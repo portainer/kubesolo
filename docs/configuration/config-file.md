@@ -172,6 +172,10 @@ network:
     enabled: true
     ip: ""                # empty = use nodeIP
 
+pki:
+  caCert: ""              # empty = KubeSolo generates and owns the CA
+  caKey: ""               # both or neither; supplied files are used in place, never copied
+
 runtime:
   endpoint: ""            # empty = run the embedded containerd
   containerMode: null     # null = auto-detect; true/false to force
@@ -237,6 +241,8 @@ and stays at the top level.
 | `network.mtu` | `integer` | `0` |
 | `network.nodeIP` | `string` | `""` |
 | `path` | `string` | `/var/lib/kubesolo` | **immutable**
+| `pki.caCert` | `string` | `""` |
+| `pki.caKey` | `string` | `""` |
 | `portainer.async` | `boolean` | `false` |
 | `portainer.edgeID` | `string` | `""` |
 | `portainer.edgeKey` | `string` | `—` | *(secret)*

@@ -44,6 +44,18 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		runtimeEndpoint = cri.Embedded(containerdSocketFile)
 	}
 
+	// The Kubernetes root CA. Supplied material is used where it lies rather than
+	// copied in: it is commonly read-only and owned by whatever provisioned it,
+	// and keeping it outside PKIDir puts it out of reach of removeLeafCerts,
+	// which wipes everything under that directory when the node IP moves.
+	caCert := filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.crt")
+	caKey := filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.key")
+	externalCA := cfg.PKI.CACert != "" && cfg.PKI.CAKey != ""
+	if externalCA {
+		caCert = cfg.PKI.CACert
+		caKey = cfg.PKI.CAKey
+	}
+
 	// The node this control plane manages, defaulting to the hostname.
 	//
 	// Trimmed and lowercased to match what the kubelet does to --hostname-override
@@ -58,7 +70,8 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 	}
 
 	return types.Embedded{
-		NodeName: nodeName,
+		NodeName:   nodeName,
+		ExternalCA: externalCA,
 
 		// System Node IP
 		NodeIP:          probe.NodeIP,
@@ -84,42 +97,42 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		// Certificate paths
 		KubeletCerts: types.KubeletCertificatePaths{
 			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.crt"),
+				CACert: caCert,
 				Cert:   filepath.Join(cfg.Path, types.DefaultPKIDir, "kubelet", "kubelet.crt"),
 				Key:    filepath.Join(cfg.Path, types.DefaultPKIDir, "kubelet", "kubelet.key"),
 			},
 		},
 		APIServerCerts: types.APIServerCertificatePaths{
 			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.crt"),
+				CACert: caCert,
 				Cert:   filepath.Join(cfg.Path, types.DefaultPKIDir, "apiserver", "apiserver.crt"),
 				Key:    filepath.Join(cfg.Path, types.DefaultPKIDir, "apiserver", "apiserver.key"),
 			},
 		},
 		ControllerManagerCerts: types.ControllerManagerCertificatePaths{
 			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.crt"),
+				CACert: caCert,
 				Cert:   filepath.Join(cfg.Path, types.DefaultPKIDir, "controller-manager", "controller-manager.crt"),
 				Key:    filepath.Join(cfg.Path, types.DefaultPKIDir, "controller-manager", "controller-manager.key"),
 			},
 		},
 		AdminCerts: types.AdminCertificatePaths{
 			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.crt"),
+				CACert: caCert,
 				Cert:   filepath.Join(cfg.Path, types.DefaultPKIDir, "admin", "admin.crt"),
 				Key:    filepath.Join(cfg.Path, types.DefaultPKIDir, "admin", "admin.key"),
 			},
 		},
 		WebhookCerts: types.WebhookCertificatePaths{
 			CertificatePaths: types.CertificatePaths{
-				CACert: filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.crt"),
+				CACert: caCert,
 				Cert:   filepath.Join(cfg.Path, types.DefaultPKIDir, "webhook", "webhook.crt"),
 				Key:    filepath.Join(cfg.Path, types.DefaultPKIDir, "webhook", "webhook.key"),
 			},
 		},
 		CACerts: types.CACertificatePaths{
-			Cert: filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.crt"),
-			Key:  filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.key"),
+			Cert: caCert,
+			Key:  caKey,
 		},
 		RequestHeaderCerts: types.RequestHeaderCertificatePaths{
 			CACert:     filepath.Join(cfg.Path, types.DefaultPKIDir, "request-header", "request-header-ca.crt"),
@@ -203,7 +216,7 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		D2K:          cfg.D2K.Enabled,
 		D2KNamespace: cfg.D2K.Namespace,
 		D2KCerts: types.D2KCertificatePaths{
-			CACert:     filepath.Join(cfg.Path, types.DefaultPKIDir, "ca", "ca.crt"),
+			CACert:     caCert,
 			ServerCert: filepath.Join(cfg.Path, types.DefaultPKIDir, types.DefaultD2KDir, "server.crt"),
 			ServerKey:  filepath.Join(cfg.Path, types.DefaultPKIDir, types.DefaultD2KDir, "server.key"),
 			ClientCert: filepath.Join(cfg.Path, types.DefaultPKIDir, types.DefaultD2KDir, "client.crt"),

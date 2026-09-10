@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -81,6 +82,22 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 
 	if _, err := cri.Resolve(cfg.Runtime.Endpoint); err != nil {
 		return warnings, fmt.Errorf("runtime.endpoint: %w", err)
+	}
+
+	// A supplied CA is only usable as a pair: KubeSolo signs every leaf
+	// certificate with it, so a cert without its key leaves the control plane
+	// unable to issue anything, and a key without its cert leaves it with no
+	// trust anchor to publish.
+	if (cfg.PKI.CACert == "") != (cfg.PKI.CAKey == "") {
+		return warnings, fmt.Errorf("pki.caCert and pki.caKey must be set together: KubeSolo signs with this CA, so one without the other is unusable")
+	}
+
+	// Relative paths would resolve against KubeSolo's working directory, which is
+	// whatever started it — a service manager, a shell, a container entrypoint.
+	for path, field := range map[string]string{cfg.PKI.CACert: "pki.caCert", cfg.PKI.CAKey: "pki.caKey"} {
+		if path != "" && !filepath.IsAbs(path) {
+			return warnings, fmt.Errorf("%s must be an absolute path, got %q", field, path)
+		}
 	}
 
 	// cpumanager.Parse is the single validator for these four settings: it checks

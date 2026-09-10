@@ -128,6 +128,10 @@ func goldenCases() []goldenCase {
 			cfg:   cfgWith(at(base)),
 			probe: Probe{Hostname: "edge-box-7"},
 		},
+		{name: "external-ca", cfg: cfgWith(at(base), func(c *types.Config) {
+			c.PKI.CACert = "/etc/talos/pki/ca.crt"
+			c.PKI.CAKey = "/etc/talos/pki/ca.key"
+		})},
 		{name: "metrics-enabled", cfg: cfgWith(at(base), func(c *types.Config) {
 			c.Metrics = types.MetricsConfig{Enabled: true, BindAddress: "0.0.0.0:9105"}
 		})},

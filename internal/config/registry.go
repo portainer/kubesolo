@@ -151,6 +151,18 @@ func buildRegistry() []Field {
 			},
 		},
 		{
+			ConfigPath: "pki.caCert",
+			Envar:      "KUBESOLO_PKI_CA_CERT",
+			Get:        func(c *types.Config) any { return c.PKI.CACert },
+			Set:        func(c *types.Config, v string) error { c.PKI.CACert = v; return nil },
+		},
+		{
+			ConfigPath: "pki.caKey",
+			Envar:      "KUBESOLO_PKI_CA_KEY",
+			Get:        func(c *types.Config) any { return c.PKI.CAKey },
+			Set:        func(c *types.Config, v string) error { c.PKI.CAKey = v; return nil },
+		},
+		{
 			ConfigPath: "kubernetes.nodeName",
 			Envar:      "KUBESOLO_NODE_NAME",
 			Get:        func(c *types.Config) any { return c.Kubernetes.NodeName },

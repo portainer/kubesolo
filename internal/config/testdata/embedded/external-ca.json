@@ -1,6 +1,6 @@
 {
   "NodeName": "",
-  "ExternalCA": false,
+  "ExternalCA": true,
   "NodeIP": "",
   "NodeIPSpecified": false,
   "MTU": 0,
@@ -15,33 +15,33 @@
   "PKIRequestHeaderDir": "/var/lib/kubesolo/pki/request-header",
   "AdminKubeconfigFile": "/var/lib/kubesolo/pki/admin/admin.kubeconfig",
   "KubeletCerts": {
-    "CACert": "/var/lib/kubesolo/pki/ca/ca.crt",
+    "CACert": "/etc/talos/pki/ca.crt",
     "Cert": "/var/lib/kubesolo/pki/kubelet/kubelet.crt",
     "Key": "/var/lib/kubesolo/pki/kubelet/kubelet.key"
   },
   "APIServerCerts": {
-    "CACert": "/var/lib/kubesolo/pki/ca/ca.crt",
+    "CACert": "/etc/talos/pki/ca.crt",
     "Cert": "/var/lib/kubesolo/pki/apiserver/apiserver.crt",
     "Key": "/var/lib/kubesolo/pki/apiserver/apiserver.key"
   },
   "ControllerManagerCerts": {
-    "CACert": "/var/lib/kubesolo/pki/ca/ca.crt",
+    "CACert": "/etc/talos/pki/ca.crt",
     "Cert": "/var/lib/kubesolo/pki/controller-manager/controller-manager.crt",
     "Key": "/var/lib/kubesolo/pki/controller-manager/controller-manager.key"
   },
   "AdminCerts": {
-    "CACert": "/var/lib/kubesolo/pki/ca/ca.crt",
+    "CACert": "/etc/talos/pki/ca.crt",
     "Cert": "/var/lib/kubesolo/pki/admin/admin.crt",
     "Key": "/var/lib/kubesolo/pki/admin/admin.key"
   },
   "WebhookCerts": {
-    "CACert": "/var/lib/kubesolo/pki/ca/ca.crt",
+    "CACert": "/etc/talos/pki/ca.crt",
     "Cert": "/var/lib/kubesolo/pki/webhook/webhook.crt",
     "Key": "/var/lib/kubesolo/pki/webhook/webhook.key"
   },
   "CACerts": {
-    "Cert": "/var/lib/kubesolo/pki/ca/ca.crt",
-    "Key": "/var/lib/kubesolo/pki/ca/ca.key"
+    "Cert": "/etc/talos/pki/ca.crt",
+    "Key": "/etc/talos/pki/ca.key"
   },
   "RequestHeaderCerts": {
     "CACert": "/var/lib/kubesolo/pki/request-header/request-header-ca.crt",
@@ -90,11 +90,11 @@
   "IsPortainerEdge": false,
   "PortainerEdgeImage": "",
   "ContainerMode": false,
-  "DisableIPv6": true,
+  "DisableIPv6": false,
   "D2K": false,
   "D2KNamespace": "",
   "D2KCerts": {
-    "CACert": "/var/lib/kubesolo/pki/ca/ca.crt",
+    "CACert": "/etc/talos/pki/ca.crt",
     "ServerCert": "/var/lib/kubesolo/pki/d2k/server.crt",
     "ServerKey": "/var/lib/kubesolo/pki/d2k/server.key",
     "ClientCert": "/var/lib/kubesolo/pki/d2k/client.crt",

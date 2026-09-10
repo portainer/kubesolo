@@ -20,9 +20,17 @@ import (
 // it generates the CA certificate, kubelet certificate, apiserver certificate, controller-manager certificate, admin certificate, webhook certificate, and request header certificates
 // all certificates are generated as self-signed certificates
 func GenerateAllCertificates(embedded types.Embedded) error {
-	caOpts := defaultCertOptions(CACert, embedded)
-	if err := generateCertificate(caOpts); err != nil {
-		return fmt.Errorf("failed to generate CA certificate: %v", err)
+	// A supplied CA is verified, never generated: KubeSolo signs with it but does
+	// not own it, so it is not created, rotated or removed here.
+	if embedded.ExternalCA {
+		if err := VerifyExternalCA(embedded); err != nil {
+			return err
+		}
+	} else {
+		caOpts := defaultCertOptions(CACert, embedded)
+		if err := generateCertificate(caOpts); err != nil {
+			return fmt.Errorf("failed to generate CA certificate: %v", err)
+		}
 	}
 
 	kubeletOpts := defaultCertOptions(KubeletCert, embedded)
@@ -318,10 +326,34 @@ func loadCertificateAndKey(certPath, keyPath string) (*x509.Certificate, *rsa.Pr
 		return nil, nil, fmt.Errorf("failed to parse key PEM data")
 	}
 
-	key, err := x509.ParsePKCS1PrivateKey(keyDERBlock.Bytes)
+	key, err := parseRSAPrivateKey(keyDERBlock.Bytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse key: %v", err)
+		return nil, nil, err
 	}
 
 	return cert, key, nil
+}
+
+// parseRSAPrivateKey accepts both PEM encodings an RSA key is found in.
+//
+// KubeSolo writes PKCS#1 ("RSA PRIVATE KEY") itself, but a CA supplied via
+// pki.caKey was produced by something else — PKCS#8 ("PRIVATE KEY") is at least
+// as common, and openssl emits it by default. Accepting only PKCS#1 would reject
+// a perfectly good CA with a parse error that names nothing useful.
+func parseRSAPrivateKey(der []byte) (*rsa.PrivateKey, error) {
+	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
+		return key, nil
+	}
+
+	parsed, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse key: not a PKCS#1 or PKCS#8 private key")
+	}
+
+	key, ok := parsed.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse key: got a %T, but KubeSolo signs with RSA keys only", parsed)
+	}
+
+	return key, nil
 }

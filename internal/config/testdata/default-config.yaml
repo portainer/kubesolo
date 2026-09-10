@@ -27,6 +27,7 @@ network:
   mtu: 0
   nodeIP: ""
 path: /var/lib/kubesolo
+pki: {}
 portainer:
   async: false
   edgeID: ""

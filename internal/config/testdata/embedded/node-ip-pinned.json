@@ -1,5 +1,6 @@
 {
   "NodeName": "",
+  "ExternalCA": false,
   "NodeIP": "10.0.0.5",
   "NodeIPSpecified": true,
   "MTU": 0,

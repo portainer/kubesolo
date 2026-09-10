@@ -330,3 +330,41 @@ func TestDefaultSocketPathFitsComfortably(t *testing.T) {
 		t.Errorf("default socket path is %d characters, over the %d limit", got, maxUnixSocketPath)
 	}
 }
+
+// TestValidateExternalCAPairing — a CA certificate without its key cannot sign,
+// and a key without its certificate leaves nothing to publish as a trust anchor.
+// Accepting either half would fail much later, as a TLS error naming some leaf.
+func TestValidateExternalCAPairing(t *testing.T) {
+	tests := []struct {
+		name    string
+		cert    string
+		key     string
+		wantErr string
+	}{
+		{name: "neither is the default"},
+		{name: "both together", cert: "/etc/talos/ca.crt", key: "/etc/talos/ca.key"},
+		{name: "cert without key", cert: "/etc/talos/ca.crt", wantErr: "must be set together"},
+		{name: "key without cert", key: "/etc/talos/ca.key", wantErr: "must be set together"},
+		{name: "relative cert", cert: "pki/ca.crt", key: "/etc/talos/ca.key", wantErr: "absolute path"},
+		{name: "relative key", cert: "/etc/talos/ca.crt", key: "pki/ca.key", wantErr: "absolute path"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.PKI.CACert = test.cert
+			cfg.PKI.CAKey = test.key
+
+			_, err := Validate(cfg, testHost())
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("expected an error containing %q, got %v", test.wantErr, err)
+			}
+		})
+	}
+}

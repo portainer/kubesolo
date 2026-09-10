@@ -27,6 +27,7 @@ type Config struct {
 	// containerd state live below it, and nothing migrates them.
 	Path string `json:"path,omitempty"`
 
+	PKI        PKIConfig        `json:"pki"`
 	Logging    LoggingConfig    `json:"logging"`
 	Network    NetworkConfig    `json:"network"`
 	Runtime    RuntimeConfig    `json:"runtime"`
@@ -36,6 +37,24 @@ type Config struct {
 	D2K        D2KConfig        `json:"d2k"`
 	Metrics    MetricsConfig    `json:"metrics"`
 	API        ConfigAPI        `json:"api"`
+}
+
+// PKIConfig supplies certificate material KubeSolo would otherwise generate.
+//
+// This exists for clusters whose trust anchor is owned by something else. Talos
+// holds the Kubernetes CA and hands the same CA to its kubelet, so KubeSolo has
+// to sign with that CA or the two never trust each other.
+//
+// The files are read where they are, never copied into the KubeSolo PKI
+// directory. That keeps them out of reach of the leaf-certificate regeneration
+// that runs when the node IP moves, and lets them stay read-only and owned by
+// whoever provisioned them.
+type PKIConfig struct {
+	// CACert and CAKey are the Kubernetes root CA. Both or neither: KubeSolo
+	// signs with this CA, so a certificate without its key is unusable.
+	// Empty means KubeSolo generates and owns the CA, which is the default.
+	CACert string `json:"caCert,omitempty"`
+	CAKey  string `json:"caKey,omitempty"`
 }
 
 // LoggingConfig controls log verbosity and the pprof server.

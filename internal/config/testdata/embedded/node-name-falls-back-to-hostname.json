@@ -1,5 +1,6 @@
 {
   "NodeName": "edge-box-7",
+  "ExternalCA": false,
   "NodeIP": "",
   "NodeIPSpecified": false,
   "MTU": 0,

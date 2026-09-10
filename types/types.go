@@ -67,6 +67,11 @@ type Embedded struct {
 	// Resolved from kubernetes.nodeName, falling back to the hostname.
 	NodeName string
 
+	// ExternalCA is true when the CA cert and key were supplied via pki.caCert
+	// and pki.caKey rather than generated. KubeSolo must not create, rotate or
+	// delete either file in that case — it only signs with them.
+	ExternalCA bool
+
 	// System Node IP
 	NodeIP string
 

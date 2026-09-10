@@ -14,6 +14,11 @@ func Defaults() *types.Config {
 
 		Path: types.DefaultBasePath,
 
+		PKI: types.PKIConfig{
+			CACert: "", // KubeSolo generates and owns the CA
+			CAKey:  "",
+		},
+
 		Logging: types.LoggingConfig{
 			Debug: false,
 			Pprof: false,
