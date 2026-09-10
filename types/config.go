@@ -114,6 +114,21 @@ type KubernetesConfig struct {
 	// this name — a mismatch leaves the whole cluster Pending.
 	NodeName string `json:"nodeName,omitempty"`
 
+	// BootstrapToken turns on Kubernetes TLS bootstrapping, in the standard
+	// "<6 chars>.<16 chars>" form. Empty — the default — leaves it off.
+	//
+	// KubeSolo's own kubelet does not need this: it is handed a client
+	// certificate KubeSolo has already signed. A kubelet KubeSolo does not
+	// control has no such option — Talos, for one, only ever enrols by
+	// presenting a bootstrap token and requesting a certificate — so setting
+	// this enables bootstrap-token authentication on the API server, starts the
+	// controller manager's CSR signers, and seeds the token Secret and the RBAC
+	// that lets node client CSRs be approved automatically.
+	//
+	// It is a credential: anything holding it can obtain a node certificate for
+	// this cluster.
+	BootstrapToken string `json:"bootstrapToken,omitempty"`
+
 	APIServer APIServerConfig `json:"apiServer"`
 	Kubelet   KubeletConfig   `json:"kubelet"`
 }

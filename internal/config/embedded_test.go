@@ -128,6 +128,9 @@ func goldenCases() []goldenCase {
 			cfg:   cfgWith(at(base)),
 			probe: Probe{Hostname: "edge-box-7"},
 		},
+		{name: "bootstrap-token", cfg: cfgWith(at(base), func(c *types.Config) {
+			c.Kubernetes.BootstrapToken = "abcdef.0123456789abcdef"
+		})},
 		{name: "external-ca", cfg: cfgWith(at(base), func(c *types.Config) {
 			c.PKI.CACert = "/etc/talos/pki/ca.crt"
 			c.PKI.CAKey = "/etc/talos/pki/ca.key"

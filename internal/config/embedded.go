@@ -70,8 +70,9 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 	}
 
 	return types.Embedded{
-		NodeName:   nodeName,
-		ExternalCA: externalCA,
+		NodeName:       nodeName,
+		BootstrapToken: cfg.Kubernetes.BootstrapToken,
+		ExternalCA:     externalCA,
 
 		// System Node IP
 		NodeIP:          probe.NodeIP,

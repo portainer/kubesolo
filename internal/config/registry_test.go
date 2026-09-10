@@ -106,7 +106,10 @@ func TestOnlyPathIsImmutable(t *testing.T) {
 
 // TestSecretsAreMarked pins which settings the API redacts.
 func TestSecretsAreMarked(t *testing.T) {
-	want := map[string]bool{"portainer.edgeKey": true}
+	want := map[string]bool{
+		"portainer.edgeKey":         true,
+		"kubernetes.bootstrapToken": true,
+	}
 	for _, f := range Registry() {
 		if f.Secret != want[f.ConfigPath] {
 			t.Errorf("%s: Secret = %v, want %v", f.ConfigPath, f.Secret, want[f.ConfigPath])

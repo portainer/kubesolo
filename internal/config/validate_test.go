@@ -368,3 +368,32 @@ func TestValidateExternalCAPairing(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateBootstrapToken — the API server derives the Secret name from the
+// token id, so a malformed token authenticates nothing and surfaces only as a
+// 401 at the kubelet, which never names the token as the cause.
+func TestValidateBootstrapToken(t *testing.T) {
+	for _, token := range []string{"", "abcdef.0123456789abcdef", "07401b.f395accd246ae52d"} {
+		cfg := Defaults()
+		cfg.Kubernetes.BootstrapToken = token
+		if _, err := Validate(cfg, testHost()); err != nil {
+			t.Errorf("token %q: expected no error, got %v", token, err)
+		}
+	}
+
+	invalid := []string{
+		"abcdef",                    // no secret
+		"abcdef.0123",               // secret too short
+		"ABCDEF.0123456789abcdef",   // uppercase
+		"abcde.0123456789abcdef",    // id too short
+		"abcdef-0123456789abcdef",   // wrong separator
+		"abcdef.0123456789abcdefff", // secret too long
+	}
+	for _, token := range invalid {
+		cfg := Defaults()
+		cfg.Kubernetes.BootstrapToken = token
+		if _, err := Validate(cfg, testHost()); err == nil {
+			t.Errorf("token %q: expected an error, got none", token)
+		}
+	}
+}

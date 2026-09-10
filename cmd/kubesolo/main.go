@@ -27,6 +27,7 @@ import (
 	"github.com/portainer/kubesolo/pkg/components/portainer"
 	"github.com/portainer/kubesolo/pkg/kine"
 	"github.com/portainer/kubesolo/pkg/kubernetes/apiserver"
+	"github.com/portainer/kubesolo/pkg/kubernetes/bootstrap"
 	"github.com/portainer/kubesolo/pkg/kubernetes/controller"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubelet"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubeproxy"
@@ -289,6 +290,16 @@ func (s *kubesolo) run() {
 		// exposing.
 		if svc.name == "kine" && s.cfg.API.Enabled {
 			s.startConfigAPIService(ctx, cancel)
+		}
+	}
+
+	// TLS bootstrapping is seeded before any kubelet is expected, so that a
+	// foreign kubelet already retrying against the API server finds the token
+	// valid on its next attempt rather than after a further backoff.
+	if s.cfg.Kubernetes.BootstrapToken != "" {
+		log.Info().Str("component", "kubesolo").Msg("enabling tls bootstrapping...")
+		if err := bootstrap.Apply(s.embedded.AdminKubeconfigFile, s.cfg.Kubernetes.BootstrapToken); err != nil {
+			log.Fatal().Err(err).Msg("failed to enable tls bootstrapping")
 		}
 	}
 

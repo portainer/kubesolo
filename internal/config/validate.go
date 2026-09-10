@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -53,6 +54,10 @@ func ResolveContainerMode(cfg *types.Config, detected bool) bool {
 // It has no side effects beyond cfg and never exits. Startup treats a returned
 // error as fatal; the config API turns it into a rejected request. A validator
 // that called log.Fatal would take the cluster down over a bad API payload.
+// bootstrapTokenPattern is the token form the API server's bootstrap
+// authenticator accepts, from k8s.io/cluster-bootstrap.
+var bootstrapTokenPattern = regexp.MustCompile(`^[a-z0-9]{6}\.[a-z0-9]{16}$`)
+
 func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	var warnings []Warning
 
@@ -82,6 +87,14 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 
 	if _, err := cri.Resolve(cfg.Runtime.Endpoint); err != nil {
 		return warnings, fmt.Errorf("runtime.endpoint: %w", err)
+	}
+
+	// The API server parses the token into the Secret name bootstrap-token-<id>
+	// and matches it against token-id/token-secret, so a token in any other shape
+	// authenticates nothing. The failure is a 401 at the kubelet with no
+	// indication that the token was the problem, so it is rejected here instead.
+	if token := cfg.Kubernetes.BootstrapToken; token != "" && !bootstrapTokenPattern.MatchString(token) {
+		return warnings, fmt.Errorf("kubernetes.bootstrapToken must look like %q (six lowercase alphanumerics, a dot, then sixteen)", "abcdef.0123456789abcdef")
 	}
 
 	// A supplied CA is only usable as a pair: KubeSolo signs every leaf

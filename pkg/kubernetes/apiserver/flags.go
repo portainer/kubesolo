@@ -35,6 +35,13 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	_ = flags.Set("proxy-client-cert-file", s.requestHeaderClientCert)
 	_ = flags.Set("proxy-client-key-file", s.requestHeaderClientKey)
 
+	// TLS bootstrapping. Off unless a token is configured: with it on, anything
+	// that can present a valid bootstrap token can obtain a node certificate, so
+	// it is not something to enable for a cluster that has no use for it.
+	if s.bootstrapToken != "" {
+		_ = flags.Set("enable-bootstrap-token-auth", "true")
+	}
+
 	// authorization
 	_ = flags.Set("allow-privileged", "true")
 	_ = flags.Set("authorization-mode", "Node,RBAC")

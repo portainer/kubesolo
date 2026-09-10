@@ -1,5 +1,6 @@
 {
   "NodeName": "",
+  "BootstrapToken": "",
   "ExternalCA": false,
   "NodeIP": "",
   "NodeIPSpecified": false,

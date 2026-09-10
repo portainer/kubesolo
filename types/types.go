@@ -67,6 +67,10 @@ type Embedded struct {
 	// Resolved from kubernetes.nodeName, falling back to the hostname.
 	NodeName string
 
+	// BootstrapToken enables TLS bootstrapping when non-empty. See
+	// types.KubernetesConfig.BootstrapToken.
+	BootstrapToken string
+
 	// ExternalCA is true when the CA cert and key were supplied via pki.caCert
 	// and pki.caKey rather than generated. KubeSolo must not create, rotate or
 	// delete either file in that case — it only signs with them.

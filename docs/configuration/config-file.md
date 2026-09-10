@@ -154,6 +154,7 @@ path: /var/lib/kubesolo
 
 kubernetes:
   nodeName: ""            # empty = the hostname
+  bootstrapToken: ""      # e.g. abcdef.0123456789abcdef; empty = TLS bootstrapping off
   apiServer:
     extraSANs: []
     startupTimeoutSeconds: 600
@@ -224,6 +225,7 @@ and stays at the top level.
 | `api.socketPath` | `string` | `""` |
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |
+| `kubernetes.bootstrapToken` | `string` | `—` | *(secret)*
 | `kubernetes.apiServer.extraSANs` | `array` | `[]` |
 | `kubernetes.apiServer.startupTimeoutSeconds` | `integer` | `600` |
 | `kubernetes.kubelet.cpuManager.policy` | `string` | `none` |

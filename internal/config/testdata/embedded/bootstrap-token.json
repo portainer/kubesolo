@@ -1,6 +1,6 @@
 {
-  "NodeName": "edge-box-7",
-  "BootstrapToken": "",
+  "NodeName": "",
+  "BootstrapToken": "abcdef.0123456789abcdef",
   "ExternalCA": false,
   "NodeIP": "",
   "NodeIPSpecified": false,

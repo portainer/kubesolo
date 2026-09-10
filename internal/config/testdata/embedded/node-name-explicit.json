@@ -1,5 +1,6 @@
 {
   "NodeName": "talos-cp-1",
+  "BootstrapToken": "",
   "ExternalCA": false,
   "NodeIP": "",
   "NodeIPSpecified": false,

@@ -19,6 +19,14 @@ func (s *service) configureControllerManagerFlags(command *cobra.Command) {
 	_ = flags.Set("requestheader-client-ca-file", s.caFile)
 	_ = flags.Set("tls-cert-file", s.controllerManagerCertFile)
 	_ = flags.Set("tls-private-key-file", s.controllerManagerKeyFile)
+	// The CSR signing controllers only start when they have signing material, so
+	// without these a bootstrapping kubelet's CSR is created, approved, and then
+	// sits Pending forever with nothing to issue the certificate.
+	if s.bootstrapToken != "" {
+		_ = flags.Set("cluster-signing-cert-file", s.caFile)
+		_ = flags.Set("cluster-signing-key-file", s.caKeyFile)
+	}
+
 	_ = flags.Set("leader-elect", "false")
 	_ = flags.Set("use-service-account-credentials", "true")
 }
