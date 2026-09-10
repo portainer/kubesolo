@@ -40,8 +40,9 @@ func Defaults() *types.Config {
 		},
 
 		Kubernetes: types.KubernetesConfig{
-			NodeName:       "", // the hostname
-			BootstrapToken: "", // TLS bootstrapping off
+			NodeName:            "", // the hostname
+			BootstrapToken:      "", // TLS bootstrapping off
+			BootstrapKubeconfig: "",
 			APIServer: types.APIServerConfig{
 				ExtraSANs:             nil,
 				StartupTimeoutSeconds: types.DefaultStartupTimeout,

@@ -594,4 +594,17 @@ func (s *kubesolo) bootstrap() {
 		RuntimeEndpoint: s.runtimeEndpoint,
 		Hostname:        s.hostName,
 	})
+
+	// Resolved here rather than in BuildEmbedded so that mapping config to
+	// paths stays free of I/O, and resolved before any service is constructed
+	// because the API server and controller manager both switch on the token
+	// being present.
+	if path := s.cfg.Kubernetes.BootstrapKubeconfig; path != "" {
+		token, err := bootstrap.TokenFromKubeconfig(path)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to read the bootstrap token. exiting...")
+		}
+
+		s.embedded.BootstrapToken = token
+	}
 }

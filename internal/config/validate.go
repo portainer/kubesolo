@@ -98,6 +98,19 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 		return warnings, fmt.Errorf("kubernetes.bootstrapToken must look like %q (six lowercase alphanumerics, a dot, then sixteen)", "abcdef.0123456789abcdef")
 	}
 
+	// Both set is a contradiction rather than a precedence question: whichever
+	// one lost would silently not be the token the cluster runs on.
+	if cfg.Kubernetes.BootstrapToken != "" && cfg.Kubernetes.BootstrapKubeconfig != "" {
+		return warnings, fmt.Errorf("kubernetes.bootstrapToken and kubernetes.bootstrapKubeconfig are mutually exclusive; set one")
+	}
+
+	// Relative to what is unanswerable here: KubeSolo's working directory is
+	// wherever it was started from, which on a host-managed init is not the
+	// directory the config was written in.
+	if path := cfg.Kubernetes.BootstrapKubeconfig; path != "" && !filepath.IsAbs(path) {
+		return warnings, fmt.Errorf("kubernetes.bootstrapKubeconfig must be an absolute path, got %q", path)
+	}
+
 	// A malformed endpoint reaches the API server as an --etcd-servers value it
 	// cannot dial, and the only symptom is the API server failing to start with a
 	// storage error that does not name the configuration.

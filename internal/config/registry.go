@@ -176,6 +176,12 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { c.Kubernetes.BootstrapToken = v; return nil },
 		},
 		{
+			ConfigPath: "kubernetes.bootstrapKubeconfig",
+			Envar:      "KUBESOLO_BOOTSTRAP_KUBECONFIG",
+			Get:        func(c *types.Config) any { return c.Kubernetes.BootstrapKubeconfig },
+			Set:        func(c *types.Config, v string) error { c.Kubernetes.BootstrapKubeconfig = v; return nil },
+		},
+		{
 			ConfigPath: "kubernetes.nodeName",
 			Envar:      "KUBESOLO_NODE_NAME",
 			Get:        func(c *types.Config) any { return c.Kubernetes.NodeName },

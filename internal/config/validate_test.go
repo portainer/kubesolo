@@ -398,6 +398,30 @@ func TestValidateBootstrapToken(t *testing.T) {
 	}
 }
 
+// TestValidateBootstrapKubeconfig — the token and the file it would be read
+// from cannot both be authoritative, and a relative path resolves against
+// whatever directory KubeSolo happened to be started in.
+func TestValidateBootstrapKubeconfig(t *testing.T) {
+	cfg := Defaults()
+	cfg.Kubernetes.BootstrapKubeconfig = "/etc/kubernetes/bootstrap-kubeconfig"
+	if _, err := Validate(cfg, testHost()); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	cfg = Defaults()
+	cfg.Kubernetes.BootstrapKubeconfig = "bootstrap-kubeconfig"
+	if _, err := Validate(cfg, testHost()); err == nil {
+		t.Error("expected a relative path to be rejected, got none")
+	}
+
+	cfg = Defaults()
+	cfg.Kubernetes.BootstrapToken = "abcdef.0123456789abcdef"
+	cfg.Kubernetes.BootstrapKubeconfig = "/etc/kubernetes/bootstrap-kubeconfig"
+	if _, err := Validate(cfg, testHost()); err == nil {
+		t.Error("expected setting both to be rejected, got none")
+	}
+}
+
 // TestValidateEtcdEndpoints — a malformed endpoint reaches the API server as an
 // --etcd-servers value it cannot dial, and the only symptom is the API server
 // failing to start with a storage error that never names the configuration.

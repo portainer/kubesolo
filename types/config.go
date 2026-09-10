@@ -129,6 +129,16 @@ type KubernetesConfig struct {
 	// this cluster.
 	BootstrapToken string `json:"bootstrapToken,omitempty"`
 
+	// BootstrapKubeconfig reads the bootstrap token out of a kubeconfig on disk
+	// instead of taking it literally, and is otherwise identical to
+	// BootstrapToken. The two are mutually exclusive.
+	//
+	// This exists because the host that owns the kubelet usually mints the token
+	// itself: Talos writes /etc/kubernetes/bootstrap-kubeconfig, and the value
+	// is generated with the cluster, so it cannot be written into a KubeSolo
+	// config that has to be authored before the cluster exists.
+	BootstrapKubeconfig string `json:"bootstrapKubeconfig,omitempty"`
+
 	APIServer APIServerConfig `json:"apiServer"`
 	Kubelet   KubeletConfig   `json:"kubelet"`
 }

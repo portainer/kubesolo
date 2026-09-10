@@ -155,6 +155,7 @@ path: /var/lib/kubesolo
 kubernetes:
   nodeName: ""            # empty = the hostname
   bootstrapToken: ""      # e.g. abcdef.0123456789abcdef; empty = TLS bootstrapping off
+  bootstrapKubeconfig: "" # read the token from a kubeconfig instead; mutually exclusive with the above
   apiServer:
     extraSANs: []
     startupTimeoutSeconds: 600
@@ -232,6 +233,7 @@ and stays at the top level.
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |
 | `kubernetes.bootstrapToken` | `string` | `—` | *(secret)*
+| `kubernetes.bootstrapKubeconfig` | `string` | `""` |
 | `kubernetes.apiServer.extraSANs` | `array` | `[]` |
 | `kubernetes.apiServer.startupTimeoutSeconds` | `integer` | `600` |
 | `kubernetes.kubelet.external` | `boolean` | `false` |
