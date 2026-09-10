@@ -38,6 +38,7 @@ runtime:
   endpoint: ""
 storage:
   dbWALRepair: false
+  etcd: {}
   localPath:
     enabled: true
     sharedPath: ""

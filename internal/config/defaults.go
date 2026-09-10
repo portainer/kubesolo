@@ -58,6 +58,7 @@ func Defaults() *types.Config {
 		},
 
 		Storage: types.StorageConfig{
+			Etcd: types.EtcdConfig{Endpoints: nil}, // nil = run the embedded kine
 			LocalPath: types.LocalPathConfig{
 				Enabled:    true,
 				SharedPath: "",

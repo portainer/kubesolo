@@ -183,6 +183,11 @@ runtime:
   containerMode: null     # null = auto-detect; true/false to force
 
 storage:
+  etcd:
+    endpoints: []         # empty = run the embedded kine (SQLite)
+    caFile: ""            # client credentials for a host-managed etcd
+    certFile: ""
+    keyFile: ""
   localPath:
     enabled: true
     sharedPath: ""
@@ -254,6 +259,10 @@ and stays at the top level.
 | `runtime.containerMode` | `boolean` | `<nil>` |
 | `runtime.endpoint` | `string` | `""` |
 | `storage.dbWALRepair` | `boolean` | `false` |
+| `storage.etcd.caFile` | `string` | `""` |
+| `storage.etcd.certFile` | `string` | `""` |
+| `storage.etcd.endpoints` | `array` | `[]` |
+| `storage.etcd.keyFile` | `string` | `""` |
 | `storage.localPath.enabled` | `boolean` | `true` |
 | `storage.localPath.sharedPath` | `string` | `""` |
 `runtime.containerMode` is deliberately three-state: unset means auto-detect,

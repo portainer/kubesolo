@@ -249,6 +249,33 @@ func buildRegistry() []Field {
 			},
 		},
 		{
+			ConfigPath: "storage.etcd.endpoints",
+			Envar:      "KUBESOLO_ETCD_ENDPOINTS",
+			Get:        func(c *types.Config) any { return c.Storage.Etcd.Endpoints },
+			Set: func(c *types.Config, v string) error {
+				c.Storage.Etcd.Endpoints = splitList(v)
+				return nil
+			},
+		},
+		{
+			ConfigPath: "storage.etcd.caFile",
+			Envar:      "KUBESOLO_ETCD_CA_FILE",
+			Get:        func(c *types.Config) any { return c.Storage.Etcd.CAFile },
+			Set:        func(c *types.Config, v string) error { c.Storage.Etcd.CAFile = v; return nil },
+		},
+		{
+			ConfigPath: "storage.etcd.certFile",
+			Envar:      "KUBESOLO_ETCD_CERT_FILE",
+			Get:        func(c *types.Config) any { return c.Storage.Etcd.CertFile },
+			Set:        func(c *types.Config, v string) error { c.Storage.Etcd.CertFile = v; return nil },
+		},
+		{
+			ConfigPath: "storage.etcd.keyFile",
+			Envar:      "KUBESOLO_ETCD_KEY_FILE",
+			Get:        func(c *types.Config) any { return c.Storage.Etcd.KeyFile },
+			Set:        func(c *types.Config, v string) error { c.Storage.Etcd.KeyFile = v; return nil },
+		},
+		{
 			ConfigPath: "storage.localPath.enabled",
 			Flag:       "local-storage",
 			Envar:      "KUBESOLO_LOCAL_STORAGE",

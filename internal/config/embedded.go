@@ -56,6 +56,15 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		caKey = cfg.PKI.CAKey
 	}
 
+	// The datastore behind the API server. Without configured endpoints KubeSolo
+	// runs kine and talks to it over loopback, which is the small-footprint
+	// default; with them it uses an etcd the host already runs.
+	etcdExternal := len(cfg.Storage.Etcd.Endpoints) > 0
+	etcdEndpoints := cfg.Storage.Etcd.Endpoints
+	if !etcdExternal {
+		etcdEndpoints = []string{types.DefaultKineEndpoint}
+	}
+
 	// The node this control plane manages, defaulting to the hostname.
 	//
 	// Trimmed and lowercased to match what the kubelet does to --hostname-override
@@ -73,6 +82,13 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		NodeName:       nodeName,
 		BootstrapToken: cfg.Kubernetes.BootstrapToken,
 		ExternalCA:     externalCA,
+
+		// Datastore
+		EtcdExternal:  etcdExternal,
+		EtcdEndpoints: etcdEndpoints,
+		EtcdCAFile:    cfg.Storage.Etcd.CAFile,
+		EtcdCertFile:  cfg.Storage.Etcd.CertFile,
+		EtcdKeyFile:   cfg.Storage.Etcd.KeyFile,
 
 		// System Node IP
 		NodeIP:          probe.NodeIP,

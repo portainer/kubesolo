@@ -80,6 +80,13 @@
     "10.0.0.4",
     "kubesolo.local"
   ],
+  "EtcdExternal": false,
+  "EtcdEndpoints": [
+    "127.0.0.1:2379"
+  ],
+  "EtcdCAFile": "",
+  "EtcdCertFile": "",
+  "EtcdKeyFile": "",
   "KineDir": "/var/lib/kubesolo/kine/db",
   "KineSocketFile": "/var/lib/kubesolo/kine/db/socket",
   "ControllerDir": "/var/lib/kubesolo/controller-manager/config",

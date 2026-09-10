@@ -167,9 +167,32 @@ type KubeletConfig struct {
 type StorageConfig struct {
 	LocalPath LocalPathConfig `json:"localPath"`
 
+	// Etcd points the API server at an etcd the host already runs, instead of
+	// the SQLite-backed kine KubeSolo embeds.
+	Etcd EtcdConfig `json:"etcd"`
+
 	// DBWALRepair runs an integrity check against the SQLite database at startup
 	// and clears WAL artefacts if it is corrupt. Recovers from power loss.
 	DBWALRepair bool `json:"dbWALRepair"`
+}
+
+// EtcdConfig points the API server at an etcd the host manages.
+//
+// This exists for hosts that already run one and will not stop: Talos supervises
+// etcd on a control plane node and reports the machine unready without it, and
+// two datastores on an edge device is one too many. Empty Endpoints — the
+// default — means KubeSolo runs kine, which is what makes it small.
+type EtcdConfig struct {
+	// Endpoints are the etcd client URLs, e.g. https://127.0.0.1:2379. Empty
+	// means KubeSolo runs its own kine.
+	Endpoints []string `json:"endpoints,omitempty"`
+
+	// CAFile, CertFile and KeyFile authenticate the API server to that etcd.
+	// A host-managed etcd almost always requires client certificates; they are
+	// optional here only because a plaintext endpoint is legal.
+	CAFile   string `json:"caFile,omitempty"`
+	CertFile string `json:"certFile,omitempty"`
+	KeyFile  string `json:"keyFile,omitempty"`
 }
 
 // LocalPathConfig covers the local-path storage provisioner.

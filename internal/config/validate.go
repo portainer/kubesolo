@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -97,6 +98,21 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 		return warnings, fmt.Errorf("kubernetes.bootstrapToken must look like %q (six lowercase alphanumerics, a dot, then sixteen)", "abcdef.0123456789abcdef")
 	}
 
+	// A malformed endpoint reaches the API server as an --etcd-servers value it
+	// cannot dial, and the only symptom is the API server failing to start with a
+	// storage error that does not name the configuration.
+	for _, endpoint := range cfg.Storage.Etcd.Endpoints {
+		parsed, err := url.Parse(endpoint)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return warnings, fmt.Errorf("storage.etcd.endpoints: %q is not a URL of the form https://host:2379", endpoint)
+		}
+	}
+
+	// etcd client authentication needs both halves, the same way a CA does.
+	if (cfg.Storage.Etcd.CertFile == "") != (cfg.Storage.Etcd.KeyFile == "") {
+		return warnings, fmt.Errorf("storage.etcd.certFile and storage.etcd.keyFile must be set together: they are one client credential")
+	}
+
 	// A supplied CA is only usable as a pair: KubeSolo signs every leaf
 	// certificate with it, so a cert without its key leaves the control plane
 	// unable to issue anything, and a key without its cert leaves it with no
@@ -107,7 +123,13 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 
 	// Relative paths would resolve against KubeSolo's working directory, which is
 	// whatever started it — a service manager, a shell, a container entrypoint.
-	for path, field := range map[string]string{cfg.PKI.CACert: "pki.caCert", cfg.PKI.CAKey: "pki.caKey"} {
+	for path, field := range map[string]string{
+		cfg.PKI.CACert:            "pki.caCert",
+		cfg.PKI.CAKey:             "pki.caKey",
+		cfg.Storage.Etcd.CAFile:   "storage.etcd.caFile",
+		cfg.Storage.Etcd.CertFile: "storage.etcd.certFile",
+		cfg.Storage.Etcd.KeyFile:  "storage.etcd.keyFile",
+	} {
 		if path != "" && !filepath.IsAbs(path) {
 			return warnings, fmt.Errorf("%s must be an absolute path, got %q", field, path)
 		}

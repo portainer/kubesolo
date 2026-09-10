@@ -77,13 +77,13 @@
   "APIServerDir": "/var/lib/kubesolo/apiserver",
   "ServiceAccountKeyFile": "/var/lib/kubesolo/pki/apiserver/service-account.key",
   "APIServerExtraSANs": null,
-  "EtcdExternal": false,
+  "EtcdExternal": true,
   "EtcdEndpoints": [
-    "127.0.0.1:2379"
+    "https://127.0.0.1:2379"
   ],
-  "EtcdCAFile": "",
-  "EtcdCertFile": "",
-  "EtcdKeyFile": "",
+  "EtcdCAFile": "/etc/kubernetes/pki/etcd/ca.crt",
+  "EtcdCertFile": "/etc/kubernetes/pki/apiserver-etcd-client.crt",
+  "EtcdKeyFile": "/etc/kubernetes/pki/apiserver-etcd-client.key",
   "KineDir": "/var/lib/kubesolo/kine/db",
   "KineSocketFile": "/var/lib/kubesolo/kine/db/socket",
   "ControllerDir": "/var/lib/kubesolo/controller-manager/config",
@@ -114,14 +114,8 @@
     "bindAddress": ""
   },
   "CPUManager": {
-    "policy": "static",
-    "policyOptions": {
-      "full-pcpus-only": "true"
-    },
-    "reservedCPUs": "0-1"
+    "policy": "",
+    "reservedCPUs": ""
   },
-  "SystemReserved": {
-    "cpu": "1",
-    "memory": "500Mi"
-  }
+  "SystemReserved": null
 }

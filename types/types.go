@@ -168,6 +168,16 @@ type Embedded struct {
 	APIServerExtraSANs []string
 
 	// Kine directories and files
+	// EtcdExternal is true when the API server talks to an etcd the host manages
+	// rather than the kine KubeSolo embeds. EtcdEndpoints is populated in both
+	// cases — for kine it is the loopback address kine listens on — so consumers
+	// need only one code path.
+	EtcdExternal  bool
+	EtcdEndpoints []string
+	EtcdCAFile    string
+	EtcdCertFile  string
+	EtcdKeyFile   string
+
 	KineDir        string
 	KineSocketFile string
 

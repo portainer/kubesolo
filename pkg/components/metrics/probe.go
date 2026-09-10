@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -52,7 +53,7 @@ func (s *Service) buildProbers() map[string]prober {
 
 	return map[string]prober{
 		ComponentRuntime:    probeFileExists(s.embedded.RuntimeSocketPath),
-		ComponentKine:       probeTCP(types.DefaultKineEndpoint),
+		ComponentKine:       probeTCP(datastoreProbeTarget(s.embedded)),
 		ComponentAPIServer:  probeHTTP(tlsClient, "https://127.0.0.1:6443/livez"),
 		ComponentController: probeHTTP(tlsClient, "https://127.0.0.1:10257/healthz"),
 		ComponentKubelet:    probeHTTP(httpClient, "http://127.0.0.1:10248/healthz"),
@@ -186,4 +187,21 @@ func probeCoreDNS(cache *k8sClientCache) prober {
 		}
 		return nil
 	}
+}
+
+// datastoreProbeTarget is the host:port the datastore listens on, so the gauge
+// means the same thing whether that is the embedded kine or an etcd the host
+// runs. Endpoints are URLs when they come from configuration and a bare
+// host:port when they come from kine, so both forms are handled.
+func datastoreProbeTarget(embedded types.Embedded) string {
+	if len(embedded.EtcdEndpoints) == 0 {
+		return types.DefaultKineEndpoint
+	}
+
+	endpoint := embedded.EtcdEndpoints[0]
+	if parsed, err := url.Parse(endpoint); err == nil && parsed.Host != "" {
+		return parsed.Host
+	}
+
+	return endpoint
 }

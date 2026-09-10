@@ -397,3 +397,44 @@ func TestValidateBootstrapToken(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateEtcdEndpoints — a malformed endpoint reaches the API server as an
+// --etcd-servers value it cannot dial, and the only symptom is the API server
+// failing to start with a storage error that never names the configuration.
+func TestValidateEtcdEndpoints(t *testing.T) {
+	tests := []struct {
+		name      string
+		endpoints []string
+		cert, key string
+		wantErr   string
+	}{
+		{name: "unset is the default"},
+		{name: "https endpoint", endpoints: []string{"https://127.0.0.1:2379"}},
+		{name: "several endpoints", endpoints: []string{"https://10.0.0.1:2379", "https://10.0.0.2:2379"}},
+		{name: "no scheme", endpoints: []string{"127.0.0.1:2379"}, wantErr: "is not a URL"},
+		{name: "no host", endpoints: []string{"https://"}, wantErr: "is not a URL"},
+		{name: "cert without key", cert: "/etc/etcd/client.crt", wantErr: "must be set together"},
+		{name: "key without cert", key: "/etc/etcd/client.key", wantErr: "must be set together"},
+		{name: "relative cert", cert: "etcd/client.crt", key: "/etc/etcd/client.key", wantErr: "absolute path"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Storage.Etcd.Endpoints = test.endpoints
+			cfg.Storage.Etcd.CertFile = test.cert
+			cfg.Storage.Etcd.KeyFile = test.key
+
+			_, err := Validate(cfg, testHost())
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("expected an error containing %q, got %v", test.wantErr, err)
+			}
+		})
+	}
+}

@@ -77,6 +77,13 @@
   "APIServerDir": "apiserver",
   "ServiceAccountKeyFile": "pki/apiserver/service-account.key",
   "APIServerExtraSANs": null,
+  "EtcdExternal": false,
+  "EtcdEndpoints": [
+    "127.0.0.1:2379"
+  ],
+  "EtcdCAFile": "",
+  "EtcdCertFile": "",
+  "EtcdKeyFile": "",
   "KineDir": "kine/db",
   "KineSocketFile": "kine/db/socket",
   "ControllerDir": "controller-manager/config",

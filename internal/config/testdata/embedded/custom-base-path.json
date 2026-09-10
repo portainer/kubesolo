@@ -77,6 +77,13 @@
   "APIServerDir": "/opt/kubesolo/apiserver",
   "ServiceAccountKeyFile": "/opt/kubesolo/pki/apiserver/service-account.key",
   "APIServerExtraSANs": null,
+  "EtcdExternal": false,
+  "EtcdEndpoints": [
+    "127.0.0.1:2379"
+  ],
+  "EtcdCAFile": "",
+  "EtcdCertFile": "",
+  "EtcdKeyFile": "",
   "KineDir": "/opt/kubesolo/kine/db",
   "KineSocketFile": "/opt/kubesolo/kine/db/socket",
   "ControllerDir": "/opt/kubesolo/controller-manager/config",
