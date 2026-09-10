@@ -13,6 +13,7 @@ import (
 
 	kubesolokubernetes "github.com/portainer/kubesolo/internal/kubernetes"
 	"github.com/portainer/kubesolo/types"
+	"go.etcd.io/etcd/client/pkg/v3/transport"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -53,7 +54,7 @@ func (s *Service) buildProbers() map[string]prober {
 
 	return map[string]prober{
 		ComponentRuntime:    probeFileExists(s.embedded.RuntimeSocketPath),
-		ComponentKine:       probeTCP(datastoreProbeTarget(s.embedded)),
+		ComponentKine:       probeDatastore(s.embedded),
 		ComponentAPIServer:  probeHTTP(tlsClient, "https://127.0.0.1:6443/livez"),
 		ComponentController: probeHTTP(tlsClient, "https://127.0.0.1:10257/healthz"),
 		ComponentKubelet:    probeHTTP(httpClient, "http://127.0.0.1:10248/healthz"),
@@ -189,19 +190,73 @@ func probeCoreDNS(cache *k8sClientCache) prober {
 	}
 }
 
-// datastoreProbeTarget is the host:port the datastore listens on, so the gauge
-// means the same thing whether that is the embedded kine or an etcd the host
-// runs. Endpoints are URLs when they come from configuration and a bare
-// host:port when they come from kine, so both forms are handled.
-func datastoreProbeTarget(embedded types.Embedded) string {
+// probeDatastore reports the datastore up when at least one of its endpoints
+// is usable, so the gauge means the same thing whether that is the embedded
+// kine or an etcd the host runs.
+//
+// Every endpoint is tried, not just the first: the API server is given the
+// whole list and stays healthy as long as one of them answers, so probing one
+// would report down while the cluster is fine. And where client credentials
+// are configured the probe completes a TLS handshake with them rather than
+// opening a socket, because an etcd that accepts TCP but rejects the
+// certificate is not a datastore KubeSolo can use.
+func probeDatastore(embedded types.Embedded) prober {
 	if len(embedded.EtcdEndpoints) == 0 {
-		return types.DefaultKineEndpoint
+		return probeTCP(types.DefaultKineEndpoint)
 	}
 
-	endpoint := embedded.EtcdEndpoints[0]
+	return func(ctx context.Context) error {
+		var lastErr error
+
+		for _, endpoint := range embedded.EtcdEndpoints {
+			if err := dialDatastore(ctx, endpoint, embedded); err != nil {
+				lastErr = err
+				continue
+			}
+
+			return nil
+		}
+
+		return lastErr
+	}
+}
+
+// dialDatastore opens one endpoint, verifying the TLS credentials when the
+// endpoint is https and a client certificate is configured.
+func dialDatastore(ctx context.Context, endpoint string, embedded types.Embedded) error {
+	// Endpoints are URLs when they come from configuration and a bare host:port
+	// when they come from kine, so both forms are handled.
+	address, secure := endpoint, false
 	if parsed, err := url.Parse(endpoint); err == nil && parsed.Host != "" {
-		return parsed.Host
+		address, secure = parsed.Host, parsed.Scheme == "https"
 	}
 
-	return endpoint
+	dialer := &net.Dialer{Timeout: 2 * time.Second}
+
+	if !secure {
+		conn, err := dialer.DialContext(ctx, "tcp", address)
+		if err != nil {
+			return err
+		}
+
+		return conn.Close()
+	}
+
+	// etcd's own client TLS construction, which is what the API server uses to
+	// reach the same endpoints, rather than a second reading of the same files.
+	config, err := transport.TLSInfo{
+		CertFile:      embedded.EtcdCertFile,
+		KeyFile:       embedded.EtcdKeyFile,
+		TrustedCAFile: embedded.EtcdCAFile,
+	}.ClientConfig()
+	if err != nil {
+		return fmt.Errorf("etcd client credentials: %w", err)
+	}
+
+	conn, err := (&tls.Dialer{NetDialer: dialer, Config: config}).DialContext(ctx, "tcp", address)
+	if err != nil {
+		return err
+	}
+
+	return conn.Close()
 }

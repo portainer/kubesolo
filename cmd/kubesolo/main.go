@@ -307,9 +307,14 @@ func (s *kubesolo) run() {
 	// TLS bootstrapping is seeded before any kubelet is expected, so that a
 	// foreign kubelet already retrying against the API server finds the token
 	// valid on its next attempt rather than after a further backoff.
-	if s.cfg.Kubernetes.BootstrapToken != "" {
+	//
+	// The embedded value is the resolved one: kubernetes.bootstrapKubeconfig
+	// lands there and never in cfg, and it is what the API server and controller
+	// manager switch on. Reading cfg here would seed nothing for that path while
+	// still enabling bootstrap-token auth.
+	if s.embedded.BootstrapToken != "" {
 		log.Info().Str("component", "kubesolo").Msg("enabling tls bootstrapping...")
-		if err := bootstrap.Apply(s.embedded.AdminKubeconfigFile, s.cfg.Kubernetes.BootstrapToken); err != nil {
+		if err := bootstrap.Apply(s.embedded.AdminKubeconfigFile, s.embedded.BootstrapToken); err != nil {
 			log.Fatal().Err(err).Msg("failed to enable tls bootstrapping")
 		}
 	}

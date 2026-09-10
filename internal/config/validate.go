@@ -5,14 +5,15 @@ import (
 	"maps"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/distribution/reference"
 	"github.com/portainer/kubesolo/internal/config/cpumanager"
+	"github.com/portainer/kubesolo/internal/core/pki"
 	"github.com/portainer/kubesolo/internal/runtime/cri"
 	"github.com/portainer/kubesolo/types"
+	bootstraputil "k8s.io/cluster-bootstrap/token/util"
 )
 
 // ipv6MinimumMTU is the smallest MTU IPv6 permits. Below it, pod traffic cannot
@@ -55,10 +56,6 @@ func ResolveContainerMode(cfg *types.Config, detected bool) bool {
 // It has no side effects beyond cfg and never exits. Startup treats a returned
 // error as fatal; the config API turns it into a rejected request. A validator
 // that called log.Fatal would take the cluster down over a bad API payload.
-// bootstrapTokenPattern is the token form the API server's bootstrap
-// authenticator accepts, from k8s.io/cluster-bootstrap.
-var bootstrapTokenPattern = regexp.MustCompile(`^[a-z0-9]{6}\.[a-z0-9]{16}$`)
-
 func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	var warnings []Warning
 
@@ -94,7 +91,7 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	// and matches it against token-id/token-secret, so a token in any other shape
 	// authenticates nothing. The failure is a 401 at the kubelet with no
 	// indication that the token was the problem, so it is rejected here instead.
-	if token := cfg.Kubernetes.BootstrapToken; token != "" && !bootstrapTokenPattern.MatchString(token) {
+	if token := cfg.Kubernetes.BootstrapToken; token != "" && !bootstraputil.IsValidBootstrapToken(token) {
 		return warnings, fmt.Errorf("kubernetes.bootstrapToken must look like %q (six lowercase alphanumerics, a dot, then sixteen)", "abcdef.0123456789abcdef")
 	}
 
@@ -114,10 +111,20 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	// A malformed endpoint reaches the API server as an --etcd-servers value it
 	// cannot dial, and the only symptom is the API server failing to start with a
 	// storage error that does not name the configuration.
+	//
+	// url.Parse only checks syntax, so the scheme and port are checked too: it
+	// accepts "ftp://host:2379" and "https://host" happily, and both reach the
+	// API server as an endpoint it cannot use.
 	for _, endpoint := range cfg.Storage.Etcd.Endpoints {
 		parsed, err := url.Parse(endpoint)
-		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		if err != nil || parsed.Host == "" {
 			return warnings, fmt.Errorf("storage.etcd.endpoints: %q is not a URL of the form https://host:2379", endpoint)
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			return warnings, fmt.Errorf("storage.etcd.endpoints: %q must use http or https, got scheme %q", endpoint, parsed.Scheme)
+		}
+		if parsed.Port() == "" {
+			return warnings, fmt.Errorf("storage.etcd.endpoints: %q must name a port, as in https://host:2379", endpoint)
 		}
 	}
 
@@ -145,6 +152,21 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	} {
 		if path != "" && !filepath.IsAbs(path) {
 			return warnings, fmt.Errorf("%s must be an absolute path, got %q", field, path)
+		}
+	}
+
+	// A supplied CA under KubeSolo's own PKI directory is inside the tree
+	// removeLeafCerts sweeps: everything but the ca/ and request-header/
+	// subdirectories is deleted whenever leaf certificates are regenerated, so
+	// an operator-owned CA placed there would be destroyed by a node IP change.
+	// The point of pki.caCert is that KubeSolo does not own the file.
+	managedPKI := filepath.Join(cfg.Path, types.DefaultPKIDir)
+	for path, field := range map[string]string{
+		cfg.PKI.CACert: "pki.caCert",
+		cfg.PKI.CAKey:  "pki.caKey",
+	} {
+		if path != "" && pki.SweptByRegeneration(managedPKI, path) {
+			return warnings, fmt.Errorf("%s must live outside %s, which KubeSolo clears when it regenerates leaf certificates; got %q", field, managedPKI, path)
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	bootstraputil "k8s.io/cluster-bootstrap/token/util"
 )
 
 // write puts contents in a temp file and returns its path.
@@ -118,4 +119,11 @@ users:
 		_, err := TokenFromKubeconfig(write(t, certOnly))
 		require.ErrorContains(t, err, "carries no token")
 	})
+}
+
+// The API server rejects a bootstrap token Secret whose auth-extra-groups do
+// not match its own pattern, and the rejection names the Secret rather than
+// the group. Upstream owns the rule, so ask it.
+func TestTokenGroupIsAValidBootstrapGroup(t *testing.T) {
+	require.NoError(t, bootstraputil.ValidateBootstrapGroupName(tokenGroup))
 }

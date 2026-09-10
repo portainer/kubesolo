@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -435,8 +436,13 @@ func TestValidateEtcdEndpoints(t *testing.T) {
 		{name: "unset is the default"},
 		{name: "https endpoint", endpoints: []string{"https://127.0.0.1:2379"}},
 		{name: "several endpoints", endpoints: []string{"https://10.0.0.1:2379", "https://10.0.0.2:2379"}},
+		{name: "http endpoint", endpoints: []string{"http://10.0.0.5:2379"}},
+		{name: "ipv6 endpoint", endpoints: []string{"https://[::1]:2379"}},
 		{name: "no scheme", endpoints: []string{"127.0.0.1:2379"}, wantErr: "is not a URL"},
 		{name: "no host", endpoints: []string{"https://"}, wantErr: "is not a URL"},
+		// url.Parse accepts both of these: only syntax is its concern.
+		{name: "unsupported scheme", endpoints: []string{"ftp://host:2379"}, wantErr: "must use http or https"},
+		{name: "no port", endpoints: []string{"https://host"}, wantErr: "must name a port"},
 		{name: "cert without key", cert: "/etc/etcd/client.crt", wantErr: "must be set together"},
 		{name: "key without cert", key: "/etc/etcd/client.key", wantErr: "must be set together"},
 		{name: "relative cert", cert: "etcd/client.crt", key: "/etc/etcd/client.key", wantErr: "absolute path"},
@@ -458,6 +464,40 @@ func TestValidateEtcdEndpoints(t *testing.T) {
 			}
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("expected an error containing %q, got %v", test.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestValidateExternalCALocation — the managed PKI directory is swept whenever
+// leaf certificates are regenerated, so a CA placed there would be deleted by
+// something as ordinary as the node IP changing.
+func TestValidateExternalCALocation(t *testing.T) {
+	cfg := Defaults()
+	managed := filepath.Join(cfg.Path, "pki")
+
+	cases := map[string]struct {
+		dir     string
+		wantErr bool
+	}{
+		"outside the managed tree":    {dir: "/system/secrets/kubernetes", wantErr: false},
+		"in the preserved ca dir":     {dir: filepath.Join(managed, "ca"), wantErr: false},
+		"in the swept apiserver dir":  {dir: filepath.Join(managed, "apiserver"), wantErr: true},
+		"at the root of the pki tree": {dir: managed, wantErr: true},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.PKI.CACert = filepath.Join(test.dir, "ca.crt")
+			cfg.PKI.CAKey = filepath.Join(test.dir, "ca.key")
+
+			_, err := Validate(cfg, testHost())
+			if test.wantErr && err == nil {
+				t.Errorf("expected an error for %s, got none", test.dir)
+			}
+			if !test.wantErr && err != nil {
+				t.Errorf("expected no error for %s, got %v", test.dir, err)
 			}
 		})
 	}

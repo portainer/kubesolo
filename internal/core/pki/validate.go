@@ -80,6 +80,17 @@ func InvalidateIfStale(embedded types.Embedded) error {
 		return removeLeafCerts(embedded.PKIDir)
 	}
 
+	// A leaf signed by a CA the cluster no longer trusts is worse than a missing
+	// one: every component starts, presents it, and is rejected by the peer that
+	// now holds a different anchor. This happens when an install that generated
+	// its own CA is later pointed at pki.caCert, or when the supplied CA is
+	// replaced, and neither shows up as an expiry or a SAN change.
+	if err := checkIssuer(cert, embedded); err != nil {
+		log.Warn().Str("component", "pki").Err(err).
+			Msg("existing certificate was not signed by the configured CA — regenerating leaf certificates")
+		return removeLeafCerts(embedded.PKIDir)
+	}
+
 	if missing := missingExtraSANs(cert, embedded.APIServerExtraSANs); len(missing) > 0 {
 		log.Warn().
 			Str("component", "pki").
@@ -141,6 +152,20 @@ func containsDNSName(haystack []string, needle string) bool {
 // the CA and request-header CA stable avoids rotating the cluster trust anchor
 // (which would invalidate every distributed kubeconfig).
 var caDirNames = map[string]bool{"ca": true, "request-header": true}
+
+// SweptByRegeneration reports whether path sits in the part of pkiDir that
+// removeLeafCerts deletes. Supplying a CA from there would have KubeSolo
+// destroy material it does not own the moment a leaf certificate goes stale.
+func SweptByRegeneration(pkiDir, path string) bool {
+	rel, err := filepath.Rel(pkiDir, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return false
+	}
+
+	head, _, _ := strings.Cut(rel, string(filepath.Separator))
+
+	return !caDirNames[head]
+}
 
 // removeLeafCerts removes every entry under pkiDir except the CA directories, so
 // GenerateAllCertificates re-signs fresh leaf certificates with the existing CA.
@@ -222,6 +247,39 @@ func VerifyExternalCA(embedded types.Embedded) error {
 		Str("subject", cert.Subject.String()).
 		Time("expires", cert.NotAfter).
 		Msg("signing with the supplied CA; KubeSolo will not generate, rotate or remove it")
+
+	return nil
+}
+
+// checkIssuer reports whether leaf was signed by the CA currently configured.
+//
+// The CA certificate is read fresh rather than compared by name, because the
+// interesting case is a different CA with the same subject — Talos and KubeSolo
+// both issue an "O=kubernetes" root, so the names match while the keys do not.
+func checkIssuer(leaf *x509.Certificate, embedded types.Embedded) error {
+	caPEM, err := os.ReadFile(embedded.CACerts.Cert)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// No CA to compare against: a first run, where generation is about
+			// to create one and sign everything with it.
+			return nil
+		}
+		return fmt.Errorf("failed to read the configured CA %s: %v", embedded.CACerts.Cert, err)
+	}
+
+	block, _ := pem.Decode(caPEM)
+	if block == nil {
+		return fmt.Errorf("configured CA %s is not PEM", embedded.CACerts.Cert)
+	}
+
+	ca, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse the configured CA %s: %v", embedded.CACerts.Cert, err)
+	}
+
+	if err := leaf.CheckSignatureFrom(ca); err != nil {
+		return fmt.Errorf("leaf certificate was not signed by %s: %v", embedded.CACerts.Cert, err)
+	}
 
 	return nil
 }

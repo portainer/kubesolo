@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // runExternal attaches to a kubelet the host manages, instead of starting the
@@ -95,6 +96,13 @@ func (s *service) waitForNodeRegistration() (*corev1.Node, error) {
 		return nil, fmt.Errorf("failed to create kubernetes client: %v", err)
 	}
 
+	// Everything below is judged against this instant, because the Node object
+	// outlives the kubelet that created it. After a reboot it is still in the
+	// datastore reporting Ready, and stays that way until the node lifecycle
+	// controller ages out the lease — so Ready alone would open this gate while
+	// the host's kubelet is still starting.
+	since := time.Now()
+
 	var lastErr error
 	for attempt := range types.DefaultRetryCount {
 		node, err := clientset.CoreV1().Nodes().Get(s.ctx, s.nodeName, metav1.GetOptions{})
@@ -110,6 +118,10 @@ func (s *service) waitForNodeRegistration() (*corev1.Node, error) {
 			lastErr = fmt.Errorf("node %s is registered but not Ready", s.nodeName)
 			log.Warn().Str("component", "kubelet").
 				Msgf("node %q has registered but is not Ready yet (attempt %d/%d)...", s.nodeName, attempt+1, types.DefaultRetryCount)
+		case !s.heartbeatSince(clientset, since):
+			lastErr = fmt.Errorf("node %s reports Ready but has not renewed its lease since this run started", s.nodeName)
+			log.Warn().Str("component", "kubelet").
+				Msgf("node %q is Ready from a previous run; waiting for the host's kubelet to renew its lease (attempt %d/%d)...", s.nodeName, attempt+1, types.DefaultRetryCount)
 		default:
 			return node, nil
 		}
@@ -131,4 +143,21 @@ func isNodeReady(node *corev1.Node) bool {
 		}
 	}
 	return false
+}
+
+// heartbeatSince reports whether the host's kubelet has renewed the node's
+// lease since the given instant, which is the only evidence that the kubelet
+// answering for this Node is the one running now.
+//
+// The lease is used rather than the Ready condition's timestamps because the
+// kubelet renews the lease every few seconds while it updates Node status only
+// on change, so a stale Node can carry a Ready condition minutes old.
+func (s *service) heartbeatSince(clientset *kubernetes.Clientset, since time.Time) bool {
+	lease, err := clientset.CoordinationV1().Leases(corev1.NamespaceNodeLease).Get(s.ctx, s.nodeName, metav1.GetOptions{})
+	if err != nil {
+		return false
+	}
+
+	// A lease with no renew time has been created but never renewed.
+	return lease.Spec.RenewTime != nil && lease.Spec.RenewTime.After(since)
 }

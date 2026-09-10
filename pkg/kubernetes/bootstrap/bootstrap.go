@@ -20,9 +20,20 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	bootstrapapi "k8s.io/cluster-bootstrap/token/api"
+	bootstraputil "k8s.io/cluster-bootstrap/token/util"
 )
 
 const component = "bootstrap"
+
+// managedByLabel marks the token Secrets KubeSolo owns, so that rotating to a
+// new token can revoke the previous one without touching Secrets somebody else
+// created. Talos seeds its own bootstrap token, and deleting that would break
+// the very kubelet this exists to enrol.
+const (
+	managedByLabel = "app.kubernetes.io/managed-by"
+	managedByValue = "kubesolo"
+)
 
 // tokenGroup is the group the token authenticates into. It is scoped to KubeSolo
 // rather than reusing kubeadm's name so that the bindings below cannot silently
@@ -36,10 +47,17 @@ const nodesGroup = "system:nodes"
 // Apply creates the bootstrap token Secret and the binding set, and is safe to
 // re-run: everything is created or updated in place.
 func Apply(adminKubeconfig, token string) error {
-	id, secret, found := strings.Cut(token, ".")
-	if !found {
+	// Checked here rather than trusting the caller: a token read from a
+	// bootstrap kubeconfig never passes through config validation, and one the
+	// authenticator cannot parse would seed a Secret that only ever yields 401s.
+	//
+	// This is the API server's own validator, which compares the secret half in
+	// constant time rather than matching it against a pattern.
+	if !bootstraputil.IsValidBootstrapToken(token) {
 		return fmt.Errorf("bootstrap token is not in <id>.<secret> form")
 	}
+
+	id, secret, _ := strings.Cut(token, ".")
 
 	clientset, err := kubesolokubernetes.GetKubernetesClient(adminKubeconfig)
 	if err != nil {
@@ -47,6 +65,10 @@ func Apply(adminKubeconfig, token string) error {
 	}
 
 	if err := applyTokenSecret(clientset, id, secret); err != nil {
+		return err
+	}
+
+	if err := revokeSupersededTokens(clientset, id); err != nil {
 		return err
 	}
 
@@ -71,17 +93,18 @@ func Apply(adminKubeconfig, token string) error {
 func applyTokenSecret(clientset *kubernetes.Clientset, id, secret string) error {
 	tokenSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "bootstrap-token-" + id,
+			Name:      bootstraputil.BootstrapTokenSecretName(id),
 			Namespace: metav1.NamespaceSystem,
+			Labels:    map[string]string{managedByLabel: managedByValue},
 		},
-		Type: corev1.SecretTypeBootstrapToken,
+		Type: bootstrapapi.SecretTypeBootstrapToken,
 		StringData: map[string]string{
-			"description":                    "KubeSolo TLS bootstrap token for a host-managed kubelet",
-			"token-id":                       id,
-			"token-secret":                   secret,
-			"usage-bootstrap-authentication": "true",
-			"usage-bootstrap-signing":        "true",
-			"auth-extra-groups":              tokenGroup,
+			bootstrapapi.BootstrapTokenDescriptionKey:      "KubeSolo TLS bootstrap token for a host-managed kubelet",
+			bootstrapapi.BootstrapTokenIDKey:               id,
+			bootstrapapi.BootstrapTokenSecretKey:           secret,
+			bootstrapapi.BootstrapTokenUsageAuthentication: "true",
+			bootstrapapi.BootstrapTokenUsageSigningKey:     "true",
+			bootstrapapi.BootstrapTokenExtraGroupsKey:      tokenGroup,
 		},
 	}
 
@@ -147,6 +170,44 @@ func applyBindings(clientset *kubernetes.Clientset) error {
 		log.Debug().Str("component", component).
 			Str("binding", b.name).Str("role", b.clusterRole).Str("group", b.group).
 			Msg("applied bootstrap rbac")
+	}
+
+	return nil
+}
+
+// revokeSupersededTokens deletes the bootstrap token Secrets KubeSolo created
+// for a previous token.
+//
+// The Secrets carry no expiry — a rebooted appliance has to be able to re-enrol
+// its own kubelet with nobody present to mint a new token — so changing the
+// configured token would otherwise leave the old one valid forever. Only
+// Secrets this package labelled are considered.
+func revokeSupersededTokens(clientset *kubernetes.Clientset, keepID string) error {
+	ctx := context.Background()
+	secrets := clientset.CoreV1().Secrets(metav1.NamespaceSystem)
+
+	// Narrowed by type as well as by label, because this deletes: the label
+	// alone would also match anything else of ours that adopts the convention,
+	// and a bootstrap token Secret is the only kind that can be revoked this way.
+	existing, err := secrets.List(ctx, metav1.ListOptions{
+		LabelSelector: managedByLabel + "=" + managedByValue,
+		FieldSelector: "type=" + string(bootstrapapi.SecretTypeBootstrapToken),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list bootstrap token secrets: %v", err)
+	}
+
+	for _, secret := range existing.Items {
+		if secret.Name == bootstraputil.BootstrapTokenSecretName(keepID) {
+			continue
+		}
+
+		if err := secrets.Delete(ctx, secret.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to revoke superseded bootstrap token secret %s: %v", secret.Name, err)
+		}
+
+		log.Info().Str("component", component).Str("secret", secret.Name).
+			Msg("revoked a bootstrap token secret superseded by the configured token")
 	}
 
 	return nil
