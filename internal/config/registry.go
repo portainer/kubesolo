@@ -163,6 +163,12 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { c.PKI.CAKey = v; return nil },
 		},
 		{
+			ConfigPath: "kubernetes.kubelet.external",
+			Envar:      "KUBESOLO_KUBELET_EXTERNAL",
+			Get:        func(c *types.Config) any { return c.Kubernetes.Kubelet.External },
+			Set:        func(c *types.Config, v string) error { return setBool(&c.Kubernetes.Kubelet.External, v) },
+		},
+		{
 			ConfigPath: "kubernetes.bootstrapToken",
 			Envar:      "KUBESOLO_BOOTSTRAP_TOKEN",
 			Secret:     true,

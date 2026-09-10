@@ -47,6 +47,7 @@ func Defaults() *types.Config {
 				StartupTimeoutSeconds: types.DefaultStartupTimeout,
 			},
 			Kubelet: types.KubeletConfig{
+				External: false, // KubeSolo runs its own kubelet
 				CPUManager: types.CPUManagerConfig{
 					Policy:        types.CPUManagerPolicyNone,
 					PolicyOptions: nil,

@@ -13,6 +13,7 @@ kubernetes:
     cpuManager:
       policy: none
       reservedCPUs: ""
+    external: false
 logging:
   debug: false
   pprof: false

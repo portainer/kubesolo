@@ -167,7 +167,8 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		RuntimeEndpoint:   runtimeEndpoint.URL,
 		RuntimeSocketPath: runtimeEndpoint.SocketPath,
 
-		// Kubelet paths
+		// Kubelet
+		KubeletExternal:       cfg.Kubernetes.Kubelet.External,
 		KubeletDir:            filepath.Join(cfg.Path, types.DefaultKubeletDir),
 		KubeletConfigDir:      filepath.Join(cfg.Path, types.DefaultKubeletDir, "config"),
 		KubeletConfigFile:     filepath.Join(cfg.Path, types.DefaultKubeletDir, "config", "config.yaml"),

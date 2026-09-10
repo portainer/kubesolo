@@ -159,6 +159,7 @@ kubernetes:
     extraSANs: []
     startupTimeoutSeconds: 600
   kubelet:
+    external: false       # true = attach to the host's kubelet instead of running one
     cpuManager:
       policy: none        # none | static
       policyOptions: {}
@@ -228,6 +229,7 @@ and stays at the top level.
 | `kubernetes.bootstrapToken` | `string` | `—` | *(secret)*
 | `kubernetes.apiServer.extraSANs` | `array` | `[]` |
 | `kubernetes.apiServer.startupTimeoutSeconds` | `integer` | `600` |
+| `kubernetes.kubelet.external` | `boolean` | `false` |
 | `kubernetes.kubelet.cpuManager.policy` | `string` | `none` |
 | `kubernetes.kubelet.cpuManager.policyOptions` | `object` | `map[]` |
 | `kubernetes.kubelet.cpuManager.reservedCPUs` | `string` | `""` |

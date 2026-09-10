@@ -68,6 +68,7 @@
   "RuntimeEndpoint": "unix:///opt/kubesolo/containerd/containerd.sock",
   "RuntimeSocketPath": "/opt/kubesolo/containerd/containerd.sock",
   "RuntimeCgroupDriver": "",
+  "KubeletExternal": false,
   "KubeletDir": "/opt/kubesolo/kubelet",
   "KubeletConfigDir": "/opt/kubesolo/kubelet/config",
   "KubeletConfigFile": "/opt/kubesolo/kubelet/config/config.yaml",

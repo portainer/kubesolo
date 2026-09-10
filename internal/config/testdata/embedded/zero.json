@@ -68,6 +68,7 @@
   "RuntimeEndpoint": "unix://containerd/containerd.sock",
   "RuntimeSocketPath": "containerd/containerd.sock",
   "RuntimeCgroupDriver": "",
+  "KubeletExternal": false,
   "KubeletDir": "kubelet",
   "KubeletConfigDir": "kubelet/config",
   "KubeletConfigFile": "kubelet/config/config.yaml",

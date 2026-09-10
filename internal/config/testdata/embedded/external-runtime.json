@@ -68,6 +68,7 @@
   "RuntimeEndpoint": "unix:///run/crio/crio.sock",
   "RuntimeSocketPath": "/run/crio/crio.sock",
   "RuntimeCgroupDriver": "",
+  "KubeletExternal": false,
   "KubeletDir": "/var/lib/kubesolo/kubelet",
   "KubeletConfigDir": "/var/lib/kubesolo/kubelet/config",
   "KubeletConfigFile": "/var/lib/kubesolo/kubelet/config/config.yaml",

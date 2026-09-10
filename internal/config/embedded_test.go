@@ -128,6 +128,14 @@ func goldenCases() []goldenCase {
 			cfg:   cfgWith(at(base)),
 			probe: Probe{Hostname: "edge-box-7"},
 		},
+		{
+			name: "external-kubelet",
+			cfg: cfgWith(at(base), func(c *types.Config) {
+				c.Kubernetes.Kubelet.External = true
+				c.Kubernetes.NodeName = "talos-cp-1"
+			}),
+			probe: Probe{Hostname: "kubesolo-container"},
+		},
 		{name: "bootstrap-token", cfg: cfgWith(at(base), func(c *types.Config) {
 			c.Kubernetes.BootstrapToken = "abcdef.0123456789abcdef"
 		})},

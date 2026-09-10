@@ -147,6 +147,13 @@ type Embedded struct {
 	RuntimeSocketPath   string
 	RuntimeCgroupDriver string
 
+	// KubeletExternal is true when a kubelet the host manages registers with this
+	// control plane, instead of KubeSolo starting and supervising its own. The
+	// kubelet paths below are still populated in that case: KubeSolo writes the
+	// kubeconfig and config file for the host's kubelet to consume, it just does
+	// not run the process.
+	KubeletExternal bool
+
 	// Kubelet directories
 	KubeletDir            string
 	KubeletConfigDir      string

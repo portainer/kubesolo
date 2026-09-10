@@ -146,6 +146,16 @@ type APIServerConfig struct {
 
 // KubeletConfig covers the node agent's resource management.
 type KubeletConfig struct {
+	// External attaches KubeSolo to a kubelet the host already runs instead of
+	// starting one, the same split Runtime.Endpoint makes for the container
+	// runtime. KubeSolo then supervises no kubelet process: it waits for the
+	// host's kubelet to register NodeName with its API server, and treats that
+	// registration as the readiness signal.
+	//
+	// The remaining settings in this struct configure the kubelet KubeSolo
+	// starts, so they have no effect when this is true.
+	External bool `json:"external"`
+
 	CPUManager CPUManagerConfig `json:"cpuManager"`
 
 	// SystemReserved is withheld from node allocatable for the host, keyed by
