@@ -19,6 +19,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
+	go.etcd.io/etcd/client/pkg/v3 v3.6.12
 	golang.org/x/sys v0.47.0
 	gopkg.in/evanphx/json-patch.v4 v4.13.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -228,7 +229,6 @@ require (
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.12 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.6.12 // indirect
 	go.etcd.io/etcd/client/v3 v3.6.12 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.6.12 // indirect
 	go.etcd.io/etcd/server/v3 v3.6.12 // indirect
