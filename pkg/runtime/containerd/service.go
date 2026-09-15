@@ -31,6 +31,7 @@ type service struct {
 	d2kImageFile                  string
 	isPortainerEdge               bool
 	isD2K                         bool
+	localStorage                  bool
 }
 
 // NewService creates a new containerd service
@@ -57,5 +58,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, containerdReady 
 		d2kImageFile:                  embedded.D2KImageFile,
 		isPortainerEdge:               embedded.IsPortainerEdge,
 		isD2K:                         embedded.D2K,
+		localStorage:                  embedded.LocalStorage,
 	}
 }
