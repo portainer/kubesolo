@@ -86,6 +86,7 @@
   "LoadBalancer": false,
   "LoadBalancerIP": "",
   "LocalPathStorageDir": "/var/lib/kubesolo/local-path-storage",
+  "LocalStorage": false,
   "IsPortainerEdge": true,
   "PortainerEdgeImage": "docker.io/portainerci/agent:develop",
   "ContainerMode": false,
