@@ -1,5 +1,5 @@
 {
-  "NodeName": "edge-box-7",
+  "NodeName": "",
   "NodeIP": "",
   "NodeIPSpecified": false,
   "MTU": 0,
@@ -86,7 +86,7 @@
   "LoadBalancer": false,
   "LoadBalancerIP": "",
   "LocalPathStorageDir": "/var/lib/kubesolo/local-path-storage",
-  "LocalStorage": false,
+  "LocalStorage": true,
   "IsPortainerEdge": false,
   "PortainerEdgeImage": "",
   "ContainerMode": false,

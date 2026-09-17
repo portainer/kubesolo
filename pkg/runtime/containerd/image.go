@@ -23,8 +23,10 @@ func (s *service) importImages(ctx context.Context, c *client.Client, isPortaine
 		return err
 	}
 
-	if err := s.importImage(nsCtx, c, s.localPathProvisionerImageFile, types.DefaultLocalPathProvisionerImage); err != nil {
-		return err
+	if s.localStorage {
+		if err := s.importImage(nsCtx, c, s.localPathProvisionerImageFile, types.DefaultLocalPathProvisionerImage); err != nil {
+			return err
+		}
 	}
 
 	if isPortainerEdge {

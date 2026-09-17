@@ -131,6 +131,12 @@ func goldenCases() []goldenCase {
 		{name: "metrics-enabled", cfg: cfgWith(at(base), func(c *types.Config) {
 			c.Metrics = types.MetricsConfig{Enabled: true, BindAddress: "0.0.0.0:9105"}
 		})},
+		{name: "local-storage-enabled", cfg: cfgWith(at(base), func(c *types.Config) {
+			c.Storage.LocalPath.Enabled = true
+		})},
+		{name: "local-storage-disabled", cfg: cfgWith(at(base), func(c *types.Config) {
+			c.Storage.LocalPath.Enabled = false
+		})},
 	}
 }
 

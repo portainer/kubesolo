@@ -188,6 +188,7 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 
 		// Local Path Storage
 		LocalPathStorageDir: filepath.Join(cfg.Path, types.DefaultLocalPathStorageDir),
+		LocalStorage:        cfg.Storage.LocalPath.Enabled,
 
 		// Portainer Edge
 		IsPortainerEdge:    cfg.Portainer.EdgeID != "" && cfg.Portainer.EdgeKey != "",

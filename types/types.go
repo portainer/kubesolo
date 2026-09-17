@@ -177,6 +177,7 @@ type Embedded struct {
 
 	// Local Path Storage
 	LocalPathStorageDir string
+	LocalStorage        bool
 
 	// Portainer Edge
 	IsPortainerEdge    bool
