@@ -220,6 +220,8 @@ All installers support multiple architectures with automatic binary selection:
 ### musl Binaries (Alpine Linux Compatible)
 - `x86_64` (amd64) - Alpine Linux x86_64
 - `aarch64` (arm64) - Alpine Linux ARM64
+- `armv7l` (arm) - Alpine Linux ARM 32-bit
+- `riscv64` - Alpine Linux RISC-V 64-bit
 
 **Note:** The installer automatically detects your system type and downloads the appropriate binary. musl binaries are static and work on any musl-based system without additional dependencies.
 
@@ -294,7 +296,7 @@ curl -sfL https://get.kubesolo.io | sh
 **Alpine-specific features:**
 - Automatically downloads musl-compatible static binary
 - Creates OpenRC service configuration
-- Works on both x86_64 and aarch64 Alpine systems
+- Works on x86_64, aarch64, armv7l and riscv64 Alpine systems
 - No additional dependencies required
 
 ### Buildroot

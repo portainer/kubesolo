@@ -76,7 +76,7 @@ Examples:
 	cmd.Flags().StringVar(&dir, "path", ".", "Directory to download files into")
 	cmd.Flags().StringVar(&targetArch, "arch", "",
 		"Target architecture for the bundle (default: current host).\n"+
-			"Valid values: amd64, arm64, arm, riscv64, amd64-musl, arm64-musl.\n"+
+			"Valid values: amd64, arm64, arm, riscv64, and each with a -musl suffix.\n"+
 			"The -musl suffix selects the musl KubeSolo archive; the kubesoloctl binary has no libc split.")
 	return cmd
 }
