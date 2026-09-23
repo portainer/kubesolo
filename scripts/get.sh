@@ -29,13 +29,24 @@ BASE_URL="${KUBESOLO_INSTALLER_BASE_URL:-$DEFAULT_BASE_URL}"
 FLAT_URLS="${KUBESOLO_FLAT_URLS:-0}"
 
 # detect architecture
+# armv6l is rejected on purpose rather than falling through to the generic
+# error: the published arm builds are compiled with GOARM=7, so an ARMv6 host
+# (Pi 1, original Pi Zero) would download a binary that dies on an illegal
+# instruction instead of failing here with something actionable.
 ARCH=$(uname -m)
 case "$ARCH" in
   x86_64)              ARCH=amd64   ;;
   aarch64)             ARCH=arm64   ;;
+  armv7l | armv8l)     ARCH=arm     ;;
+  riscv64)             ARCH=riscv64 ;;
+  armv6l)
+    printf 'error: unsupported architecture: %s\n' "$ARCH" >&2
+    printf 'KubeSolo requires ARMv7 or newer; ARMv6 boards are not supported\n' >&2
+    exit 1
+    ;;
   *)
     printf 'error: unsupported architecture: %s\n' "$ARCH" >&2
-    printf 'supported: x86_64 (amd64), aarch64 (arm64)\n' >&2
+    printf 'supported: x86_64 (amd64), aarch64 (arm64), armv7l (arm), riscv64\n' >&2
     exit 1
     ;;
 esac
@@ -53,10 +64,20 @@ trap 'rm -f "$TMP"' EXIT INT TERM HUP
 
 printf 'downloading kubesoloctl %s (%s)...\n' "$KUBESOLO_VERSION" "$ARCH"
 
+# On failure curl reports only a bare status code and wget -q reports nothing at
+# all, so add the context that actually identifies the problem. The usual causes
+# are a pinned version that predates this architecture's assets, or a typo in
+# KUBESOLO_INSTALLER_BASE_URL.
+download_failed() {
+  printf 'error: failed to download kubesoloctl from %s\n' "$URL" >&2
+  printf 'no asset for %s at version %s, or the URL is unreachable\n' "$ARCH" "$KUBESOLO_VERSION" >&2
+  exit 1
+}
+
 if command -v curl > /dev/null 2>&1; then
-  curl -fsSL "$URL" -o "$TMP"
+  curl -fsSL "$URL" -o "$TMP" || download_failed
 elif command -v wget > /dev/null 2>&1; then
-  wget -qO "$TMP" "$URL"
+  wget -qO "$TMP" "$URL" || download_failed
 else
   printf 'error: curl or wget is required to download kubesoloctl\n' >&2
   exit 1
