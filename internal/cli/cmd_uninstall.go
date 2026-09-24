@@ -89,6 +89,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	// ── Stop service ──────────────────────────────────────────────────────────
 	p.Step("Stopping KubeSolo")
 	process.StopAll(initControlBinary(info.InitSystem))
+	process.StopWorkloads()
 	p.OK("KubeSolo stopped", "")
 
 	// ── Remove service files ──────────────────────────────────────────────────

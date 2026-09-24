@@ -372,7 +372,7 @@ func (s *kubesolo) run() {
 //
 // Nothing is cleaned when the container runtime is managed by the host: the socket
 // and every directory below belong to that runtime, not to kubesolo.
-func cleanStaleState(basePath string, runtimeExternal bool) {
+func cleanStaleState(basePath string, runtimeExternal, containerMode bool) {
 	if runtimeExternal {
 		log.Debug().Str("component", "kubesolo").Msg("container runtime is managed by the host, leaving its state alone")
 		return
@@ -385,6 +385,15 @@ func cleanStaleState(basePath string, runtimeExternal bool) {
 		log.Info().Str("component", "kubesolo").Msgf("removed stale system containerd socket: %s", types.DefaultSystemContainerdSock)
 	}
 
+	// Decided before the directory read below, which returns early on a fresh
+	// install and would otherwise leave the boot unrecorded until the second
+	// start — making the first restart look like a reboot.
+	//
+	// In container mode the boot id belongs to the host, so it survives the
+	// container being replaced even though that destroys every shim. Treat it as
+	// a new boot, since nothing from the previous run is still running.
+	rebooted := rebootedSinceLastRun(basePath) || containerMode
+
 	// Clean all containerd subdirectories except images/ (embedded tar archives)
 	containerdDir := filepath.Join(basePath, types.DefaultContainerdDir)
 	entries, err := os.ReadDir(containerdDir)
@@ -392,7 +401,6 @@ func cleanStaleState(basePath string, runtimeExternal bool) {
 		return
 	}
 
-	rebooted := rebootedSinceLastRun(basePath)
 	if !rebooted {
 		log.Info().Str("component", "kubesolo").Msg("same boot as the previous run, keeping containerd task state")
 	}
@@ -447,6 +455,11 @@ func readBootID() string {
 func rebootedSinceLastRun(basePath string) bool {
 	current := readBootID()
 	marker := filepath.Join(basePath, bootIDMarkerFile)
+
+	if err := filesystem.EnsureDirectoryExists(basePath); err != nil {
+		log.Warn().Str("component", "kubesolo").Msgf("could not create %s to record the boot marker: %v", basePath, err)
+		return true
+	}
 
 	previous, readErr := os.ReadFile(marker)
 
@@ -616,7 +629,7 @@ func (s *kubesolo) bootstrap() {
 	// s.runtimeEndpoint.External is used rather than the endpoint BuildEmbedded
 	// resolves: substituting the embedded endpoint never changes External, since
 	// cri.Embedded leaves it false.
-	cleanStaleState(basePath, s.runtimeEndpoint.External)
+	cleanStaleState(basePath, s.runtimeEndpoint.External, containerMode)
 
 	s.embedded = config.BuildEmbedded(s.cfg, config.Probe{
 		NodeIP:          nodeIP,

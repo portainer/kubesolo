@@ -71,6 +71,7 @@ func runReset(name, dataPath string, force bool) error {
 
 	p.Step("Stopping KubeSolo")
 	process.StopAll(initControlBinary(info.InitSystem))
+	process.StopWorkloads()
 	p.OK("KubeSolo stopped", "")
 
 	p.Step("Removing cluster state")
