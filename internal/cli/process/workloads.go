@@ -11,18 +11,16 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// StopWorkloads terminates every container process and every shim left behind
+// StopWorkloads terminates every container process and every shim still running
 // once the KubeSolo service has stopped.
 //
-// Pods run under kubepods and the shims that manage them run in the service's
-// own cgroup, so with KillMode=process neither is killed when the service stops.
-// A caller that then deletes the data directory strands both: the containers
-// keep running, and writing, against files that are no longer there. Reset and
-// uninstall call this; restart and upgrade must not, since there the workloads
-// are meant to survive and be reattached to.
+// Pods run under kubepods and their shims in the service cgroup, so
+// KillMode=process leaves both alive when the service stops. Reset and uninstall
+// call this before deleting the data directory; restart and upgrade must not,
+// since they reattach to the workloads instead.
 //
-// Call it only after the service is stopped. Anything still in its cgroup by
-// then is an orphan.
+// Only call it once the service is stopped: anything left in its cgroup is an
+// orphan.
 func StopWorkloads() {
 	pids := podPIDs()
 	if len(pids) == 0 {
@@ -95,17 +93,16 @@ func podPIDs() []int {
 	return pids
 }
 
-// serviceCgroupRoots returns the KubeSolo service cgroups. Once systemd has
-// stopped the unit, what remains in here is the shims KillMode=process spared.
-// Matching on the unit name keeps a containerd managed by the host, which runs
-// its shims under its own unit, out of range.
+// serviceCgroupRoots returns the KubeSolo service cgroups. After systemd stops
+// the unit, what remains is the shims KillMode=process spared. The unit-name
+// match excludes a host-managed containerd, whose shims run under its own unit.
 func serviceCgroupRoots() []string {
 	matches, _ := filepath.Glob("/sys/fs/cgroup/system.slice/kubesolo*.service")
 	return matches
 }
 
 // kubepodsCgroupRoots returns the kubepods cgroups present on this host. The
-// name depends on the kubelet's cgroup driver: "kubepods.slice" for systemd,
+// name follows the kubelet's cgroup driver: "kubepods.slice" for systemd,
 // "kubepods" for cgroupfs. The starred patterns match cgroup v1, which mounts
 // one hierarchy per subsystem.
 func kubepodsCgroupRoots() []string {

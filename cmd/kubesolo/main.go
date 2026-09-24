@@ -385,13 +385,11 @@ func cleanStaleState(basePath string, runtimeExternal, containerMode bool) {
 		log.Info().Str("component", "kubesolo").Msgf("removed stale system containerd socket: %s", types.DefaultSystemContainerdSock)
 	}
 
-	// Decided before the directory read below, which returns early on a fresh
-	// install and would otherwise leave the boot unrecorded until the second
-	// start — making the first restart look like a reboot.
+	// Must run before the directory read below, which returns early on a fresh
+	// install and would leave the boot unrecorded until the second start.
 	//
-	// In container mode the boot id belongs to the host, so it survives the
-	// container being replaced even though that destroys every shim. Treat it as
-	// a new boot, since nothing from the previous run is still running.
+	// In container mode the boot id is the host's, so it survives the container
+	// being replaced, which destroys every shim. That is a new boot.
 	rebooted := rebootedSinceLastRun(basePath) || containerMode
 
 	// Clean all containerd subdirectories except images/ (embedded tar archives)
