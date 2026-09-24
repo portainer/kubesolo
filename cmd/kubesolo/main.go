@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -354,16 +355,20 @@ func (s *kubesolo) run() {
 	log.Info().Str("component", "kubesolo").Msg("all services have shutdown gracefully")
 }
 
-// cleanStaleState removes stale runtime artifacts from a previous run.
-// After a reboot, the old container is gone but stale containerd metadata,
-// sockets, and runtime state remain on the persistent volume. The containerd
-// metadata DB (meta.db) retains references to EXITED containers, causing
-// kubelet to fail pod synchronization on restart.
+// cleanStaleState removes the containerd artifacts that a new run regenerates:
+// sockets, the generated config and the CNI directory.
 //
-// Strategy: remove everything in the containerd directory except the embedded
-// image archives (images/). These are re-imported by importImages() on every
-// startup, so no data is lost. This gives containerd a clean slate while
-// preserving the kine database (Kubernetes state) and PKI certificates.
+// root/ is never removed. It holds the content store and snapshots, so deleting
+// it destroys images side-loaded with `ctr images import`, which have no other
+// source (issue #197).
+//
+// state/ holds one bundle per running task and is cleared only after a reboot.
+// Within a boot those shims are still alive and containerd reattaches to them.
+// Clearing it strands their container processes in kubepods.slice, where kubelet
+// cannot see them, and a second copy of every pod starts alongside.
+//
+// containerd reconciles what is left: it deletes bundles it cannot reach and
+// removes their work directories under root/.
 //
 // Nothing is cleaned when the container runtime is managed by the host: the socket
 // and every directory below belong to that runtime, not to kubesolo.
@@ -387,6 +392,11 @@ func cleanStaleState(basePath string, runtimeExternal bool) {
 		return
 	}
 
+	rebooted := rebootedSinceLastRun(basePath)
+	if !rebooted {
+		log.Info().Str("component", "kubesolo").Msg("same boot as the previous run, keeping containerd task state")
+	}
+
 	for _, entry := range entries {
 		name := entry.Name()
 		// Preserve embedded image archives — they are re-imported on startup
@@ -401,12 +411,58 @@ func cleanStaleState(basePath string, runtimeExternal bool) {
 		if name == "registry" {
 			continue
 		}
+		if name == "root" {
+			continue
+		}
+		if name == "state" && !rebooted {
+			continue
+		}
 
 		target := filepath.Join(containerdDir, name)
 		if err := os.RemoveAll(target); err == nil {
 			log.Info().Str("component", "kubesolo").Msgf("cleaned stale containerd artifact: %s", target)
 		}
 	}
+}
+
+const (
+	bootIDPath       = "/proc/sys/kernel/random/boot_id"
+	bootIDMarkerFile = ".boot-id"
+)
+
+// readBootID returns a value that changes every time the host boots. Empty when
+// the kernel's boot_id cannot be read.
+func readBootID() string {
+	raw, err := os.ReadFile(bootIDPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+// rebootedSinceLastRun reports whether the host has booted since the previous
+// kubesolo start, and records the current boot for the next one. An
+// unidentifiable boot, or a marker that cannot be read or written, counts as a
+// reboot.
+func rebootedSinceLastRun(basePath string) bool {
+	current := readBootID()
+	marker := filepath.Join(basePath, bootIDMarkerFile)
+
+	previous, readErr := os.ReadFile(marker)
+
+	if current == "" {
+		return true
+	}
+
+	if err := os.WriteFile(marker, []byte(current), 0o600); err != nil {
+		log.Warn().Str("component", "kubesolo").Msgf("could not record the boot marker, treating this start as a reboot: %v", err)
+		return true
+	}
+
+	if readErr != nil {
+		return true
+	}
+	return strings.TrimSpace(string(previous)) != current
 }
 
 // startMetricsService starts the optional kubesolo metrics endpoint and
