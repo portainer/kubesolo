@@ -163,7 +163,14 @@ done
 # Download container images
 echo "Checking if Crane is available..."
 if ! command -v crane &> /dev/null; then
-    curl -sL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" > go-containerregistry.tar.gz
+    # crane runs on the build host, so this follows uname rather than ${ARCH},
+    # which is the target KubeSolo is being built for.
+    case "$(uname -m)" in
+        x86_64)        CRANE_ARCH="x86_64" ;;
+        aarch64|arm64) CRANE_ARCH="arm64"  ;;
+        *) echo "Unsupported build host architecture for crane: $(uname -m)"; exit 1 ;;
+    esac
+    curl -sL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_${CRANE_ARCH}.tar.gz" > go-containerregistry.tar.gz
     tar -zxvf go-containerregistry.tar.gz -C /usr/local/bin/ crane
     rm -f go-containerregistry.tar.gz
 fi
