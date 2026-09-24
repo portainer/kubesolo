@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DefaultVersion     = "v1.1.8"
+	DefaultVersion     = "v1.2.0"
 	DefaultPath        = "/var/lib/kubesolo"
 	DefaultInstallPath = "/usr/local/bin/kubesolo"
 	DefaultRunMode     = RunModeService
