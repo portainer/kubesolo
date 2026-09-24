@@ -69,7 +69,10 @@ printf 'downloading kubesoloctl %s (%s)...\n' "$KUBESOLO_VERSION" "$ARCH"
 # are a pinned version that predates this architecture's assets, or a typo in
 # KUBESOLO_INSTALLER_BASE_URL.
 download_failed() {
-  printf 'error: failed to download kubesoloctl from %s\n' "$URL" >&2
+  # KUBESOLO_INSTALLER_BASE_URL points at private mirrors, so strip any
+  # user:password@ and query string before the URL reaches a CI log.
+  safe_url=$(printf '%s' "$URL" | sed -e 's#://[^/@]*@#://#' -e 's#?.*##')
+  printf 'error: failed to download kubesoloctl from %s\n' "$safe_url" >&2
   printf 'no asset for %s at version %s, or the URL is unreachable\n' "$ARCH" "$KUBESOLO_VERSION" >&2
   exit 1
 }

@@ -55,9 +55,9 @@ func TestArchiveName_MuslVariants(t *testing.T) {
 // behind the "musl builds are only available for amd64 and arm64" error.
 func TestForTarget_MuslAvailableForEveryArch(t *testing.T) {
 	cases := []struct {
-		target        string
-		wantArch      string
-		wantLibCSuffx string
+		target         string
+		wantArch       string
+		wantLibCSuffix string
 	}{
 		{"amd64", "amd64", ""},
 		{"arm64", "arm64", ""},
@@ -74,9 +74,9 @@ func TestForTarget_MuslAvailableForEveryArch(t *testing.T) {
 			t.Errorf("ForTarget(%q): unexpected error: %v", c.target, err)
 			continue
 		}
-		if info.ArchiveSuffix != c.wantArch || info.LibCSuffix != c.wantLibCSuffx {
+		if info.ArchiveSuffix != c.wantArch || info.LibCSuffix != c.wantLibCSuffix {
 			t.Errorf("ForTarget(%q): got arch=%q libc=%q, want arch=%q libc=%q",
-				c.target, info.ArchiveSuffix, info.LibCSuffix, c.wantArch, c.wantLibCSuffx)
+				c.target, info.ArchiveSuffix, info.LibCSuffix, c.wantArch, c.wantLibCSuffix)
 		}
 	}
 }
