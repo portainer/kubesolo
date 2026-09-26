@@ -47,3 +47,49 @@ The v2 file uses the stable-looking `dashboard.grafana.app/v2` resource kind, bu
 That value identifies a Grafana 13.x development or nightly build. Because the dashboard was exported from a prerelease environment, treat the v2 format as bleeding-edge and check the [current Grafana release notes](https://grafana.com/docs/grafana/latest/whatsnew/) before using it in production.
 
 **Recommendation:** Start with `kubesolo-grafana-dashboard-classic.json`. It is the most compatible option, including for current Grafana Cloud stacks. Switch to the v2 dashboard only after confirming that your Grafana instance supports it and you specifically want its API-driven editing capabilities.
+
+## Shipping metrics with Grafana Alloy
+
+> This part including the `alloy-config.yaml` is merely an example on one of the options to ship your metrics
+
+[`alloy-config.yaml`](alloy-config.yaml) is an example [Grafana Alloy](https://grafana.com/docs/alloy/latest/) configuration that feeds these dashboards. Its `prometheus.scrape "kubesolo"` block collects from exactly two targets, and **these two targets are the basis for every panel in both dashboards**:
+
+- `kubesolo-apiserver` — kube-apiserver's own `/metrics`, proxied through the `kubernetes.default.svc` Service
+- `kubesolo-kubelet-cadvisor` — kubelet/cAdvisor metrics, proxied through the apiserver's node proxy (`/api/v1/nodes/<node>/proxy/metrics/cadvisor`)
+
+Everything else in the file — the `ClusterRole`/`ClusterRoleBinding` and the `bearer_token_file`/`tls_config` block — exists solely to authenticate and authorize those two scrapes. The `ClusterRole` grants the Alloy `ServiceAccount` the `nodes`, `nodes/metrics`, `nodes/stats`, and `nodes/proxy` permissions they need (KubeSolo's own `system:kube-apiserver-to-kubelet` role already grants these to the apiserver itself, but Alloy authenticates as its own ServiceAccount, so it needs its own grant).
+
+Apply with:
+
+```sh
+kubectl apply -f alloy-config.yaml
+```
+
+Then set `GRAFANA_CLOUD_URL`, `GRAFANA_CLOUD_USERNAME`, and `GRAFANA_CLOUD_API_KEY` on the Alloy deployment (or point `prometheus.remote_write` at any other Prometheus-compatible endpoint).
+
+Plain environment variables are the simplest way to get started, but they place the Grafana Cloud username/API key directly on the Alloy Deployment/Pod spec. Where possible, prefer reading them from a Kubernetes `Secret` via [`remote.kubernetes.secret`](https://grafana.com/docs/alloy/latest/reference/components/remote/remote.kubernetes.secret/) instead — this keeps credentials out of the Alloy config and off the Pod spec entirely. Non-secret values, such as the remote-write URL, can similarly be sourced from a `ConfigMap` via [`remote.kubernetes.configmap`](https://grafana.com/docs/alloy/latest/reference/components/remote/remote.kubernetes.configmap/). For example:
+
+```alloy
+remote.kubernetes.secret "grafanacloud" {
+  namespace = "monitoring"
+  name      = "grafanacloud-credentials"
+}
+
+remote.kubernetes.configmap "grafanacloud" {
+  namespace = "monitoring"
+  name      = "grafanacloud-config"
+}
+
+prometheus.remote_write "grafanacloud" {
+  endpoint {
+    url = remote.kubernetes.configmap.grafanacloud.data["url"]
+
+    basic_auth {
+      username = remote.kubernetes.secret.grafanacloud.data["username"]
+      password = remote.kubernetes.secret.grafanacloud.data["api-key"]
+    }
+  }
+}
+```
+
+For installation options (Helm chart, binary, Docker) and the full `prometheus.scrape`/`prometheus.remote_write`/`discovery.kubernetes` component reference, see the [Grafana Alloy documentation](https://grafana.com/docs/alloy/latest/).
