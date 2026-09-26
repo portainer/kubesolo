@@ -14,6 +14,11 @@ func Defaults() *types.Config {
 
 		Path: types.DefaultBasePath,
 
+		PKI: types.PKIConfig{
+			CACert: "", // KubeSolo generates and owns the CA
+			CAKey:  "",
+		},
+
 		Logging: types.LoggingConfig{
 			Debug: false,
 			Pprof: false,
@@ -35,12 +40,15 @@ func Defaults() *types.Config {
 		},
 
 		Kubernetes: types.KubernetesConfig{
-			NodeName: "", // the hostname
+			NodeName:            "", // the hostname
+			BootstrapToken:      "", // TLS bootstrapping off
+			BootstrapKubeconfig: "",
 			APIServer: types.APIServerConfig{
 				ExtraSANs:             nil,
 				StartupTimeoutSeconds: types.DefaultStartupTimeout,
 			},
 			Kubelet: types.KubeletConfig{
+				External: false, // KubeSolo runs its own kubelet
 				CPUManager: types.CPUManagerConfig{
 					Policy:        types.CPUManagerPolicyNone,
 					PolicyOptions: nil,
@@ -51,6 +59,7 @@ func Defaults() *types.Config {
 		},
 
 		Storage: types.StorageConfig{
+			Etcd: types.EtcdConfig{Endpoints: nil}, // nil = run the embedded kine
 			LocalPath: types.LocalPathConfig{
 				Enabled:    true,
 				SharedPath: "",

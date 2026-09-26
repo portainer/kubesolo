@@ -76,17 +76,14 @@
   "KubeletPluginsDir": "/var/lib/kubesolo/kubelet/volumeplugins",
   "APIServerDir": "/var/lib/kubesolo/apiserver",
   "ServiceAccountKeyFile": "/var/lib/kubesolo/pki/apiserver/service-account.key",
-  "APIServerExtraSANs": [
-    "10.0.0.4",
-    "kubesolo.local"
-  ],
-  "EtcdExternal": false,
+  "APIServerExtraSANs": null,
+  "EtcdExternal": true,
   "EtcdEndpoints": [
-    "127.0.0.1:2379"
+    "https://127.0.0.1:2379"
   ],
-  "EtcdCAFile": "",
-  "EtcdCertFile": "",
-  "EtcdKeyFile": "",
+  "EtcdCAFile": "/etc/kubernetes/pki/etcd/ca.crt",
+  "EtcdCertFile": "/etc/kubernetes/pki/apiserver-etcd-client.crt",
+  "EtcdKeyFile": "/etc/kubernetes/pki/apiserver-etcd-client.key",
   "KineDir": "/var/lib/kubesolo/kine/db",
   "KineSocketFile": "/var/lib/kubesolo/kine/db/socket",
   "ControllerDir": "/var/lib/kubesolo/controller-manager/config",
@@ -99,7 +96,6 @@
   "LoadBalancer": false,
   "LoadBalancerIP": "",
   "LocalPathStorageDir": "/var/lib/kubesolo/local-path-storage",
-  "LocalStorage": false,
   "IsPortainerEdge": false,
   "PortainerEdgeImage": "",
   "ContainerMode": false,

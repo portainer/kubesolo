@@ -151,6 +151,37 @@ func buildRegistry() []Field {
 			},
 		},
 		{
+			ConfigPath: "pki.caCert",
+			Envar:      "KUBESOLO_PKI_CA_CERT",
+			Get:        func(c *types.Config) any { return c.PKI.CACert },
+			Set:        func(c *types.Config, v string) error { c.PKI.CACert = v; return nil },
+		},
+		{
+			ConfigPath: "pki.caKey",
+			Envar:      "KUBESOLO_PKI_CA_KEY",
+			Get:        func(c *types.Config) any { return c.PKI.CAKey },
+			Set:        func(c *types.Config, v string) error { c.PKI.CAKey = v; return nil },
+		},
+		{
+			ConfigPath: "kubernetes.kubelet.external",
+			Envar:      "KUBESOLO_KUBELET_EXTERNAL",
+			Get:        func(c *types.Config) any { return c.Kubernetes.Kubelet.External },
+			Set:        func(c *types.Config, v string) error { return setBool(&c.Kubernetes.Kubelet.External, v) },
+		},
+		{
+			ConfigPath: "kubernetes.bootstrapToken",
+			Envar:      "KUBESOLO_BOOTSTRAP_TOKEN",
+			Secret:     true,
+			Get:        func(c *types.Config) any { return c.Kubernetes.BootstrapToken },
+			Set:        func(c *types.Config, v string) error { c.Kubernetes.BootstrapToken = v; return nil },
+		},
+		{
+			ConfigPath: "kubernetes.bootstrapKubeconfig",
+			Envar:      "KUBESOLO_BOOTSTRAP_KUBECONFIG",
+			Get:        func(c *types.Config) any { return c.Kubernetes.BootstrapKubeconfig },
+			Set:        func(c *types.Config, v string) error { c.Kubernetes.BootstrapKubeconfig = v; return nil },
+		},
+		{
 			ConfigPath: "kubernetes.nodeName",
 			Envar:      "KUBESOLO_NODE_NAME",
 			Get:        func(c *types.Config) any { return c.Kubernetes.NodeName },
@@ -222,6 +253,33 @@ func buildRegistry() []Field {
 				c.Kubernetes.Kubelet.SystemReserved = m
 				return nil
 			},
+		},
+		{
+			ConfigPath: "storage.etcd.endpoints",
+			Envar:      "KUBESOLO_ETCD_ENDPOINTS",
+			Get:        func(c *types.Config) any { return c.Storage.Etcd.Endpoints },
+			Set: func(c *types.Config, v string) error {
+				c.Storage.Etcd.Endpoints = splitList(v)
+				return nil
+			},
+		},
+		{
+			ConfigPath: "storage.etcd.caFile",
+			Envar:      "KUBESOLO_ETCD_CA_FILE",
+			Get:        func(c *types.Config) any { return c.Storage.Etcd.CAFile },
+			Set:        func(c *types.Config, v string) error { c.Storage.Etcd.CAFile = v; return nil },
+		},
+		{
+			ConfigPath: "storage.etcd.certFile",
+			Envar:      "KUBESOLO_ETCD_CERT_FILE",
+			Get:        func(c *types.Config) any { return c.Storage.Etcd.CertFile },
+			Set:        func(c *types.Config, v string) error { c.Storage.Etcd.CertFile = v; return nil },
+		},
+		{
+			ConfigPath: "storage.etcd.keyFile",
+			Envar:      "KUBESOLO_ETCD_KEY_FILE",
+			Get:        func(c *types.Config) any { return c.Storage.Etcd.KeyFile },
+			Set:        func(c *types.Config, v string) error { c.Storage.Etcd.KeyFile = v; return nil },
 		},
 		{
 			ConfigPath: "storage.localPath.enabled",

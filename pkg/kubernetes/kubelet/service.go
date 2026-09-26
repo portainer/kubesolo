@@ -25,6 +25,7 @@ type service struct {
 	keyFile               string
 	nodeName              string
 	nodeIP                string
+	external              bool
 	kubeletCertPath       string
 	adminKubeconfig       string
 	containerMode         bool
@@ -57,6 +58,7 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		certFile:              embedded.KubeletCerts.Cert,
 		keyFile:               embedded.KubeletCerts.Key,
 		nodeName:              embedded.NodeName,
+		external:              embedded.KubeletExternal,
 		adminKubeconfig:       embedded.AdminKubeconfigFile,
 		containerMode:         embedded.ContainerMode,
 		disableIPv6:           embedded.DisableIPv6,

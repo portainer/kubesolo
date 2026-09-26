@@ -1,5 +1,7 @@
 {
   "NodeName": "",
+  "BootstrapToken": "",
+  "ExternalCA": false,
   "NodeIP": "10.0.0.5",
   "NodeIPSpecified": false,
   "MTU": 0,
@@ -66,6 +68,7 @@
   "RuntimeEndpoint": "unix:///var/lib/kubesolo/containerd/containerd.sock",
   "RuntimeSocketPath": "/var/lib/kubesolo/containerd/containerd.sock",
   "RuntimeCgroupDriver": "",
+  "KubeletExternal": false,
   "KubeletDir": "/var/lib/kubesolo/kubelet",
   "KubeletConfigDir": "/var/lib/kubesolo/kubelet/config",
   "KubeletConfigFile": "/var/lib/kubesolo/kubelet/config/config.yaml",
@@ -74,6 +77,13 @@
   "APIServerDir": "/var/lib/kubesolo/apiserver",
   "ServiceAccountKeyFile": "/var/lib/kubesolo/pki/apiserver/service-account.key",
   "APIServerExtraSANs": null,
+  "EtcdExternal": false,
+  "EtcdEndpoints": [
+    "127.0.0.1:2379"
+  ],
+  "EtcdCAFile": "",
+  "EtcdCertFile": "",
+  "EtcdKeyFile": "",
   "KineDir": "/var/lib/kubesolo/kine/db",
   "KineSocketFile": "/var/lib/kubesolo/kine/db/socket",
   "ControllerDir": "/var/lib/kubesolo/controller-manager/config",

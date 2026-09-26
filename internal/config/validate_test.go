@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -328,5 +329,176 @@ func TestDefaultSocketPathFitsComfortably(t *testing.T) {
 
 	if got := len(cfg.API.SocketPath); got > maxUnixSocketPath {
 		t.Errorf("default socket path is %d characters, over the %d limit", got, maxUnixSocketPath)
+	}
+}
+
+// TestValidateExternalCAPairing — a CA certificate without its key cannot sign,
+// and a key without its certificate leaves nothing to publish as a trust anchor.
+// Accepting either half would fail much later, as a TLS error naming some leaf.
+func TestValidateExternalCAPairing(t *testing.T) {
+	tests := []struct {
+		name    string
+		cert    string
+		key     string
+		wantErr string
+	}{
+		{name: "neither is the default"},
+		{name: "both together", cert: "/etc/talos/ca.crt", key: "/etc/talos/ca.key"},
+		{name: "cert without key", cert: "/etc/talos/ca.crt", wantErr: "must be set together"},
+		{name: "key without cert", key: "/etc/talos/ca.key", wantErr: "must be set together"},
+		{name: "relative cert", cert: "pki/ca.crt", key: "/etc/talos/ca.key", wantErr: "absolute path"},
+		{name: "relative key", cert: "/etc/talos/ca.crt", key: "pki/ca.key", wantErr: "absolute path"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.PKI.CACert = test.cert
+			cfg.PKI.CAKey = test.key
+
+			_, err := Validate(cfg, testHost())
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("expected an error containing %q, got %v", test.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestValidateBootstrapToken — the API server derives the Secret name from the
+// token id, so a malformed token authenticates nothing and surfaces only as a
+// 401 at the kubelet, which never names the token as the cause.
+func TestValidateBootstrapToken(t *testing.T) {
+	for _, token := range []string{"", "abcdef.0123456789abcdef", "07401b.f395accd246ae52d"} {
+		cfg := Defaults()
+		cfg.Kubernetes.BootstrapToken = token
+		if _, err := Validate(cfg, testHost()); err != nil {
+			t.Errorf("token %q: expected no error, got %v", token, err)
+		}
+	}
+
+	invalid := []string{
+		"abcdef",                    // no secret
+		"abcdef.0123",               // secret too short
+		"ABCDEF.0123456789abcdef",   // uppercase
+		"abcde.0123456789abcdef",    // id too short
+		"abcdef-0123456789abcdef",   // wrong separator
+		"abcdef.0123456789abcdefff", // secret too long
+	}
+	for _, token := range invalid {
+		cfg := Defaults()
+		cfg.Kubernetes.BootstrapToken = token
+		if _, err := Validate(cfg, testHost()); err == nil {
+			t.Errorf("token %q: expected an error, got none", token)
+		}
+	}
+}
+
+// TestValidateBootstrapKubeconfig — the token and the file it would be read
+// from cannot both be authoritative, and a relative path resolves against
+// whatever directory KubeSolo happened to be started in.
+func TestValidateBootstrapKubeconfig(t *testing.T) {
+	cfg := Defaults()
+	cfg.Kubernetes.BootstrapKubeconfig = "/etc/kubernetes/bootstrap-kubeconfig"
+	if _, err := Validate(cfg, testHost()); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	cfg = Defaults()
+	cfg.Kubernetes.BootstrapKubeconfig = "bootstrap-kubeconfig"
+	if _, err := Validate(cfg, testHost()); err == nil {
+		t.Error("expected a relative path to be rejected, got none")
+	}
+
+	cfg = Defaults()
+	cfg.Kubernetes.BootstrapToken = "abcdef.0123456789abcdef"
+	cfg.Kubernetes.BootstrapKubeconfig = "/etc/kubernetes/bootstrap-kubeconfig"
+	if _, err := Validate(cfg, testHost()); err == nil {
+		t.Error("expected setting both to be rejected, got none")
+	}
+}
+
+// TestValidateEtcdEndpoints — a malformed endpoint reaches the API server as an
+// --etcd-servers value it cannot dial, and the only symptom is the API server
+// failing to start with a storage error that never names the configuration.
+func TestValidateEtcdEndpoints(t *testing.T) {
+	tests := []struct {
+		name      string
+		endpoints []string
+		cert, key string
+		wantErr   string
+	}{
+		{name: "unset is the default"},
+		{name: "https endpoint", endpoints: []string{"https://127.0.0.1:2379"}},
+		{name: "several endpoints", endpoints: []string{"https://10.0.0.1:2379", "https://10.0.0.2:2379"}},
+		{name: "http endpoint", endpoints: []string{"http://10.0.0.5:2379"}},
+		{name: "ipv6 endpoint", endpoints: []string{"https://[::1]:2379"}},
+		{name: "no scheme", endpoints: []string{"127.0.0.1:2379"}, wantErr: "is not a URL"},
+		{name: "no host", endpoints: []string{"https://"}, wantErr: "is not a URL"},
+		// url.Parse accepts both of these: only syntax is its concern.
+		{name: "unsupported scheme", endpoints: []string{"ftp://host:2379"}, wantErr: "must use http or https"},
+		{name: "no port", endpoints: []string{"https://host"}, wantErr: "must name a port"},
+		{name: "cert without key", cert: "/etc/etcd/client.crt", wantErr: "must be set together"},
+		{name: "key without cert", key: "/etc/etcd/client.key", wantErr: "must be set together"},
+		{name: "relative cert", cert: "etcd/client.crt", key: "/etc/etcd/client.key", wantErr: "absolute path"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Storage.Etcd.Endpoints = test.endpoints
+			cfg.Storage.Etcd.CertFile = test.cert
+			cfg.Storage.Etcd.KeyFile = test.key
+
+			_, err := Validate(cfg, testHost())
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("expected an error containing %q, got %v", test.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestValidateExternalCALocation — the managed PKI directory is swept whenever
+// leaf certificates are regenerated, so a CA placed there would be deleted by
+// something as ordinary as the node IP changing.
+func TestValidateExternalCALocation(t *testing.T) {
+	cfg := Defaults()
+	managed := filepath.Join(cfg.Path, "pki")
+
+	cases := map[string]struct {
+		dir     string
+		wantErr bool
+	}{
+		"outside the managed tree":    {dir: "/system/secrets/kubernetes", wantErr: false},
+		"in the preserved ca dir":     {dir: filepath.Join(managed, "ca"), wantErr: false},
+		"in the swept apiserver dir":  {dir: filepath.Join(managed, "apiserver"), wantErr: true},
+		"at the root of the pki tree": {dir: managed, wantErr: true},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.PKI.CACert = filepath.Join(test.dir, "ca.crt")
+			cfg.PKI.CAKey = filepath.Join(test.dir, "ca.key")
+
+			_, err := Validate(cfg, testHost())
+			if test.wantErr && err == nil {
+				t.Errorf("expected an error for %s, got none", test.dir)
+			}
+			if !test.wantErr && err != nil {
+				t.Errorf("expected no error for %s, got %v", test.dir, err)
+			}
+		})
 	}
 }

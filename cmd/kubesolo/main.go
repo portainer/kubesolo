@@ -27,6 +27,7 @@ import (
 	"github.com/portainer/kubesolo/pkg/components/portainer"
 	"github.com/portainer/kubesolo/pkg/kine"
 	"github.com/portainer/kubesolo/pkg/kubernetes/apiserver"
+	"github.com/portainer/kubesolo/pkg/kubernetes/bootstrap"
 	"github.com/portainer/kubesolo/pkg/kubernetes/controller"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubelet"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubeproxy"
@@ -215,8 +216,19 @@ func (s *kubesolo) run() {
 			readyCh: runtimeReadyCh,
 		},
 		{
-			name: "kine",
+			name: "datastore",
 			start: func() {
+				// With a host-managed etcd there is no datastore for KubeSolo to
+				// run: the API server was already pointed at it, so the only thing
+				// left is to release the components waiting on this channel.
+				if s.embedded.EtcdExternal {
+					log.Info().Str("component", "kubesolo").
+						Strs("endpoints", s.embedded.EtcdEndpoints).
+						Msg("using the etcd managed by the host, not starting kine")
+					close(kineReadyCh)
+					return
+				}
+
 				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.cfg.Storage.DBWALRepair)
 				s.wg.Go(func() {
 					_ = kineService.Run()
@@ -280,15 +292,30 @@ func (s *kubesolo) run() {
 		// Start the optional metrics endpoint as soon as kine is ready, so the
 		// kine_db_size_bytes collector has a real path to stat. The metrics
 		// service does not block any other component on its own readiness.
-		if svc.name == "kine" && s.embedded.Metrics.Enabled {
+		if svc.name == "datastore" && s.embedded.Metrics.Enabled {
 			s.startMetricsService(ctx, cancel)
 		}
 
 		// The configuration API has no dependency on kine either; this is simply
 		// the point at which the control plane is far enough along to be worth
 		// exposing.
-		if svc.name == "kine" && s.cfg.API.Enabled {
+		if svc.name == "datastore" && s.cfg.API.Enabled {
 			s.startConfigAPIService(ctx, cancel)
+		}
+	}
+
+	// TLS bootstrapping is seeded before any kubelet is expected, so that a
+	// foreign kubelet already retrying against the API server finds the token
+	// valid on its next attempt rather than after a further backoff.
+	//
+	// The embedded value is the resolved one: kubernetes.bootstrapKubeconfig
+	// lands there and never in cfg, and it is what the API server and controller
+	// manager switch on. Reading cfg here would seed nothing for that path while
+	// still enabling bootstrap-token auth.
+	if s.embedded.BootstrapToken != "" {
+		log.Info().Str("component", "kubesolo").Msg("enabling tls bootstrapping...")
+		if err := bootstrap.Apply(s.embedded.AdminKubeconfigFile, s.embedded.BootstrapToken); err != nil {
+			log.Fatal().Err(err).Msg("failed to enable tls bootstrapping")
 		}
 	}
 
@@ -572,4 +599,17 @@ func (s *kubesolo) bootstrap() {
 		RuntimeEndpoint: s.runtimeEndpoint,
 		Hostname:        s.hostName,
 	})
+
+	// Resolved here rather than in BuildEmbedded so that mapping config to
+	// paths stays free of I/O, and resolved before any service is constructed
+	// because the API server and controller manager both switch on the token
+	// being present.
+	if path := s.cfg.Kubernetes.BootstrapKubeconfig; path != "" {
+		token, err := bootstrap.TokenFromKubeconfig(path)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to read the bootstrap token. exiting...")
+		}
+
+		s.embedded.BootstrapToken = token
+	}
 }

@@ -1,6 +1,6 @@
 {
   "NodeName": "",
-  "BootstrapToken": "",
+  "BootstrapToken": "abcdef.0123456789abcdef",
   "ExternalCA": false,
   "NodeIP": "",
   "NodeIPSpecified": false,
@@ -76,10 +76,7 @@
   "KubeletPluginsDir": "/var/lib/kubesolo/kubelet/volumeplugins",
   "APIServerDir": "/var/lib/kubesolo/apiserver",
   "ServiceAccountKeyFile": "/var/lib/kubesolo/pki/apiserver/service-account.key",
-  "APIServerExtraSANs": [
-    "10.0.0.4",
-    "kubesolo.local"
-  ],
+  "APIServerExtraSANs": null,
   "EtcdExternal": false,
   "EtcdEndpoints": [
     "127.0.0.1:2379"
@@ -99,7 +96,6 @@
   "LoadBalancer": false,
   "LoadBalancerIP": "",
   "LocalPathStorageDir": "/var/lib/kubesolo/local-path-storage",
-  "LocalStorage": false,
   "IsPortainerEdge": false,
   "PortainerEdgeImage": "",
   "ContainerMode": false,

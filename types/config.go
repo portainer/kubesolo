@@ -27,6 +27,7 @@ type Config struct {
 	// containerd state live below it, and nothing migrates them.
 	Path string `json:"path,omitempty"`
 
+	PKI        PKIConfig        `json:"pki"`
 	Logging    LoggingConfig    `json:"logging"`
 	Network    NetworkConfig    `json:"network"`
 	Runtime    RuntimeConfig    `json:"runtime"`
@@ -36,6 +37,24 @@ type Config struct {
 	D2K        D2KConfig        `json:"d2k"`
 	Metrics    MetricsConfig    `json:"metrics"`
 	API        ConfigAPI        `json:"api"`
+}
+
+// PKIConfig supplies certificate material KubeSolo would otherwise generate.
+//
+// This exists for clusters whose trust anchor is owned by something else. Talos
+// holds the Kubernetes CA and hands the same CA to its kubelet, so KubeSolo has
+// to sign with that CA or the two never trust each other.
+//
+// The files are read where they are, never copied into the KubeSolo PKI
+// directory. That keeps them out of reach of the leaf-certificate regeneration
+// that runs when the node IP moves, and lets them stay read-only and owned by
+// whoever provisioned them.
+type PKIConfig struct {
+	// CACert and CAKey are the Kubernetes root CA. Both or neither: KubeSolo
+	// signs with this CA, so a certificate without its key is unusable.
+	// Empty means KubeSolo generates and owns the CA, which is the default.
+	CACert string `json:"caCert,omitempty"`
+	CAKey  string `json:"caKey,omitempty"`
 }
 
 // LoggingConfig controls log verbosity and the pprof server.
@@ -95,6 +114,31 @@ type KubernetesConfig struct {
 	// this name — a mismatch leaves the whole cluster Pending.
 	NodeName string `json:"nodeName,omitempty"`
 
+	// BootstrapToken turns on Kubernetes TLS bootstrapping, in the standard
+	// "<6 chars>.<16 chars>" form. Empty — the default — leaves it off.
+	//
+	// KubeSolo's own kubelet does not need this: it is handed a client
+	// certificate KubeSolo has already signed. A kubelet KubeSolo does not
+	// control has no such option — Talos, for one, only ever enrols by
+	// presenting a bootstrap token and requesting a certificate — so setting
+	// this enables bootstrap-token authentication on the API server, starts the
+	// controller manager's CSR signers, and seeds the token Secret and the RBAC
+	// that lets node client CSRs be approved automatically.
+	//
+	// It is a credential: anything holding it can obtain a node certificate for
+	// this cluster.
+	BootstrapToken string `json:"bootstrapToken,omitempty"`
+
+	// BootstrapKubeconfig reads the bootstrap token out of a kubeconfig on disk
+	// instead of taking it literally, and is otherwise identical to
+	// BootstrapToken. The two are mutually exclusive.
+	//
+	// This exists because the host that owns the kubelet usually mints the token
+	// itself: Talos writes /etc/kubernetes/bootstrap-kubeconfig, and the value
+	// is generated with the cluster, so it cannot be written into a KubeSolo
+	// config that has to be authored before the cluster exists.
+	BootstrapKubeconfig string `json:"bootstrapKubeconfig,omitempty"`
+
 	APIServer APIServerConfig `json:"apiServer"`
 	Kubelet   KubeletConfig   `json:"kubelet"`
 }
@@ -112,6 +156,16 @@ type APIServerConfig struct {
 
 // KubeletConfig covers the node agent's resource management.
 type KubeletConfig struct {
+	// External attaches KubeSolo to a kubelet the host already runs instead of
+	// starting one, the same split Runtime.Endpoint makes for the container
+	// runtime. KubeSolo then supervises no kubelet process: it waits for the
+	// host's kubelet to register NodeName with its API server, and treats that
+	// registration as the readiness signal.
+	//
+	// The remaining settings in this struct configure the kubelet KubeSolo
+	// starts, so they have no effect when this is true.
+	External bool `json:"external"`
+
 	CPUManager CPUManagerConfig `json:"cpuManager"`
 
 	// SystemReserved is withheld from node allocatable for the host, keyed by
@@ -123,9 +177,32 @@ type KubeletConfig struct {
 type StorageConfig struct {
 	LocalPath LocalPathConfig `json:"localPath"`
 
+	// Etcd points the API server at an etcd the host already runs, instead of
+	// the SQLite-backed kine KubeSolo embeds.
+	Etcd EtcdConfig `json:"etcd"`
+
 	// DBWALRepair runs an integrity check against the SQLite database at startup
 	// and clears WAL artefacts if it is corrupt. Recovers from power loss.
 	DBWALRepair bool `json:"dbWALRepair"`
+}
+
+// EtcdConfig points the API server at an etcd the host manages.
+//
+// This exists for hosts that already run one and will not stop: Talos supervises
+// etcd on a control plane node and reports the machine unready without it, and
+// two datastores on an edge device is one too many. Empty Endpoints — the
+// default — means KubeSolo runs kine, which is what makes it small.
+type EtcdConfig struct {
+	// Endpoints are the etcd client URLs, e.g. https://127.0.0.1:2379. Empty
+	// means KubeSolo runs its own kine.
+	Endpoints []string `json:"endpoints,omitempty"`
+
+	// CAFile, CertFile and KeyFile authenticate the API server to that etcd.
+	// A host-managed etcd almost always requires client certificates; they are
+	// optional here only because a plaintext endpoint is legal.
+	CAFile   string `json:"caFile,omitempty"`
+	CertFile string `json:"certFile,omitempty"`
+	KeyFile  string `json:"keyFile,omitempty"`
 }
 
 // LocalPathConfig covers the local-path storage provisioner.

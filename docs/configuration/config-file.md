@@ -154,10 +154,13 @@ path: /var/lib/kubesolo
 
 kubernetes:
   nodeName: ""            # empty = the hostname
+  bootstrapToken: ""      # e.g. abcdef.0123456789abcdef; empty = TLS bootstrapping off
+  bootstrapKubeconfig: "" # read the token from a kubeconfig instead; mutually exclusive with the above
   apiServer:
     extraSANs: []
     startupTimeoutSeconds: 600
   kubelet:
+    external: false       # true = attach to the host's kubelet instead of running one
     cpuManager:
       policy: none        # none | static
       policyOptions: {}
@@ -172,11 +175,20 @@ network:
     enabled: true
     ip: ""                # empty = use nodeIP
 
+pki:
+  caCert: ""              # empty = KubeSolo generates and owns the CA
+  caKey: ""               # both or neither; supplied files are used in place, never copied
+
 runtime:
   endpoint: ""            # empty = run the embedded containerd
   containerMode: null     # null = auto-detect; true/false to force
 
 storage:
+  etcd:
+    endpoints: []         # empty = run the embedded kine (SQLite)
+    caFile: ""            # client credentials for a host-managed etcd
+    certFile: ""
+    keyFile: ""
   localPath:
     enabled: true
     sharedPath: ""
@@ -220,8 +232,11 @@ and stays at the top level.
 | `api.socketPath` | `string` | `""` |
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |
+| `kubernetes.bootstrapToken` | `string` | `—` | *(secret)*
+| `kubernetes.bootstrapKubeconfig` | `string` | `""` |
 | `kubernetes.apiServer.extraSANs` | `array` | `[]` |
 | `kubernetes.apiServer.startupTimeoutSeconds` | `integer` | `600` |
+| `kubernetes.kubelet.external` | `boolean` | `false` |
 | `kubernetes.kubelet.cpuManager.policy` | `string` | `none` |
 | `kubernetes.kubelet.cpuManager.policyOptions` | `object` | `map[]` |
 | `kubernetes.kubelet.cpuManager.reservedCPUs` | `string` | `""` |
@@ -237,6 +252,8 @@ and stays at the top level.
 | `network.mtu` | `integer` | `0` |
 | `network.nodeIP` | `string` | `""` |
 | `path` | `string` | `/var/lib/kubesolo` | **immutable**
+| `pki.caCert` | `string` | `""` |
+| `pki.caKey` | `string` | `""` |
 | `portainer.async` | `boolean` | `false` |
 | `portainer.edgeID` | `string` | `""` |
 | `portainer.edgeKey` | `string` | `—` | *(secret)*
@@ -244,6 +261,10 @@ and stays at the top level.
 | `runtime.containerMode` | `boolean` | `<nil>` |
 | `runtime.endpoint` | `string` | `""` |
 | `storage.dbWALRepair` | `boolean` | `false` |
+| `storage.etcd.caFile` | `string` | `""` |
+| `storage.etcd.certFile` | `string` | `""` |
+| `storage.etcd.endpoints` | `array` | `[]` |
+| `storage.etcd.keyFile` | `string` | `""` |
 | `storage.localPath.enabled` | `boolean` | `true` |
 | `storage.localPath.sharedPath` | `string` | `""` |
 `runtime.containerMode` is deliberately three-state: unset means auto-detect,
