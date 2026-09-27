@@ -1564,8 +1564,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "clamp_max(sum(rate(container_cpu_cfs_throttled_periods_total[$__rate_interval])) / sum(rate(container_cpu_cfs_periods_total[$__rate_interval])), 1)",
-          "legendFormat": "throttled ratio",
+          "expr": "clamp_max(sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{container!=\"\", namespace=~\"$namespace\"}[$__rate_interval])) / sum by (pod) (rate(container_cpu_cfs_periods_total{container!=\"\", namespace=~\"$namespace\"}[$__rate_interval])), 1)",
+          "legendFormat": "{{pod}} throttled ratio",
           "refId": "A"
         }
       ],
