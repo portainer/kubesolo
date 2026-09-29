@@ -2,7 +2,7 @@
 
 The KubeSolo install script accepts flags that control version selection, runtime behaviour, Portainer integration, and offline workflows. Every flag has a corresponding environment variable, which is useful when piping the script directly from a URL.
 
-> **These flags configure the installer.** From KubeSolo v1.3.0 the installer
+> **These flags configure the installer.** From KubeSolo v1.2.1 the installer
 > records them in a configuration file at `/etc/kubesolo/config.yaml`, and the
 > installed service reads its settings from there rather than from a command line.
 >
