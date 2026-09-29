@@ -36,6 +36,8 @@ func TestArchiveName_MuslVariants(t *testing.T) {
 	}{
 		{"amd64", "v1.1.5", "kubesolo-v1.1.5-linux-amd64-musl.tar.gz"},
 		{"arm64", "v1.1.5", "kubesolo-v1.1.5-linux-arm64-musl.tar.gz"},
+		{"arm", "v1.2.0", "kubesolo-v1.2.0-linux-arm-musl.tar.gz"},
+		{"riscv64", "v1.2.0", "kubesolo-v1.2.0-linux-riscv64-musl.tar.gz"},
 	}
 	for _, c := range cases {
 		info := &SystemInfo{OS: "linux", ArchiveSuffix: c.arch, LibCSuffix: "-musl"}
@@ -43,6 +45,45 @@ func TestArchiveName_MuslVariants(t *testing.T) {
 		if got != c.want {
 			t.Errorf("ArchiveName(%q) with arch=%q musl: got %q, want %q", c.version, c.arch, got, c.want)
 		}
+	}
+}
+
+// ── ForTarget ─────────────────────────────────────────────────────────────────
+
+// The release matrix builds a musl archive for every supported arch, so every
+// arch must have a -musl target. Rejecting arm/riscv64 musl hosts was the bug
+// behind the "musl builds are only available for amd64 and arm64" error.
+func TestForTarget_MuslAvailableForEveryArch(t *testing.T) {
+	cases := []struct {
+		target         string
+		wantArch       string
+		wantLibCSuffix string
+	}{
+		{"amd64", "amd64", ""},
+		{"arm64", "arm64", ""},
+		{"arm", "arm", ""},
+		{"riscv64", "riscv64", ""},
+		{"amd64-musl", "amd64", "-musl"},
+		{"arm64-musl", "arm64", "-musl"},
+		{"arm-musl", "arm", "-musl"},
+		{"riscv64-musl", "riscv64", "-musl"},
+	}
+	for _, c := range cases {
+		info, err := ForTarget(c.target)
+		if err != nil {
+			t.Errorf("ForTarget(%q): unexpected error: %v", c.target, err)
+			continue
+		}
+		if info.ArchiveSuffix != c.wantArch || info.LibCSuffix != c.wantLibCSuffix {
+			t.Errorf("ForTarget(%q): got arch=%q libc=%q, want arch=%q libc=%q",
+				c.target, info.ArchiveSuffix, info.LibCSuffix, c.wantArch, c.wantLibCSuffix)
+		}
+	}
+}
+
+func TestForTarget_RejectsUnknown(t *testing.T) {
+	if _, err := ForTarget("ppc64le"); err == nil {
+		t.Error("ForTarget(\"ppc64le\"): expected an error, got nil")
 	}
 }
 

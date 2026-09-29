@@ -21,7 +21,7 @@ chmod +x kubesoloctl
 sudo mv kubesoloctl /usr/local/bin/
 ```
 
-Released assets follow the pattern `kubesoloctl-<os>-<arch>` (e.g. `kubesoloctl-linux-arm64`, `kubesoloctl-darwin-arm64`).
+Released assets follow the pattern `kubesoloctl-<os>-<arch>` (e.g. `kubesoloctl-linux-arm64`, `kubesoloctl-darwin-arm64`). Published targets are `linux/amd64`, `linux/arm64`, `linux/arm`, `linux/riscv64`, `darwin/amd64` and `darwin/arm64`. The `linux/arm` build is compiled for ARMv7 — ARMv6 boards (Pi 1, original Pi Zero) are not supported.
 
 ---
 

@@ -80,10 +80,10 @@ func (s *SystemInfo) InstallerName() string {
 // probing the current host. Use this when preparing an offline bundle for a
 // machine with a different architecture than the one running the installer.
 //
-// arch must be one of: amd64, arm64, arm, riscv64, amd64-musl, arm64-musl.
-// The -musl suffix selects the musl libc variant for the KubeSolo archive
-// (only published for amd64 and arm64); it does not affect the installer binary
-// asset name, which has no libc split (see InstallerName).
+// arch must be one of: amd64, arm64, arm, riscv64, or any of those with a
+// -musl suffix. The -musl suffix selects the musl libc variant for the KubeSolo
+// archive; it does not affect the installer binary asset name, which has no
+// libc split (see InstallerName).
 // InitSystem and Environment are set to Unknown/Standard — they are not relevant
 // for bundle downloads.
 func ForTarget(arch string) (*SystemInfo, error) {
@@ -92,17 +92,20 @@ func ForTarget(arch string) (*SystemInfo, error) {
 		libcSuffix string
 	}
 	targets := map[string]entry{
-		"amd64":      {"amd64", ""},
-		"arm64":      {"arm64", ""},
-		"arm":        {"arm", ""},
-		"riscv64":    {"riscv64", ""},
-		"amd64-musl": {"amd64", "-musl"},
-		"arm64-musl": {"arm64", "-musl"},
+		"amd64":        {"amd64", ""},
+		"arm64":        {"arm64", ""},
+		"arm":          {"arm", ""},
+		"riscv64":      {"riscv64", ""},
+		"amd64-musl":   {"amd64", "-musl"},
+		"arm64-musl":   {"arm64", "-musl"},
+		"arm-musl":     {"arm", "-musl"},
+		"riscv64-musl": {"riscv64", "-musl"},
 	}
 	t, ok := targets[arch]
 	if !ok {
 		return nil, fmt.Errorf(
-			"unsupported target arch %q: valid values are amd64, arm64, arm, riscv64, amd64-musl, arm64-musl",
+			"unsupported target arch %q: valid values are amd64, arm64, arm, riscv64, "+
+				"amd64-musl, arm64-musl, arm-musl, riscv64-musl",
 			arch,
 		)
 	}
@@ -118,7 +121,7 @@ func ForTarget(arch string) (*SystemInfo, error) {
 
 // Detect collects all relevant system information and returns a populated
 // SystemInfo. It returns an error only for unsupported (untargetable) hosts,
-// e.g. a musl system on riscv64 where no musl binary exists.
+// i.e. an architecture with no published KubeSolo build.
 func Detect() (*SystemInfo, error) {
 	// On macOS, KubeSolo runs as a container — no init system or libc
 	// detection is needed, only the host arch matters.
@@ -143,10 +146,7 @@ func Detect() (*SystemInfo, error) {
 		return nil, err
 	}
 
-	libc, libcSuffix, err := detectLibC(archSuffix)
-	if err != nil {
-		return nil, err
-	}
+	libc, libcSuffix := detectLibC()
 
 	return &SystemInfo{
 		OS:            "linux",
@@ -182,7 +182,9 @@ func detectArch() (goArch, archiveSuffix string, err error) {
 // presence of musl's dynamic linker under /lib and /usr/lib. The installer
 // binary itself is pure Go (CGO_ENABLED=0), so it runs on both — but the
 // KubeSolo binary it downloads is CGO-linked and requires the correct variant.
-func detectLibC(archSuffix string) (libc LibC, libcSuffix string, err error) {
+// The release matrix builds a musl archive for every supported arch, so this
+// never has to reject a host on libc grounds.
+func detectLibC() (libc LibC, libcSuffix string) {
 	muslPatterns := []string{
 		"/lib/ld-musl-*.so.1",
 		"/usr/lib/ld-musl-*.so.1",
@@ -190,18 +192,10 @@ func detectLibC(archSuffix string) (libc LibC, libcSuffix string, err error) {
 	for _, pattern := range muslPatterns {
 		matches, _ := filepath.Glob(pattern)
 		if len(matches) > 0 {
-			// Musl builds are only published for amd64 and arm64
-			if archSuffix != "amd64" && archSuffix != "arm64" {
-				return "", "", fmt.Errorf(
-					"musl libc detected but musl KubeSolo builds are only available for amd64 and arm64 (current arch: %s). "+
-						"See https://docs.kubesolo.io/installation for alternatives",
-					archSuffix,
-				)
-			}
-			return LibCMusl, "-musl", nil
+			return LibCMusl, "-musl"
 		}
 	}
-	return LibCGlibc, "", nil
+	return LibCGlibc, ""
 }
 
 // detectInitSystem probes the host for a known process supervision system.
