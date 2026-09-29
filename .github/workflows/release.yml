@@ -134,6 +134,11 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
+          - goos: linux
+            goarch: arm
+            goarm: "7"
+          - goos: linux
+            goarch: riscv64
           - goos: darwin
             goarch: amd64
           - goos: darwin
@@ -154,6 +159,7 @@ jobs:
           make build-kubesoloctl \
             GOOS=${{ matrix.goos }} \
             GOARCH=${{ matrix.goarch }} \
+            GOARM=${{ matrix.goarm }} \
             VERSION="${{ github.event.inputs.kubesolo_version }}" \
             KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
       - name: "[post] upload kubesoloctl to github release"

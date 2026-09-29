@@ -977,11 +977,7 @@ download_bundle() {
 
     libc_suffix=""
     if [ -f /lib/ld-musl-*.so.1 ] || [ -f /usr/lib/ld-musl-*.so.1 ]; then
-        if [ "$arch" = "amd64" ] || [ "$arch" = "arm64" ]; then
-            libc_suffix="-musl"
-        else
-            handle_error "musl libc detected but musl builds are only available for amd64 and arm64. Current: $arch"
-        fi
+        libc_suffix="-musl"
     fi
 
     local offline_suffix=""
@@ -1250,13 +1246,8 @@ esac
 # Detect libc type (glibc vs musl)
 LIBC_SUFFIX=""
 if [ -f /lib/ld-musl-*.so.1 ] || [ -f /usr/lib/ld-musl-*.so.1 ]; then
-    # Check if musl builds are available for this architecture
-    if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
-        LIBC_SUFFIX="-musl"
-        echo "🔍 Detected musl libc system"
-    else
-        handle_error "musl libc detected but musl builds are only available for amd64 and arm64 architectures. Current architecture: $ARCH"
-    fi
+    LIBC_SUFFIX="-musl"
+    echo "🔍 Detected musl libc system"
 else
     echo "🔍 Detected glibc system"
 fi

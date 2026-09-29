@@ -118,6 +118,11 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
+          - goos: linux
+            goarch: arm
+            goarm: "7"
+          - goos: linux
+            goarch: riscv64
           - goos: darwin
             goarch: amd64
           - goos: darwin
@@ -135,6 +140,7 @@ jobs:
           make build-kubesoloctl \
             GOOS=${{ matrix.goos }} \
             GOARCH=${{ matrix.goarch }} \
+            GOARM=${{ matrix.goarm }} \
             KUBESOLOCTL_OUTPUT=./dist/kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
       - name: "[execution] upload artifact"
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
