@@ -179,6 +179,7 @@ programmatically.
 
 - **[Configuration file](docs/configuration/config-file.md)** — every setting, precedence, migrating from flags
 - **[Configuration API](docs/configuration/config-api.md)** — managing it over a socket
+- **[Grafana dashboards](examples/grafana/README.md)** — pre-built dashboards for the [metrics endpoint](docs/configuration/config-file.md#every-setting) (`metrics.enabled`)
 
 ### Migrating from flags
 

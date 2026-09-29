@@ -1,0 +1,96 @@
+# Example Grafana Alloy configuration for collecting KubeSolo metrics and
+# sending them to Grafana Cloud or another Prometheus remote_write endpoint.
+#
+# The "kubesolo" scrape has two targets: the API server's /metrics endpoint
+# and the kubelet/cAdvisor proxy. Both dashboards in this folder use metrics
+# from these targets:
+#   kubesolo-grafana-dashboard-classic.json
+#   kubesolo-grafana-dashboard-apiv2.json
+#
+# The rest of this file sets up what Alloy needs to scrape those targets
+# and send their metrics onward.
+#
+# This example assumes Alloy was installed with the official Helm chart
+# (https://github.com/grafana/alloy) in the "monitoring" namespace, with a
+# ServiceAccount named "alloy". If your installation uses a different name
+# or namespace, update the ClusterRoleBinding subject below.
+#
+# Apply with: kubectl apply -f alloy-config.yaml
+#
+# Then configure Alloy to read the "config.alloy" key below. With the Helm
+# chart, set `alloy.configMap.name` and `alloy.configMap.key`. If you run
+# Alloy standalone, use `--config.file` instead.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubesolo-alloy-metrics
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/metrics", "nodes/stats", "nodes/proxy"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubesolo-alloy-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubesolo-alloy-metrics
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubesolo-alloy-config
+  namespace: monitoring
+data:
+  config.alloy: |
+    // These two targets are the basis for every panel in
+    // kubesolo-grafana-dashboard-classic.json / kubesolo-grafana-dashboard-apiv2.json:
+    //   - kubesolo-apiserver:        kube-apiserver's own /metrics, proxied
+    //     through the kubernetes.default.svc Service.
+    //   - kubesolo-kubelet-cadvisor: kubelet + cAdvisor metrics, proxied
+    //     through the apiserver's node proxy.
+    //
+    // "kubesolo" below is the node name in the proxy path. KubeSolo's node
+    // name defaults to the host's hostname and is configurable via
+    // `kubernetes.nodeName` (docs/configuration/config-file.md), so replace
+    // it with your actual node name (`kubectl get nodes`) if it differs.
+    prometheus.scrape "kubesolo" {
+      targets = [
+        {
+          "__address__"      = "kubernetes.default.svc",
+          "__metrics_path__" = "/metrics",
+          "job"              = "kubesolo-apiserver",
+        },
+        {
+          "__address__"      = "kubernetes.default.svc",
+          "__metrics_path__" = "/api/v1/nodes/kubesolo/proxy/metrics/cadvisor",
+          "job"              = "kubesolo-kubelet-cadvisor",
+        },
+      ]
+      scheme = "https"
+
+      bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+      tls_config {
+        ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+      }
+
+      forward_to = [prometheus.remote_write.grafanacloud.receiver]
+    }
+
+    prometheus.remote_write "grafanacloud" {
+      endpoint {
+        url = env("GRAFANA_CLOUD_URL")
+
+        basic_auth {
+          username = env("GRAFANA_CLOUD_USERNAME")
+          password = env("GRAFANA_CLOUD_API_KEY")
+        }
+      }
+    }
