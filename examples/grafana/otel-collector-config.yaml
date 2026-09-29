@@ -1,0 +1,120 @@
+# Example OpenTelemetry Collector configuration for collecting KubeSolo metrics
+# and sending them to Grafana Cloud or another Prometheus remote_write endpoint.
+#
+# This file provides an OpenTelemetry equivalent to `alloy-config.yaml` in this
+# same directory. Both configurations scrape the same two targets and feed the
+# same dashboards. Choose whichever collector best suits your environment.
+#
+# The two scrape jobs below—the API server's /metrics endpoint and the
+# kubelet/cAdvisor proxy—feed every panel across both dashboards:
+#   kubesolo-grafana-dashboard-classic.json
+#   kubesolo-grafana-dashboard-apiv2.json
+#
+# The rest of this file sets up the authentication and RBAC permissions needed
+# to scrape those targets and forward their data.
+#
+# IMPORTANT: This setup requires the "contrib" image of the OpenTelemetry
+# Collector (otel/opentelemetry-collector-contrib), not the "core" image
+# (otel/opentelemetry-collector). The prometheus receiver, basicauth extension,
+# and prometheusremotewrite exporter ship only with contrib. Starting the core
+# image with this configuration will fail with an "unknown component type" error.
+#
+# This example assumes the Collector was installed with the official Helm chart
+# (https://github.com/open-telemetry/opentelemetry-helm-charts/tree/main/charts/opentelemetry-collector)
+# in the "monitoring" namespace using a ServiceAccount named "otel-collector".
+# Adjust the ClusterRoleBinding subject below if your release uses a different
+# name or namespace.
+#
+# In your Helm values, configure the contrib image:
+#   image.repository: otel/opentelemetry-collector-contrib
+#   command.name: otelcol-contrib
+#
+# Apply with: kubectl apply -f otel-collector-config.yaml
+#
+# Then configure the Collector to mount this ConfigMap. When using the Helm chart,
+# set `configMap.create: false` and use `extraVolumes`/`extraVolumeMounts` to mount
+# the file at /etc/otelcol-contrib/config.yaml. If you run the Collector standalone,
+# pass the file path to the `--config` flag instead.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubesolo-otel-metrics
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/metrics", "nodes/stats", "nodes/proxy"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubesolo-otel-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubesolo-otel-metrics
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubesolo-otel-collector-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    # These two scrape jobs are the basis for every panel in
+    # kubesolo-grafana-dashboard-classic.json / kubesolo-grafana-dashboard-apiv2.json:
+    #   - kubesolo-apiserver:        kube-apiserver's own /metrics, proxied
+    #     through the kubernetes.default.svc Service.
+    #   - kubesolo-kubelet-cadvisor: kubelet + cAdvisor metrics, proxied
+    #     through the apiserver's node proxy.
+    #
+    # "kubesolo" below is the node name in the proxy path. KubeSolo's node
+    # name defaults to the host's hostname and is configurable via
+    # `kubernetes.nodeName` (docs/configuration/config-file.md), so replace
+    # it with your actual node name (`kubectl get nodes`) if it differs.
+    receivers:
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: "kubesolo-apiserver"
+              scheme: https
+              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              tls_config:
+                ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              metrics_path: /metrics
+              static_configs:
+                - targets: ["kubernetes.default.svc"]
+            - job_name: "kubesolo-kubelet-cadvisor"
+              scheme: https
+              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              tls_config:
+                ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              metrics_path: /api/v1/nodes/kubesolo/proxy/metrics/cadvisor
+              static_configs:
+                - targets: ["kubernetes.default.svc"]
+
+    # Basic-auth credentials for the Grafana Cloud remote_write endpoint,
+    # referenced by the exporter below via `auth.authenticator`. ${env:...}
+    # is expanded from the Collector container's environment at startup.
+    extensions:
+      basicauth/grafanacloud:
+        client_auth:
+          username: ${env:GRAFANA_CLOUD_USERNAME}
+          password: ${env:GRAFANA_CLOUD_API_KEY}
+
+    exporters:
+      prometheusremotewrite:
+        endpoint: ${env:GRAFANA_CLOUD_URL}
+        auth:
+          authenticator: basicauth/grafanacloud
+
+    service:
+      extensions: [basicauth/grafanacloud]
+      pipelines:
+        metrics:
+          receivers: [prometheus]
+          exporters: [prometheusremotewrite]
