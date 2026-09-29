@@ -12,9 +12,36 @@ permissions:
   contents: write
 
 jobs:
+  # Warms the shared setup-go cache with the complete module graph before the
+  # build matrix starts; see the go-mod-cache job in ci.yml for why. The release
+  # is only created once this succeeds, so a proxy outage leaves no empty
+  # pre-release behind.
+  go-mod-cache:
+    name: go module cache
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[execution] download go modules"
+        run: |
+          for attempt in 1 2 3; do
+            go mod tidy && exit 0
+            echo "go mod tidy failed (attempt ${attempt}/3), retrying in 15s"
+            sleep 15
+          done
+          exit 1
+
   create-release:
     name: create-release
     runs-on: ubuntu-latest
+    needs: [go-mod-cache]
     steps:
       - name: "[execution] create a pre-release"
         run: |
