@@ -24,8 +24,8 @@ binary, and restart the service. Cluster state (certificates, database) is
 preserved across the upgrade.
 
 Examples:
-  sudo kubesoloctl upgrade --version=v1.1.8
-  sudo kubesoloctl upgrade --version=v1.1.8 --offline-install=/tmp/kubesolo-v1.1.8-linux-amd64.tar.gz`,
+  sudo kubesoloctl upgrade --version=v1.2.1
+  sudo kubesoloctl upgrade --version=v1.2.1 --offline-install=/tmp/kubesolo-v1.2.1-linux-amd64.tar.gz`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUpgrade(cfg)
 		},

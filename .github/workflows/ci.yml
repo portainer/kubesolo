@@ -12,9 +12,38 @@ permissions:
   contents: read
 
 jobs:
+  # Every Go job shares one setup-go cache key (OS + Go version + go.sum hash)
+  # and only the first job to finish saves it. Left to race, a kubesoloctl build
+  # wins and saves a fraction of the module graph, so each kubesolo build then
+  # downloads ~300 modules at once and proxy.golang.org resets some of the
+  # streams. This job saves the complete set before any other Go job starts.
+  go-mod-cache:
+    name: go module cache
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      # go mod tidy fetches a superset of what any build needs (it also loads
+      # the tests of dependencies), so the cache it leaves covers every job,
+      # including the `go mod tidy` that `make lint` runs before each build.
+      - name: "[execution] download go modules"
+        run: |
+          for attempt in 1 2 3; do
+            go mod tidy && exit 0
+            echo "go mod tidy failed (attempt ${attempt}/3), retrying in 15s"
+            sleep 15
+          done
+          exit 1
+
   test:
     name: unit tests
     runs-on: ubuntu-latest
+    needs: [go-mod-cache]
     steps:
       - name: "[preparation] checkout the current branch"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -49,6 +78,7 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
+    needs: [go-mod-cache]
     steps:
       - name: "[preparation] checkout the current branch"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -75,6 +105,7 @@ jobs:
     # `-offline` make targets, which mirror release.yaml). Both glibc and musl
     # are built for amd64/arm64 so every published variant is exercised on PRs.
     runs-on: ubuntu-latest
+    needs: [go-mod-cache]
     strategy:
       matrix:
         goos: [linux]
@@ -110,6 +141,7 @@ jobs:
   build-kubesoloctl:
     name: build kubesoloctl-${{ matrix.goos }}-${{ matrix.goarch }}
     runs-on: ubuntu-latest
+    needs: [go-mod-cache]
     strategy:
       fail-fast: false
       matrix:
@@ -168,6 +200,7 @@ jobs:
 
   docker-build:
     runs-on: ubuntu-latest
+    needs: [go-mod-cache]
     strategy:
       matrix:
         goarch: [amd64, arm64]

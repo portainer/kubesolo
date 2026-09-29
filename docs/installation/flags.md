@@ -2,7 +2,7 @@
 
 The KubeSolo install script accepts flags that control version selection, runtime behaviour, Portainer integration, and offline workflows. Every flag has a corresponding environment variable, which is useful when piping the script directly from a URL.
 
-> **These flags configure the installer.** From KubeSolo v1.3.0 the installer
+> **These flags configure the installer.** From KubeSolo v1.2.1 the installer
 > records them in a configuration file at `/etc/kubesolo/config.yaml`, and the
 > installed service reads its settings from there rather than from a command line.
 >
@@ -29,7 +29,7 @@ Flags are passed identically to both URLs. When piping the script, use `sh -s --
 
 ```bash
 # Stable
-curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.1.2 --local-storage=true
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.1 --local-storage=true
 
 # Development
 curl -sfL https://get-dev.kubesolo.io | sudo sh -s -- --local-storage=true
@@ -38,7 +38,7 @@ curl -sfL https://get-dev.kubesolo.io | sudo sh -s -- --local-storage=true
 When running a downloaded copy of the script directly, flags are passed normally:
 
 ```bash
-sudo sh install.sh --version=v1.1.2 --local-storage=true
+sudo sh install.sh --version=v1.2.1 --local-storage=true
 ```
 
 ---
@@ -51,10 +51,10 @@ Set the KubeSolo version to install. Defaults to the latest stable release bundl
 
 | Flag | Env var | Default |
 |---|---|---|
-| `--version=VERSION` | `KUBESOLO_VERSION` | `v1.1.2` |
+| `--version=VERSION` | `KUBESOLO_VERSION` | `v1.2.1` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.1.2
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.1
 ```
 
 ---
@@ -305,7 +305,7 @@ Install from a local binary or archive instead of downloading from GitHub. Accep
 | `--offline-install=PATH` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ |
 
 ```bash
-sudo sh install.sh --offline-install=./kubesolo-v1.1.2-linux-amd64.tar.gz
+sudo sh install.sh --offline-install=./kubesolo-v1.2.1-linux-amd64.tar.gz
 ```
 
 See [--download-only](#--download-only) for how to prepare the required files on an internet-connected machine.
@@ -345,7 +345,7 @@ curl -sfL https://get.kubesolo.io | sh -s -- --download-only=./kubesolo-offline
 **Install on the air-gapped machine:**
 
 ```bash
-sudo sh install.sh --offline-install=./kubesolo-v1.1.2-linux-amd64.tar.gz
+sudo sh install.sh --offline-install=./kubesolo-v1.2.1-linux-amd64.tar.gz
 ```
 
 > **Note:** The archive is downloaded for the architecture of the machine running `--download-only`. If the target machine has a different architecture, pass `--version` alongside `--download-only` but run the download step on a machine matching the target architecture, or obtain the correct archive directly from the [GitHub releases page](https://github.com/portainer/kubesolo/releases).
