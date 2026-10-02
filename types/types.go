@@ -67,6 +67,15 @@ type Embedded struct {
 	// Resolved from kubernetes.nodeName, falling back to the hostname.
 	NodeName string
 
+	// BootstrapToken enables TLS bootstrapping when non-empty. See
+	// types.KubernetesConfig.BootstrapToken.
+	BootstrapToken string
+
+	// ExternalCA is true when the CA cert and key were supplied via pki.caCert
+	// and pki.caKey rather than generated. KubeSolo must not create, rotate or
+	// delete either file in that case — it only signs with them.
+	ExternalCA bool
+
 	// System Node IP
 	NodeIP string
 
@@ -138,6 +147,13 @@ type Embedded struct {
 	RuntimeSocketPath   string
 	RuntimeCgroupDriver string
 
+	// KubeletExternal is true when a kubelet the host manages registers with this
+	// control plane, instead of KubeSolo starting and supervising its own. The
+	// kubelet paths below are still populated in that case: KubeSolo writes the
+	// kubeconfig and config file for the host's kubelet to consume, it just does
+	// not run the process.
+	KubeletExternal bool
+
 	// Kubelet directories
 	KubeletDir            string
 	KubeletConfigDir      string
@@ -152,6 +168,16 @@ type Embedded struct {
 	APIServerExtraSANs []string
 
 	// Kine directories and files
+	// EtcdExternal is true when the API server talks to an etcd the host manages
+	// rather than the kine KubeSolo embeds. EtcdEndpoints is populated in both
+	// cases — for kine it is the loopback address kine listens on — so consumers
+	// need only one code path.
+	EtcdExternal  bool
+	EtcdEndpoints []string
+	EtcdCAFile    string
+	EtcdCertFile  string
+	EtcdKeyFile   string
+
 	KineDir        string
 	KineSocketFile string
 
