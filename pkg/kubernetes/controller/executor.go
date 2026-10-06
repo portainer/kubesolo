@@ -33,11 +33,13 @@ func (s *service) Run(apiServerReadyCh chan struct{}) error {
 	time.Sleep(types.DefaultComponentSleep)
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		<-apiServerReadyCh
-		s.wg.Go(func() {
+		// Not tracked by s.wg: upstream's RunE runs with context.Background() and
+		// ignores s.ctx, so this goroutine only ends when the process exits.
+		go func() {
 			if err := command.ExecuteContext(s.ctx); err != nil {
 				log.Error().Str("component", "controller").Msgf("controller manager exited with error: %v", err)
 			}
-		})
+		}()
 		return nil
 	}); err != nil {
 		return err
