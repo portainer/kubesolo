@@ -36,7 +36,7 @@ KubeSolo's footprint sits under 200 MB RAM because clustering machinery is absen
 Three specific design decisions contribute to the smaller footprint:
 
 * No etcd; SQLite (via Kine) replaces it as the state store
-* No Kubernetes Scheduler; replaced by a lightweight custom webhook called `NodeSetter` that handles single-node scheduling without the full scheduling machinery
+* No Kubernetes Scheduler; replaced by `NodeSetter`, a lightweight mutating admission webhook built into KubeSolo that sets `spec.nodeName` on every new pod, without the full scheduling machinery
 * All components run inside a single process rather than as separate binaries
 
 The practical result is a full Kubernetes control loop that runs comfortably on devices with 512 MB of RAM, on flash storage, and in air-gapped environments.
@@ -59,7 +59,9 @@ The default installer downloads the online variant. If your devices are air-gapp
 ### Quick Install
 
 > [!WARNING]
-> Ensure that no container engine (e.g., Docker, Podman, containerd) is installed or active on the target system prior to proceeding. This includes any background services or residual installations that could interfere with KubeSolo networking.
+> Ensure that no container engine (e.g., Docker, Podman, containerd) is installed or active on the target system prior to proceeding. This includes any background services or residual installations that could interfere with KubeSolo networking. The installer refuses to continue if Docker is installed or running.
+>
+> The one exception is deliberate: KubeSolo can attach to a host-managed containerd or CRI-O instead of running its own, by setting `runtime.endpoint` (for example `unix:///run/containerd/containerd.sock`). The host then provides the runtime, the OCI runtime, the CNI plugin binaries and the sandbox image.
 
 **Supported platforms:** ARM · ARM64 · x86\_64 · RISC-V 64
 
@@ -82,12 +84,14 @@ curl -sfL https://get.kubesolo.io | KUBESOLO_OFFLINE=true sudo -E sh -
 **Air-gapped** (no internet on the target machine at all):
 
 ```bash
-# On a connected machine, download the bundle
-curl -sfL https://get.kubesolo.io | KUBESOLO_OFFLINE=true sh - --download-only=/tmp/kubesolo-bundle
+# On a connected machine with the same architecture, download the offline bundle
+curl -sfL https://get.kubesolo.io | sh -s -- --offline --download-only=/tmp/kubesolo-bundle
 
 # Transfer the files to the target machine, then install
 sudo sh install.sh --offline-install=<archive.tar.gz>
 ```
+
+The installer writes your settings to `/etc/kubesolo/config.yaml`. Every installer flag is listed in the [install script flags reference](docs/installation/flags.md). Unreleased changes from the `develop` branch are served from `https://get-dev.kubesolo.io`; don't use it in production.
 
 The installer also detects your libc variant:
 - **glibc systems** (Ubuntu, CentOS, Debian, etc.): Downloads standard binary
@@ -179,7 +183,7 @@ programmatically.
 
 - **[Configuration file](docs/configuration/config-file.md)** — every setting, precedence, migrating from flags
 - **[Configuration API](docs/configuration/config-api.md)** — managing it over a socket
-- **[Grafana dashboards](examples/grafana/README.md)** — pre-built dashboards for the [metrics endpoint](docs/configuration/config-file.md#every-setting) (`metrics.enabled`)
+- **[Grafana dashboards](examples/grafana/README.md)** — pre-built dashboards for API server, kubelet, cAdvisor and Go runtime metrics
 
 ### Migrating from flags
 
@@ -194,56 +198,66 @@ sudo kubesolo <current flags> --print-config | sudo tee /etc/kubesolo/config.yam
 
 ## Flags
 
-> **Deprecated.** Every flag below still works and still overrides the
-> configuration file, so existing installs keep running — but no new flags will be
-> added, and new settings are configurable only through the file. See the
+> **Deprecated.** Command-line flags still work and still override the
+> configuration file, so existing installs keep running, but no new flags will be
+> added and new settings are configurable only through the file. Each flag and
+> its `KUBESOLO_*` environment variable is listed against its setting in the
 > [flag-to-setting table](docs/configuration/config-file.md#flag-and-environment-variable-equivalents).
+> Flags for the install script are in the [installer flags reference](docs/installation/flags.md).
 
 Two flags are not settings and have no equivalent in the file: `--config`, which
 names it, and `--print-config`, which prints the resolved document and exits.
 
-
-| Flag | Environment Variable | Description | Default |
-|------|-------------|---------|---------|
-| `--version` | `N/A` | Show the version and exit | `N/A` |
-| `--path` | `KUBESOLO_PATH` | Path to the directory containing the kubesolo configuration files | `/var/lib/kubesolo` |
-| `--apiserver-extra-sans` | `KUBESOLO_APISERVER_EXTRA_SANS` | A comma-separated list of additional Subject Alternative Names (SANs) to include in the API server's TLS certificate. These SANs can be IP addresses or DNS names (e.g., 10.0.0.4,kubesolo.local) | `""` |
-| `--portainer-edge-id` | `KUBESOLO_PORTAINER_EDGE_ID` | Portainer Edge ID | `""` |
-| `--portainer-edge-key` | `KUBESOLO_PORTAINER_EDGE_KEY` | Portainer Edge Key | `""` |
-| `--portainer-edge-async` | `KUBESOLO_PORTAINER_EDGE_ASYNC` | Enable Portainer Edge Async Mode | `false` |
-| `--portainer-edge-image` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | Image deployed for the Portainer Edge Agent, including the tag. Any image other than the default is pulled from the registry rather than loaded from the embedded image | `docker.io/portainer/agent:lts` |
-| `--load-balancer` | `KUBESOLO_LOAD_BALANCER` | Enable load balancer. With this enabled, kubesolo will update a newly deployed service with the load balancer type so that the EXTERNAL-IP is set to the node IP | `true` |
-| `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | Enable local storage | `true` |
-| `--local-storage-shared-path` | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | Path to the shared file system for the local storage | `""` |
-| `--debug` | `KUBESOLO_DEBUG` | Enable debug logging | `false` |
-| `--pprof-server` | `KUBESOLO_PPROF_SERVER` | Enable pprof server for profiling | `false` |
-| `--full` | `KUBESOLO_FULL` | Deprecated: has no effect. KubeSolo always uses upstream Kubernetes defaults. Retained for backwards compatibility; will be removed in a future release | `false` |
-| `--container-mode` | `KUBESOLO_CONTAINER_MODE` | Run KubeSolo inside a container, adjusting cgroups, mounts, DNS, and eviction thresholds. Auto-detected when running in a container. See [docs/configuration/container-mode.md](docs/configuration/container-mode.md) | _(auto-detected)_ |
-| `--db-wal-repair` | `KUBESOLO_DB_WAL_REPAIR` | Run SQLite integrity checks on startup and repair WAL/SHM artifacts if corruption is detected | `false` |
-| `--disable-ipv6` | `KUBESOLO_DISABLE_IPV6` | Disable IPv6 support for CoreDNS reverse zones and kubelet node address registration | `false` |
-| `--startup-timeout` | `KUBESOLO_STARTUP_TIMEOUT` | Maximum time in seconds to wait for each component to pass its health check during startup. Increase on slow storage such as SD cards | `600` |
-| `--d2k` | `KUBESOLO_D2K` | Embed [d2k](https://github.com/portainer/d2k) and expose a Docker-compatible API endpoint over mTLS on port 2376. See [docs/configuration/d2k.md](docs/configuration/d2k.md) | `false` |
-| `--d2k-namespace` | `KUBESOLO_D2K_NAMESPACE` | Namespace into which d2k is deployed and against which it translates Docker API calls. Only honoured when `--d2k` is set | `d2k` |
-
 Example:
 
-To config KubeSolo to use Portainer Edge, you can use the following command:
+To connect KubeSolo to Portainer as an Edge agent, pass the Edge ID and key to the installer. They are written to `portainer.edgeID` and `portainer.edgeKey` in the configuration file:
 
 ```bash
 curl -sfL https://get.kubesolo.io | KUBESOLO_PORTAINER_EDGE_ID=your-portainer-edge-id KUBESOLO_PORTAINER_EDGE_KEY=your-portainer-edge-key sudo -E sh
 ```
 
+On an existing install, set them in the file instead and restart:
+
+```bash
+sudo kubesoloctl config set portainer.edgeID your-portainer-edge-id
+sudo kubesoloctl config set portainer.edgeKey your-portainer-edge-key
+```
+
 ## Documentation
 
-Please see the [documentation](https://kubesolo.io/documentation) for complete documentation.
+Full documentation is at [kubesolo.io](https://kubesolo.io/documentation). The guides in this repository:
 
-- [Installing a CNI (Cilium)](docs/configuration/cni.md) — running an external CNI such as Cilium on a single KubeSolo node.
+**Installing**
+
+- [Installation guide](INSTALL.md): init systems, minimal installer, industrial devices, proxies, uninstalling
+- [Install script flags](docs/installation/flags.md): every `install.sh` flag, install channels, air-gapped bundles
+- [kubesoloctl](docs/installation/kubesoloctl.md): the CLI, including container mode for macOS, WSL2 and CI
+
+**Configuring**
+
+- [Configuration file](docs/configuration/config-file.md): every setting, its default, and the flag it replaces
+- [Configuration API](docs/configuration/config-api.md): reading and changing settings over a unix socket
+- [Example configuration](examples/kubesolo-config.yaml): every setting at its default, ready to copy
+- [Container mode](docs/configuration/container-mode.md): running KubeSolo itself in a container
+- [CPU pinning](docs/configuration/cpu-pinning.md): exclusive cores for latency-sensitive workloads
+- [d2k](docs/configuration/d2k.md): a Docker-compatible API endpoint on the node
+- [Registry configuration](docs/configuration/registry.md): mirrors, private registries and custom TLS
+- [Installing a CNI (Cilium)](docs/configuration/cni.md): running an external CNI on a single KubeSolo node
+
+**Monitoring**
+
+- Metrics endpoint: set `metrics.enabled: true` to serve Prometheus metrics for the control plane at `/metrics` on `127.0.0.1:9105` (change with `metrics.bindAddress`). It is off by default.
+- [Grafana dashboards](examples/grafana/README.md): pre-built dashboards for API server, kubelet, cAdvisor and Go runtime metrics (scraped from Kubernetes, not from the KubeSolo metrics endpoint)
+
+**Using a host container runtime**
+
+By default KubeSolo runs its own embedded containerd. Set `runtime.endpoint` (flag `--container-runtime-endpoint`) to a host-managed containerd or CRI-O socket, such as `unix:///run/crio/crio.sock`, and KubeSolo attaches to it instead. The host is then responsible for the runtime, the OCI runtime, the CNI plugin binaries and the sandbox image.
 
 ## Building from Source
 
 ### Prerequisites
 
-- Go 1.24 or later
+- Go 1.26.5 or later (see `go.mod`)
 - Docker (for ARM builds and dependency management)
 - Cross-compilation toolchains (optional, for cross-platform builds)
 
@@ -255,11 +269,11 @@ To build for multiple architectures, install the required cross-compilation tool
 sudo make install-cross-compilers
 ```
 
-This installs:
+This installs (on Debian/Ubuntu, via `apt-get`):
 - `gcc-aarch64-linux-gnu` (for ARM64)
 - `gcc-x86-64-linux-gnu` (for AMD64)
 - `gcc-arm-linux-gnueabihf` (for ARM/ARMHF)
-- `riscv64-linux-gnu-gcc`(for RISCV64)
+- `gcc-riscv64-linux-gnu` (for RISCV64)
 
 ### Basic Build
 
@@ -298,12 +312,33 @@ sudo make install-musl-cross-compilers
 # Build musl binary for specific architecture
 make build-musl GOARCH=amd64
 make build-musl GOARCH=arm64
+make build-musl GOARCH=arm
+make build-musl GOARCH=riscv64
 
 # Build all supported musl architectures
 make build-all-musl
 ```
 
-**Note:** musl builds are currently supported for `amd64` and `arm64` architectures only.
+`install-musl-cross-compilers` installs `musl-tools` and the musl.cc toolchains for `amd64`, `arm64`, `arm` (`musleabihf`) and `riscv64`.
+
+### Offline Builds
+
+The offline variant embeds every container image. Build it with `make build-offline` (glibc) or `make build-musl-offline` (musl); both take the same `GOARCH` and `OUTPUT` variables.
+
+### kubesoloctl
+
+`kubesoloctl` is pure Go (`CGO_ENABLED=0`), so it needs no cross-compiler and one binary per architecture runs on both glibc and musl:
+
+```bash
+# Linux, host architecture (outputs to ./dist/kubesoloctl-<os>-<arch>)
+make build-kubesoloctl
+
+# Another platform
+make build-kubesoloctl GOOS=darwin GOARCH=arm64
+
+# All released targets: linux amd64/arm64/arm/riscv64, darwin amd64/arm64
+make build-kubesoloctl-all
+```
 
 ### Custom Output Path
 

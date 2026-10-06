@@ -32,6 +32,10 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- \
   --proxy=http://proxy.company.com:8080
 ```
 
+The installer writes the resolved settings to `/etc/kubesolo/config.yaml` and starts the service with `--config=/etc/kubesolo/config.yaml`. To change a setting later, edit that file (or use `kubesoloctl config set`) and restart, rather than reinstalling. See the [installer flags reference](docs/installation/flags.md) for every flag and the [configuration file reference](docs/configuration/config-file.md) for every setting.
+
+The pre-flight checks stop the install if Docker is installed or running, if the hostname is not RFC 1123 compliant (lowercase only), if `iptables` or its comment module is missing, or if required cgroup controllers are not available.
+
 **Automatic Detection:**
 - **Init System**: systemd, SysV init, OpenRC, s6, runit, upstart
 - **libc Type**: Automatically downloads glibc or musl binaries
@@ -43,8 +47,8 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- \
 - **Mixed environments**: Automatically selects correct binary variant
 
 **Run Modes:**
-- `service` (default): Creates proper service files for your init system
-- `daemon`: Runs as background process with PID file
+- `service` (default): Creates proper service files for your init system, or falls back to `daemon` if no supported init system is detected
+- `daemon`: Runs as background process with PID file (`/var/run/kubesolo.pid`, logs in `/var/log/kubesolo.log`)
 - `foreground`: Runs in foreground (for testing/debugging)
 
 ### 2. Minimal Installer (`install-minimal.sh`)
@@ -59,6 +63,9 @@ wget -O - https://raw.githubusercontent.com/portainer/kubesolo/develop/install-m
 
 # Or with environment variables
 KUBESOLO_VERSION=v1.2.1 KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
+
+# Alpine / musl systems: the minimal installer does not detect libc
+sh install-minimal.sh --musl
 ```
 
 **Features:**
@@ -66,6 +73,8 @@ KUBESOLO_VERSION=v1.2.1 KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
 - Creates simple init script
 - Provides `kubesolo-ctl` management tool
 - Minimal dependencies (only requires `tar` and `wget`/`curl`)
+
+The minimal installer accepts only `--version`, `--path`, `--temp-dir`, `--musl`/`--glibc`, `--offline` and `--bin-path` (local binary or archive). It does not write `/etc/kubesolo/config.yaml` and only starts KubeSolo if you answer yes to its prompt; its init script runs `kubesolo --path=...`. KubeSolo still reads `/etc/kubesolo/config.yaml` if you create one, so use that for any other setting.
 
 ### 3. Service Management (`kubesolo-service.sh`)
 
@@ -90,21 +99,48 @@ chmod +x kubesolo-service.sh
 
 ## Environment Variables
 
-All installers support these environment variables:
+The universal installer (`install.sh`) reads these environment variables. The values shown are the defaults:
 
 ```bash
-export KUBESOLO_VERSION="v1.2.1"           # Version to install
-export KUBESOLO_PATH="/var/lib/kubesolo"        # Installation path
-export KUBESOLO_PORTAINER_EDGE_ID="your-id"     # Portainer Edge ID
-export KUBESOLO_PORTAINER_EDGE_KEY="your-key"   # Portainer Edge Key
+export KUBESOLO_VERSION="v1.2.1"                # Version to install
+export KUBESOLO_PATH="/var/lib/kubesolo"        # Data directory
+export KUBESOLO_APISERVER_EXTRA_SANS=""         # Extra API server certificate SANs
+export KUBESOLO_PORTAINER_EDGE_ID=""            # Portainer Edge ID
+export KUBESOLO_PORTAINER_EDGE_KEY=""           # Portainer Edge Key
 export KUBESOLO_PORTAINER_EDGE_ASYNC="false"    # Async mode
 export KUBESOLO_PORTAINER_EDGE_IMAGE="docker.io/portainer/agent:lts"  # Edge Agent image
-export KUBESOLO_LOCAL_STORAGE="false"           # Enable local storage
+export KUBESOLO_LOAD_BALANCER="true"            # Built-in load balancer
+export KUBESOLO_LOCAL_STORAGE="true"            # Local-path storage provisioner
+export KUBESOLO_LOCAL_STORAGE_SHARED_PATH=""    # Shared file system for local storage
+export KUBESOLO_DB_WAL_REPAIR="false"           # SQLite WAL repair on startup
+export KUBESOLO_DISABLE_IPV6="false"            # Disable IPv6
+export KUBESOLO_STARTUP_TIMEOUT="600"           # Per-component startup timeout (seconds)
+export KUBESOLO_CPU_MANAGER_POLICY="none"       # CPU manager policy (none or static)
+export KUBESOLO_CPU_MANAGER_POLICY_OPTIONS=""   # Static policy options
+export KUBESOLO_RESERVED_CPUS=""                # Cpuset reserved for the host
+export KUBESOLO_SYSTEM_RESERVED=""              # Resources withheld from allocatable
+export KUBESOLO_D2K="false"                     # d2k Docker API translator
+export KUBESOLO_D2K_NAMESPACE="d2k"             # d2k namespace
 export KUBESOLO_DEBUG="false"                   # Debug logging
 export KUBESOLO_PPROF_SERVER="false"            # Enable pprof
-export KUBESOLO_RUN_MODE="service"              # Run mode (universal installer only)
-export KUBESOLO_PROXY="http://proxy.company.com:8080"  # Corporate proxy for HTTP/HTTPS requests
+export KUBESOLO_RUN_MODE="service"              # service, daemon or foreground
+export KUBESOLO_PROXY=""                        # Corporate proxy for HTTP/HTTPS requests
+export KUBESOLO_OFFLINE="false"                 # Download the offline build
+export KUBESOLO_OFFLINE_INSTALL=""              # Install from a local archive or binary
+export KUBESOLO_DOWNLOAD_DIR=""                 # Same as --download-only=DIR
+export KUBESOLO_INSTALL_PREREQS="false"         # Install missing prerequisites (nftables on Alpine)
 ```
+
+Any other `KUBESOLO_*` variable that KubeSolo itself recognises, such as `KUBESOLO_MTU`, `KUBESOLO_NODE_IP` or `KUBESOLO_METRICS_SERVER`, is also written into `/etc/kubesolo/config.yaml` when it is set during the install. See [Settings without an installer flag](docs/installation/flags.md#settings-without-an-installer-flag).
+
+`sudo` drops environment variables by default. Use `sudo -E`, or pass the equivalent flag instead:
+
+```bash
+curl -sfL https://get.kubesolo.io | KUBESOLO_DEBUG=true sudo -E sh -
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --debug=true
+```
+
+The minimal installer reads only `KUBESOLO_VERSION`, `KUBESOLO_PATH`, `KUBESOLO_OFFLINE`, `KUBESOLO_BIN_PATH`, `USE_MUSL` and `TEMP_DIR`.
 
 ## Industrial Device Considerations
 
@@ -114,12 +150,10 @@ Many industrial devices use read-only root filesystems. Consider:
 
 ```bash
 # Install to writable partition
-export KUBESOLO_PATH="/data/kubesolo"
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --path=/data/kubesolo
-
-# Or use tmpfs for runtime data
-export KUBESOLO_PATH="/tmp/kubesolo"
 ```
+
+The data directory holds the cluster database, certificates and container state, so it should be on persistent storage. The installer also writes `/usr/local/bin/kubesolo` and `/etc/kubesolo/config.yaml`; both locations must be writable at install time.
 
 ### 2. **Limited Storage**
 
@@ -129,34 +163,24 @@ For devices with limited storage:
 # Use minimal installer
 ./install-minimal.sh
 
-# Disable local storage provisioner
-export KUBESOLO_LOCAL_STORAGE="false"
+# Disable the local storage provisioner (on by default)
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --local-storage=false
 ```
 
 ### 3. **No Internet Access**
 
-For air-gapped installations:
+For air-gapped installations, use the offline build. It embeds every container image, so nothing is pulled at startup. The default (online) build still needs registry access when KubeSolo starts.
 
 ```bash
-# Pre-download the binary
-wget https://github.com/portainer/kubesolo/releases/download/v1.2.1/kubesolo-v1.2.1-linux-arm64.tar.gz
+# On a connected machine with the same architecture as the target
+curl -sfL https://get.kubesolo.io | sh -s -- --offline --download-only=./kubesolo-bundle
 
-# Extract and install manually
-tar -xzf kubesolo-*.tar.gz
-mv kubesolo /usr/local/bin/
-chmod +x /usr/local/bin/kubesolo
-
-# Create basic service (example for SysV init)
-cat > /etc/init.d/kubesolo << 'EOF'
-#!/bin/sh
-case "$1" in
-    start) /usr/local/bin/kubesolo --path=/var/lib/kubesolo & ;;
-    stop) pkill kubesolo ;;
-    *) echo "Usage: $0 {start|stop}" ;;
-esac
-EOF
-chmod +x /etc/init.d/kubesolo
+# Copy ./kubesolo-bundle to the target, then on the target
+cd kubesolo-bundle
+sudo sh install.sh --offline-install=kubesolo-v1.2.1-linux-arm64-offline.tar.gz
 ```
+
+`--download-only` does not need root and does not run the pre-flight checks. See [--download-only](docs/installation/flags.md#--download-only) for details. The archives are also on the [releases page](https://github.com/portainer/kubesolo/releases) (`kubesolo-<version>-linux-<arch>[-musl]-offline.tar.gz`).
 
 ### 4. **Corporate Proxy Support**
 
@@ -167,9 +191,8 @@ For environments requiring corporate proxy access:
 curl -sfL https://get.kubesolo.io | sudo sh -s -- \
   --proxy=http://proxy.company.com:8080
 
-# Using environment variable
-export KUBESOLO_PROXY="http://proxy.company.com:8080"
-curl -sfL https://get.kubesolo.io | sudo sh -
+# Using environment variable (sudo -E keeps it)
+curl -sfL https://get.kubesolo.io | KUBESOLO_PROXY="http://proxy.company.com:8080" sudo -E sh -
 
 # Combined with other options
 curl -sfL https://get.kubesolo.io | sudo sh -s -- \
@@ -199,13 +222,14 @@ For completely custom init systems:
 
 ```bash
 # Run in daemon mode
-export KUBESOLO_RUN_MODE="daemon"
-curl -sfL https://get.kubesolo.io | sudo sh -
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --run-mode=daemon
 
-# Or run manually
-/usr/local/bin/kubesolo --path=/var/lib/kubesolo > /var/log/kubesolo.log 2>&1 &
+# Or run manually, after an install has written the configuration file
+/usr/local/bin/kubesolo --config=/etc/kubesolo/config.yaml > /var/log/kubesolo.log 2>&1 &
 echo $! > /var/run/kubesolo.pid
 ```
+
+Daemon mode does not survive a reboot; your init system needs to start KubeSolo again.
 
 ## Architecture Support
 
@@ -229,20 +253,22 @@ All installers support multiple architectures with automatic binary selection:
 
 ### Init System Detection Issues
 
-```bash
-# Check detected init system
-curl -sfL https://get.kubesolo.io | sh -s -- --help
+The installer prints the detected init system near the start of its output (`Detected init system: ...`). If it picks the wrong one, or none:
 
-# Force specific mode
-export KUBESOLO_RUN_MODE="daemon"
-curl -sfL https://get.kubesolo.io | sudo sh -
+```bash
+# Force daemon mode
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --run-mode=daemon
 ```
 
 ### Service Not Starting
 
 ```bash
 # Check logs
-tail -f /var/log/kubesolo.log
+journalctl -u kubesolo -f                       # systemd
+tail -f /var/log/kubesolo.log                   # daemon mode, s6, runit
+
+# Check the configuration KubeSolo will start with
+sudo kubesolo --config=/etc/kubesolo/config.yaml --print-config
 
 # Check process
 ps aux | grep kubesolo
@@ -266,6 +292,25 @@ mkdir -p ~/.kube
 cp /var/lib/kubesolo/pki/admin/admin.kubeconfig ~/.kube/config
 ```
 
+If `kubectl` is installed when you run the installer, it merges the KubeSolo context into `~/.kube/config` for you (the invoking user's, under `sudo`) and backs up the previous file.
+
+## Uninstalling
+
+`uninstall.sh` stops KubeSolo and removes the binary, service files, CNI configuration and `/etc/kubesolo/config.yaml`:
+
+```bash
+curl -sfL https://raw.githubusercontent.com/portainer/kubesolo/develop/uninstall.sh | sudo sh -s --
+```
+
+| Flag | Effect |
+|---|---|
+| `--path=PATH` | Data directory, if not `/var/lib/kubesolo` |
+| `--remove-data` | Also delete the data directory (cluster database, certificates, images) |
+| `--remove-kubeconfig` | Also remove the KubeSolo entries from `~/.kube/config` |
+| `--keep-config` | Leave `/etc/kubesolo/config.yaml` in place for a later reinstall |
+
+`kubesoloctl uninstall` does the same; see the [kubesoloctl guide](docs/installation/kubesoloctl.md).
+
 ## Examples for Specific Platforms
 
 ### Yocto/OpenEmbedded
@@ -285,19 +330,22 @@ do_install() {
 ```bash
 # Alpine uses OpenRC and musl libc - installer detects both automatically
 apk add curl
-curl -sfL https://get.kubesolo.io | sh
+curl -sfL https://get.kubesolo.io | sh -s -- --install-prereqs
 
 # The installer will:
 # 1. Detect OpenRC init system
 # 2. Detect musl libc and download musl-compatible binary
-# 3. Create appropriate OpenRC service file
+# 3. Install nftables if missing (kube-proxy needs it on Alpine)
+# 4. Create appropriate OpenRC service file
 ```
+
+Without `--install-prereqs` the installer stops if `nft` is missing; install it yourself with `apk add nftables`.
 
 **Alpine-specific features:**
 - Automatically downloads musl-compatible static binary
 - Creates OpenRC service configuration
 - Works on x86_64, aarch64, armv7l and riscv64 Alpine systems
-- No additional dependencies required
+- Needs `nftables`, which `--install-prereqs` installs for you
 
 ### Buildroot
 

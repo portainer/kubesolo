@@ -246,6 +246,7 @@ and stays at the top level.
 | `storage.dbWALRepair` | `boolean` | `false` |
 | `storage.localPath.enabled` | `boolean` | `true` |
 | `storage.localPath.sharedPath` | `string` | `""` |
+
 `runtime.containerMode` is deliberately three-state: unset means auto-detect,
 while `true` and `false` force the answer. That is why its default is shown as
 absent rather than `false`.
@@ -287,7 +288,16 @@ file.
 | `--db-wal-repair` | `KUBESOLO_DB_WAL_REPAIR` | `storage.dbWALRepair` |
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | `storage.localPath.enabled` |
 | `--local-storage-shared-path` | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | `storage.localPath.sharedPath` |
-Three flags have no setting, because they configure nothing:
+
+Three settings have an environment variable but never had a flag:
+
+| Environment variable | Setting |
+|---|---|
+| `KUBESOLO_NODE_NAME` | `kubernetes.nodeName` |
+| `KUBESOLO_API_ENABLED` | `api.enabled` |
+| `KUBESOLO_API_SOCKET_PATH` | `api.socketPath` |
+
+Four flags have no setting, because they configure nothing:
 
 | Flag | Why |
 |---|---|
