@@ -103,7 +103,9 @@ Common flags:
 | `--image` | `KUBESOLO_IMAGE` | `portainer/kubesolo:<version>` | Container image (container mode) |
 | `--container-ports` | `KUBESOLO_CONTAINER_PORTS` | _(none)_ | Workload host ports to publish (container mode) |
 | `--d2k` | `KUBESOLO_D2K` | `false` | Enable the Docker-compatible API translator |
-| `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | `false` | Enable the local-path storage provisioner |
+| `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | on (see below) | Enable the local-path storage provisioner |
+| `--node-ip` | `KUBESOLO_NODE_IP` | _(auto-detect)_ | Override the detected node IP |
+| `--mtu` | `KUBESOLO_MTU` | _(auto-detect)_ | Override the detected MTU; in container mode also sizes the outer Docker network |
 | `--portainer-edge-image` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | `docker.io/portainer/agent:lts` | Image deployed for the Portainer edge agent |
 | `--offline-install` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ | Install from a local tarball/binary instead of downloading |
 | `--proxy` | `KUBESOLO_PROXY` | _(none)_ | HTTP/HTTPS proxy injected into the service environment |
@@ -111,6 +113,10 @@ Common flags:
 | `--cpu-manager-policy-options` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(none)_ | Comma-separated `key=value` options for the static policy |
 | `--reserved-cpus` | `KUBESOLO_RESERVED_CPUS` | `0` when the static policy is used | Cpuset reserved for the host and KubeSolo itself |
 | `--system-reserved` | `KUBESOLO_SYSTEM_RESERVED` | _(none)_ | Resources withheld from allocatable, e.g. `cpu=1,memory=500Mi` |
+
+`--local-storage` can only turn the provisioner on, and it is already on by default in KubeSolo, so the local-path provisioner is installed either way. `--local-storage=false` does not disable it. On a host install, disable it afterwards with `sudo kubesoloctl config set storage.localPath.enabled false` and restart KubeSolo. That only stops it being deployed on later starts; the existing provisioner keeps running until you remove it with `kubectl delete namespace local-path-storage` and `kubectl delete storageclass local-path`.
+
+On a host install of KubeSolo v1.2.1 or later, `install` writes the settings to `/etc/kubesolo/config.yaml` and the service runs with `--config` only. Unlike the shell installer, it does not fold `KUBESOLO_*` variables for settings it has no flag for into that file. Container mode keeps passing flags to the container. See [Configuration file](../configuration/config-file.md).
 
 CPU pinning flags are validated before anything is installed, so a bad cpuset or an unsupported policy option fails immediately rather than crash-looping the service. See the [CPU pinning guide](../configuration/cpu-pinning.md).
 

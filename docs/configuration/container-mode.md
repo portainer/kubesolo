@@ -58,8 +58,10 @@ docker run -d --privileged \
   -v kubesolo-data:/var/lib/kubesolo \
   -p 6443:6443 \
   --name kubesolo \
-  portainer/kubesolo:latest
+  portainer/kubesolo:v1.2.1
 ```
+
+There is no `:latest` tag. Release images are tagged with the version (`portainer/kubesolo:<version>`); pick the release you want from the [releases page](https://github.com/portainer/kubesolo/releases).
 
 | Option | Why it's needed |
 |---|---|
@@ -125,12 +127,20 @@ kubectl get nodes --watch
 
 ## Building the image
 
-The published images are built and pushed by CI (`docker-build` / `docker-manifest` jobs) for every PR and release across `amd64`, `arm64`, `arm`, and `riscv64`. To build locally:
+Images are built and pushed by CI. None of them carry a `:latest` tag.
+
+| Image | Built for | Architectures |
+|---|---|---|
+| `portainer/kubesolo:<version>` | Releases (multi-arch manifest; per-arch tags `<version>-linux-<arch>`) | `amd64`, `arm64`, `arm`, `riscv64` |
+| `portainerci/kubesolo:pr-<number>` | Pull requests | `amd64`, `arm64` |
+| `portainerci/kubesolo:develop` | Pushes to `develop` (multi-arch manifest; per-arch tags `develop-linux-<arch>`) | `amd64`, `arm64` |
+
+To build locally:
 
 ```bash
 make image                          # current arch, tag: <image>:<version>-<os>-<arch>
 make image GOARCH=arm64             # cross-compile
-make image-buildx                   # multi-arch build + push
+make image-buildx                   # build and push for $(GOOS)/$(GOARCH)
 ```
 
 `make image` downloads the arch-specific dependencies, builds a static (musl) binary via Alpine, and packages it into the `Dockerfile` image. Override the image name or tag with `IMAGE_NAME` and `IMAGE_TAG`:
