@@ -30,11 +30,14 @@ func (s *service) Run(kubeletReadyCh chan struct{}) error {
 	time.Sleep(types.DefaultComponentSleep)
 	if err := kubesoloservice.RunServiceWithStartupCheck(func() error {
 		<-kubeletReadyCh
-		s.wg.Go(func() {
+		// Not tracked by s.wg: upstream's RunE runs with context.Background() and
+		// ProxyServer.Run does not return on cancellation, so this goroutine only
+		// ends when the process exits.
+		go func() {
 			if err := command.ExecuteContext(s.ctx); err != nil {
 				log.Error().Str("component", "kubeproxy").Msgf("kubeproxy exited with error: %v", err)
 			}
-		})
+		}()
 		return nil
 	}); err != nil {
 		return err
