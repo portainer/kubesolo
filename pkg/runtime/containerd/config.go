@@ -136,10 +136,12 @@ func (s *service) generateContainerdConfig() map[string]any {
 		"state":   s.containerdStateDir,
 		// conf.d is the drop-in directory used by containerd packaging and by
 		// `nvidia-ctk runtime configure`. config.d is kept so drop-ins written
-		// against earlier KubeSolo releases keep loading.
+		// against earlier KubeSolo releases keep loading. containerd merges
+		// imports in list order with later files winning, so conf.d is listed
+		// last to take precedence over the legacy directory.
 		"imports": []string{
-			types.DefaultContainerdConfigDir + "/*.toml",
 			types.LegacyContainerdConfigDir + "/*.toml",
+			types.DefaultContainerdConfigDir + "/*.toml",
 		},
 		"grpc": map[string]any{
 			"address": s.containerdSocketFile,
