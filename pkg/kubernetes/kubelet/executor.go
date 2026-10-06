@@ -1,7 +1,6 @@
 package kubelet
 
 import (
-	"context"
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,7 +39,7 @@ func (s *service) Run(apiServerReady chan struct{}) error {
 		return err
 	}
 
-	command := app.NewKubeletCommand(context.Background())
+	command := app.NewKubeletCommand(s.ctx)
 	s.configureKubeletArgs(command)
 
 	time.Sleep(types.DefaultComponentSleep)
