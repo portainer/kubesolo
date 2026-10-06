@@ -169,16 +169,18 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --local-storage=false
 
 ### 3. **No Internet Access**
 
-For air-gapped installations, use the offline build. It embeds every container image, so nothing is pulled at startup. The default (online) build still needs registry access when KubeSolo starts.
+For air-gapped installations, use the offline build. It embeds every image KubeSolo deploys itself, so nothing is pulled at startup. The one exception is a custom Portainer Edge Agent image (`portainer.image`): only the default agent image is embedded, so a custom one is always pulled from its registry. The default (online) build still needs registry access when KubeSolo starts.
 
 ```bash
-# On a connected machine with the same architecture as the target
+# On a connected Linux machine with the same architecture and libc as the target
 curl -sfL https://get.kubesolo.io | sh -s -- --offline --download-only=./kubesolo-bundle
 
 # Copy ./kubesolo-bundle to the target, then on the target
 cd kubesolo-bundle
-sudo sh install.sh --offline-install=kubesolo-v1.2.1-linux-arm64-offline.tar.gz
+sudo sh install.sh --offline-install=<downloaded archive>
 ```
+
+Pass the archive that `--download-only` saved. Its name is `kubesolo-<version>-linux-<arch>[-musl]-offline.tar.gz`, for example `kubesolo-v1.2.1-linux-amd64-offline.tar.gz`. The bundle is built for the OS, architecture and libc of the machine that downloads it, so download on Linux (not macOS), and on a glibc machine for a glibc target or a musl machine (such as Alpine) for a musl target. If you can't, download the matching archive from the [releases page](https://github.com/portainer/kubesolo/releases) instead.
 
 `--download-only` does not need root and does not run the pre-flight checks. See [--download-only](docs/installation/flags.md#--download-only) for details. The archives are also on the [releases page](https://github.com/portainer/kubesolo/releases) (`kubesolo-<version>-linux-<arch>[-musl]-offline.tar.gz`).
 

@@ -17,12 +17,13 @@ The script only accepts the flags listed on this page, plus `--help`. Any other 
 The installer does not write the file itself. It runs the newly installed binary with the resolved settings plus `--print-config`, saves the output as `/etc/kubesolo/config.yaml` (mode `0600`), and starts the service with `--config=/etc/kubesolo/config.yaml` as its only flag. The binary resolves settings in its usual order, so the file reflects:
 
 1. the built-in defaults,
-2. an existing `/etc/kubesolo/config.yaml`, if there is one (a reinstall keeps its settings),
+2. an existing `/etc/kubesolo/config.yaml`, if there is one (a reinstall keeps its settings, except `path`; see below),
 3. every `KUBESOLO_*` environment variable in the installer's environment that KubeSolo recognises, including ones the installer has no flag for, such as `KUBESOLO_MTU` or `KUBESOLO_NODE_IP` ([full list](../configuration/config-file.md#flag-and-environment-variable-equivalents)),
 4. the installer flags.
 
-Two consequences of that order:
+Three consequences of that order:
 
+- The installer always passes `--path`, defaulting to `/var/lib/kubesolo`, so it overrides `path` from an existing file. When reinstalling or upgrading a node that uses a custom data directory, pass `--path` again (for example `--path=/data/kubesolo`); otherwise KubeSolo starts against an empty `/var/lib/kubesolo` and the existing cluster appears to be gone.
 - A boolean the installer only passes when it is `true` (`--debug`, `--pprof-server`, `--portainer-edge-async`, `--d2k`) cannot switch off a value an existing file has set to `true`. Use `kubesoloctl config set` for that.
 - Environment variables only reach the file if they reach the script. `sudo` drops them unless you use `sudo -E` (the installer also tries to recover `KUBESOLO_*` variables from the parent process when `KUBESOLO_PORTAINER_EDGE_KEY` is missing).
 
@@ -88,6 +89,8 @@ Override the directory KubeSolo uses for its data, PKI, and configuration. Usefu
 ```bash
 curl -sfL https://get.kubesolo.io | sudo sh -s -- --path=/data/kubesolo
 ```
+
+Repeat `--path` on every later reinstall or upgrade with the script. The installer always passes it, with `/var/lib/kubesolo` as the default, and that overrides the path recorded in `/etc/kubesolo/config.yaml`.
 
 ---
 
@@ -191,6 +194,16 @@ curl -sfL https://get.kubesolo.io | \
 Enable the [Local Path Provisioner](https://github.com/rancher/local-path-provisioner), which creates a `local-path` StorageClass backed by host-local directories. Workloads that request persistent volumes will have them provisioned automatically under the KubeSolo data path.
 
 It is on by default. Pass `--local-storage=false` to install without it.
+
+Setting it to `false` only stops KubeSolo deploying the provisioner on later starts. If it is already deployed, remove it as well:
+
+```bash
+kubectl delete namespace local-path-storage
+kubectl delete storageclass local-path
+```
+
+Delete any PersistentVolumes that use the `local-path` StorageClass first if you no longer need their data.
+
 
 | Flag | Env var | Default |
 |---|---|---|
@@ -322,7 +335,7 @@ See [--download-only](#--download-only) for how to prepare the required files on
 
 ### --offline
 
-Download the offline build instead of the default online one. The offline build embeds every container image KubeSolo needs, so the node does not pull anything at startup. Use it for air-gapped machines, and combine it with `--download-only` when preparing a bundle.
+Download the offline build instead of the default online one. The offline build embeds every image KubeSolo deploys itself, so the node does not pull anything at startup. The exception is a custom Portainer Edge Agent image (`portainer.image`): only the default agent image is embedded, so a custom one is always pulled from its registry. Use it for air-gapped machines, and combine it with `--download-only` when preparing a bundle.
 
 | Flag | Env var | Default |
 |---|---|---|
@@ -388,7 +401,7 @@ curl -sfL https://get.kubesolo.io | sh -s -- --offline --download-only=./kubesol
 sudo sh install.sh --offline-install=./kubesolo-v1.2.1-linux-amd64-offline.tar.gz
 ```
 
-> **Note:** The archive is downloaded for the architecture of the machine running `--download-only`. If the target machine has a different architecture, pass `--version` alongside `--download-only` but run the download step on a machine matching the target architecture, or obtain the correct archive directly from the [GitHub releases page](https://github.com/portainer/kubesolo/releases).
+> **Note:** The archive is chosen from the OS, architecture and libc of the machine running `--download-only`, and `--offline-install` uses it as-is. Run the download on a Linux machine with the same architecture and libc as the target (a musl host such as Alpine for a musl target). On macOS the script requests a `darwin` archive, which is not published. If you have no matching machine, download the correct `-offline` archive directly from the [GitHub releases page](https://github.com/portainer/kubesolo/releases).
 
 ---
 

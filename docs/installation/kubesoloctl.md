@@ -114,7 +114,7 @@ Common flags:
 | `--reserved-cpus` | `KUBESOLO_RESERVED_CPUS` | `0` when the static policy is used | Cpuset reserved for the host and KubeSolo itself |
 | `--system-reserved` | `KUBESOLO_SYSTEM_RESERVED` | _(none)_ | Resources withheld from allocatable, e.g. `cpu=1,memory=500Mi` |
 
-`--local-storage` can only turn the provisioner on, and it is already on by default in KubeSolo, so the local-path provisioner is installed either way. `--local-storage=false` does not disable it. On a host install, disable it afterwards with `sudo kubesoloctl config set storage.localPath.enabled false` and restart KubeSolo.
+`--local-storage` can only turn the provisioner on, and it is already on by default in KubeSolo, so the local-path provisioner is installed either way. `--local-storage=false` does not disable it. On a host install, disable it afterwards with `sudo kubesoloctl config set storage.localPath.enabled false` and restart KubeSolo. That only stops it being deployed on later starts; the existing provisioner keeps running until you remove it with `kubectl delete namespace local-path-storage` and `kubectl delete storageclass local-path`.
 
 On a host install of KubeSolo v1.2.1 or later, `install` writes the settings to `/etc/kubesolo/config.yaml` and the service runs with `--config` only. Unlike the shell installer, it does not fold `KUBESOLO_*` variables for settings it has no flag for into that file. Container mode keeps passing flags to the container. See [Configuration file](../configuration/config-file.md).
 

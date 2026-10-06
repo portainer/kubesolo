@@ -84,12 +84,14 @@ curl -sfL https://get.kubesolo.io | KUBESOLO_OFFLINE=true sudo -E sh -
 **Air-gapped** (no internet on the target machine at all):
 
 ```bash
-# On a connected machine with the same architecture, download the offline bundle
+# On a connected Linux machine with the same architecture and libc as the target, download the offline bundle
 curl -sfL https://get.kubesolo.io | sh -s -- --offline --download-only=/tmp/kubesolo-bundle
 
 # Transfer the files to the target machine, then install
 sudo sh install.sh --offline-install=<archive.tar.gz>
 ```
+
+The bundle matches the OS, architecture and libc of the machine that downloads it, so a bundle downloaded on macOS, or on a glibc host for an Alpine (musl) target, won't work. In that case download the matching `-offline` archive from the [releases page](https://github.com/portainer/kubesolo/releases).
 
 The installer writes your settings to `/etc/kubesolo/config.yaml`. Every installer flag is listed in the [install script flags reference](docs/installation/flags.md). Unreleased changes from the `develop` branch are served from `https://get-dev.kubesolo.io`; don't use it in production.
 
