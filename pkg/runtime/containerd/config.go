@@ -134,7 +134,13 @@ func (s *service) generateContainerdConfig() map[string]any {
 		"version": 3,
 		"root":    s.containerdRootDir,
 		"state":   s.containerdStateDir,
-		"imports": []string{types.DefaultContainerdConfigDir + "/*.toml"},
+		// conf.d is the drop-in directory used by containerd packaging and by
+		// `nvidia-ctk runtime configure`. config.d is kept so drop-ins written
+		// against earlier KubeSolo releases keep loading.
+		"imports": []string{
+			types.DefaultContainerdConfigDir + "/*.toml",
+			types.LegacyContainerdConfigDir + "/*.toml",
+		},
 		"grpc": map[string]any{
 			"address": s.containerdSocketFile,
 		},
