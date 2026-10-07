@@ -722,6 +722,12 @@ After=network.target
 ExecStart=$INSTALL_PATH $CMD_ARGS
 Restart=always
 RestartSec=3
+# Shims start in this unit's cgroup but manage containers in kubepods.slice.
+# The default KillMode=control-group kills them on stop, so the next start
+# cannot reattach and kubelet duplicates every pod (issue #197). Matches the
+# unit kubesoloctl writes and the one containerd ships upstream.
+KillMode=process
+Delegate=yes
 OOMScoreAdjust=-500
 LimitNOFILE=65535
 StandardOutput=journal
