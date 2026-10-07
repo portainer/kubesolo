@@ -199,49 +199,63 @@ func (s *kubesolo) run() {
 
 	type service struct {
 		name    string
-		start   func()
+		start   func(ctx context.Context, cancel context.CancelFunc)
 		readyCh chan struct{}
+	}
+
+	// Each service runs with its own context so shutdown can stop them one at
+	// a time. The cancel it is handed also cancels ctx, so a service that fails
+	// still brings the whole process down.
+	type startedService struct {
+		name string
+		stop context.CancelFunc
+		done chan struct{}
+	}
+	var started []startedService
+	startService := func(svc service) {
+		svcCtx, svcCancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		s.wg.Go(func() {
+			defer close(done)
+			svc.start(svcCtx, func() {
+				svcCancel()
+				cancel()
+			})
+		})
+		started = append(started, startedService{name: svc.name, stop: svcCancel, done: done})
 	}
 
 	// infraServices must be fully ready before pod masquerade is set up.
 	infraServices := []service{
 		{
 			name: "container runtime",
-			start: func() {
+			start: func(ctx context.Context, cancel context.CancelFunc) {
 				runtimeService := kubesoloruntime.NewService(ctx, cancel, runtimeReadyCh, &s.embedded)
-				s.wg.Go(func() {
-					_ = runtimeService.Run()
-				})
+				_ = runtimeService.Run()
 			},
 			readyCh: runtimeReadyCh,
 		},
 		{
 			name: "kine",
-			start: func() {
+			start: func(ctx context.Context, cancel context.CancelFunc) {
 				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.cfg.Storage.DBWALRepair)
-				s.wg.Go(func() {
-					_ = kineService.Run()
-				})
+				_ = kineService.Run()
 			},
 			readyCh: kineReadyCh,
 		},
 		{
 			name: "apiserver",
-			start: func() {
+			start: func(ctx context.Context, cancel context.CancelFunc) {
 				apiserverService := apiserver.NewService(ctx, cancel, apiServerReadyCh, s.embedded.NodeName, s.embedded)
-				s.wg.Go(func() {
-					_ = apiserverService.Run(kineReadyCh)
-				})
+				_ = apiserverService.Run(kineReadyCh)
 			},
 			readyCh: apiServerReadyCh,
 		},
 		{
 			name: "controller",
-			start: func() {
+			start: func(ctx context.Context, cancel context.CancelFunc) {
 				controllerService := controller.NewService(ctx, cancel, controllerReadyCh, s.embedded.ControllerDir, s.embedded)
-				s.wg.Go(func() {
-					_ = controllerService.Run(apiServerReadyCh)
-				})
+				_ = controllerService.Run(apiServerReadyCh)
 			},
 			readyCh: controllerReadyCh,
 		},
@@ -251,21 +265,17 @@ func (s *kubesolo) run() {
 	nodeServices := []service{
 		{
 			name: "kubelet",
-			start: func() {
+			start: func(ctx context.Context, cancel context.CancelFunc) {
 				kubeletService := kubelet.NewService(ctx, cancel, kubeletReadyCh, &s.embedded)
-				s.wg.Go(func() {
-					_ = kubeletService.Run(apiServerReadyCh)
-				})
+				_ = kubeletService.Run(apiServerReadyCh)
 			},
 			readyCh: kubeletReadyCh,
 		},
 		{
 			name: "kubeproxy",
-			start: func() {
+			start: func(ctx context.Context, cancel context.CancelFunc) {
 				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode)
-				s.wg.Go(func() {
-					_ = kubeproxyService.Run(kubeletReadyCh)
-				})
+				_ = kubeproxyService.Run(kubeletReadyCh)
 			},
 			readyCh: kubeproxyReadyCh,
 		},
@@ -273,7 +283,7 @@ func (s *kubesolo) run() {
 
 	for _, svc := range infraServices {
 		log.Info().Str("component", "kubesolo").Msgf("starting %s...", svc.name)
-		svc.start()
+		startService(svc)
 		if !waitForService(ctx, svc.name, svc.readyCh) {
 			return
 		}
@@ -303,7 +313,7 @@ func (s *kubesolo) run() {
 
 	for _, svc := range nodeServices {
 		log.Info().Str("component", "kubesolo").Msgf("starting %s...", svc.name)
-		svc.start()
+		startService(svc)
 		if !waitForService(ctx, svc.name, svc.readyCh) {
 			return
 		}
@@ -348,6 +358,14 @@ func (s *kubesolo) run() {
 
 	<-ctx.Done()
 	log.Info().Str("component", "kubesolo").Msg("shutting down...")
+
+	// Stop services in reverse start order, so each one goes down while the
+	// services it depends on are still running.
+	for i := len(started) - 1; i >= 0; i-- {
+		log.Info().Str("component", "kubesolo").Msgf("stopping %s...", started[i].name)
+		started[i].stop()
+		<-started[i].done
+	}
 
 	// Wait for all service goroutines to complete gracefully
 	log.Info().Str("component", "kubesolo").Msg("waiting for all services to shutdown...")
