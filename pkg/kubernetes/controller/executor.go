@@ -1,9 +1,6 @@
 package controller
 
 import (
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	kubesoloservice "github.com/portainer/kubesolo/internal/runtime/service"
@@ -17,7 +14,7 @@ import (
 // 2. it sets the controller manager flags
 // 3. it sleeps for the default component sleep duration
 // 4. it runs the controller manager
-// 5. it waits for a signal to stop the controller manager
+// 5. it waits for shutdown to be requested, then stops the controller manager
 // 6. it logs the termination of the controller manager
 func (s *service) Run(apiServerReadyCh chan struct{}) error {
 	log.Info().Str("component", "controller").Msg("starting controller manager...")
@@ -53,11 +50,9 @@ func (s *service) Run(apiServerReadyCh chan struct{}) error {
 		close(s.controllerReady)
 	})
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
+	<-s.ctx.Done()
 
-	log.Info().Str("component", "controller").Msg("received signal, stopping controller manager...")
+	log.Info().Str("component", "controller").Msg("shutdown requested, stopping controller manager...")
 	s.terminate()
 
 	return nil

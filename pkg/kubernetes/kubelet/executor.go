@@ -1,9 +1,6 @@
 package kubelet
 
 import (
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"k8s.io/kubernetes/cmd/kubelet/app"
@@ -18,7 +15,7 @@ import (
 // 2. it generates the kubelet kubeconfig
 // 3. it writes the kubelet config
 // 4. it starts the kubelet
-// 5. it waits for a signal to stop the kubelet
+// 5. it waits for shutdown to be requested, then stops the kubelet
 // 6. it logs the termination of the kubelet
 func (s *service) Run(apiServerReady chan struct{}) error {
 	log.Info().Str("component", "kubelet").Msg("starting kubelet...")
@@ -63,11 +60,9 @@ func (s *service) Run(apiServerReady chan struct{}) error {
 		close(s.kubeletReady)
 	})
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
+	<-s.ctx.Done()
 
-	log.Info().Str("component", "kubelet").Msg("received signal, stopping kubelet...")
+	log.Info().Str("component", "kubelet").Msg("shutdown requested, stopping kubelet...")
 	s.terminate()
 
 	return nil

@@ -1,9 +1,6 @@
 package kubeproxy
 
 import (
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/portainer/kubesolo/internal/runtime/network"
@@ -18,7 +15,7 @@ import (
 // 1. it sets the kube proxy flags
 // 2. it sleeps for the default component sleep duration
 // 3. it runs the kube proxy
-// 4. it waits for a signal to stop the kube proxy
+// 4. it waits for shutdown to be requested, then stops the kube proxy
 // 5. it logs the termination of the kube proxy
 func (s *service) Run(kubeletReadyCh chan struct{}) error {
 	log.Info().Str("component", "kubeproxy").Msg("starting kubeproxy...")
@@ -51,11 +48,9 @@ func (s *service) Run(kubeletReadyCh chan struct{}) error {
 		close(s.kubeproxyReady)
 	})
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
+	<-s.ctx.Done()
 
-	log.Info().Str("component", "kubeproxy").Msg("received signal, stopping kubeproxy...")
+	log.Info().Str("component", "kubeproxy").Msg("shutdown requested, stopping kubeproxy...")
 	s.terminate()
 
 	return nil
