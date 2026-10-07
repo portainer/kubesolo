@@ -3,13 +3,17 @@ package config
 import (
 	"fmt"
 	"maps"
+	"net/url"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/distribution/reference"
 	"github.com/portainer/kubesolo/internal/config/cpumanager"
+	"github.com/portainer/kubesolo/internal/core/pki"
 	"github.com/portainer/kubesolo/internal/runtime/cri"
 	"github.com/portainer/kubesolo/types"
+	bootstraputil "k8s.io/cluster-bootstrap/token/util"
 )
 
 // ipv6MinimumMTU is the smallest MTU IPv6 permits. Below it, pod traffic cannot
@@ -81,6 +85,89 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 
 	if _, err := cri.Resolve(cfg.Runtime.Endpoint); err != nil {
 		return warnings, fmt.Errorf("runtime.endpoint: %w", err)
+	}
+
+	// The API server parses the token into the Secret name bootstrap-token-<id>
+	// and matches it against token-id/token-secret, so a token in any other shape
+	// authenticates nothing. The failure is a 401 at the kubelet with no
+	// indication that the token was the problem, so it is rejected here instead.
+	if token := cfg.Kubernetes.BootstrapToken; token != "" && !bootstraputil.IsValidBootstrapToken(token) {
+		return warnings, fmt.Errorf("kubernetes.bootstrapToken must look like %q (six lowercase alphanumerics, a dot, then sixteen)", "abcdef.0123456789abcdef")
+	}
+
+	// Both set is a contradiction rather than a precedence question: whichever
+	// one lost would silently not be the token the cluster runs on.
+	if cfg.Kubernetes.BootstrapToken != "" && cfg.Kubernetes.BootstrapKubeconfig != "" {
+		return warnings, fmt.Errorf("kubernetes.bootstrapToken and kubernetes.bootstrapKubeconfig are mutually exclusive; set one")
+	}
+
+	// Relative to what is unanswerable here: KubeSolo's working directory is
+	// wherever it was started from, which on a host-managed init is not the
+	// directory the config was written in.
+	if path := cfg.Kubernetes.BootstrapKubeconfig; path != "" && !filepath.IsAbs(path) {
+		return warnings, fmt.Errorf("kubernetes.bootstrapKubeconfig must be an absolute path, got %q", path)
+	}
+
+	// A malformed endpoint reaches the API server as an --etcd-servers value it
+	// cannot dial, and the only symptom is the API server failing to start with a
+	// storage error that does not name the configuration.
+	//
+	// url.Parse only checks syntax, so the scheme and port are checked too: it
+	// accepts "ftp://host:2379" and "https://host" happily, and both reach the
+	// API server as an endpoint it cannot use.
+	for _, endpoint := range cfg.Storage.Etcd.Endpoints {
+		parsed, err := url.Parse(endpoint)
+		if err != nil || parsed.Host == "" {
+			return warnings, fmt.Errorf("storage.etcd.endpoints: %q is not a URL of the form https://host:2379", endpoint)
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			return warnings, fmt.Errorf("storage.etcd.endpoints: %q must use http or https, got scheme %q", endpoint, parsed.Scheme)
+		}
+		if parsed.Port() == "" {
+			return warnings, fmt.Errorf("storage.etcd.endpoints: %q must name a port, as in https://host:2379", endpoint)
+		}
+	}
+
+	// etcd client authentication needs both halves, the same way a CA does.
+	if (cfg.Storage.Etcd.CertFile == "") != (cfg.Storage.Etcd.KeyFile == "") {
+		return warnings, fmt.Errorf("storage.etcd.certFile and storage.etcd.keyFile must be set together: they are one client credential")
+	}
+
+	// A supplied CA is only usable as a pair: KubeSolo signs every leaf
+	// certificate with it, so a cert without its key leaves the control plane
+	// unable to issue anything, and a key without its cert leaves it with no
+	// trust anchor to publish.
+	if (cfg.PKI.CACert == "") != (cfg.PKI.CAKey == "") {
+		return warnings, fmt.Errorf("pki.caCert and pki.caKey must be set together: KubeSolo signs with this CA, so one without the other is unusable")
+	}
+
+	// Relative paths would resolve against KubeSolo's working directory, which is
+	// whatever started it — a service manager, a shell, a container entrypoint.
+	for path, field := range map[string]string{
+		cfg.PKI.CACert:            "pki.caCert",
+		cfg.PKI.CAKey:             "pki.caKey",
+		cfg.Storage.Etcd.CAFile:   "storage.etcd.caFile",
+		cfg.Storage.Etcd.CertFile: "storage.etcd.certFile",
+		cfg.Storage.Etcd.KeyFile:  "storage.etcd.keyFile",
+	} {
+		if path != "" && !filepath.IsAbs(path) {
+			return warnings, fmt.Errorf("%s must be an absolute path, got %q", field, path)
+		}
+	}
+
+	// A supplied CA under KubeSolo's own PKI directory is inside the tree
+	// removeLeafCerts sweeps: everything but the ca/ and request-header/
+	// subdirectories is deleted whenever leaf certificates are regenerated, so
+	// an operator-owned CA placed there would be destroyed by a node IP change.
+	// The point of pki.caCert is that KubeSolo does not own the file.
+	managedPKI := filepath.Join(cfg.Path, types.DefaultPKIDir)
+	for path, field := range map[string]string{
+		cfg.PKI.CACert: "pki.caCert",
+		cfg.PKI.CAKey:  "pki.caKey",
+	} {
+		if path != "" && pki.SweptByRegeneration(managedPKI, path) {
+			return warnings, fmt.Errorf("%s must live outside %s, which KubeSolo clears when it regenerates leaf certificates; got %q", field, managedPKI, path)
+		}
 	}
 
 	// cpumanager.Parse is the single validator for these four settings: it checks

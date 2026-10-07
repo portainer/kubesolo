@@ -17,6 +17,8 @@ type service struct {
 	controllerManagerCertFile string
 	controllerManagerKeyFile  string
 	caFile                    string
+	caKeyFile                 string
+	bootstrapToken            string
 	adminKubeconfigFile       string
 	serviceAccountKeyFile     string
 }
@@ -31,6 +33,8 @@ func NewService(ctx context.Context, cancel context.CancelFunc, controllerReady 
 		controllerManagerCertFile: embedded.ControllerManagerCerts.Cert,
 		controllerManagerKeyFile:  embedded.ControllerManagerCerts.Key,
 		caFile:                    embedded.CACerts.Cert,
+		caKeyFile:                 embedded.CACerts.Key,
+		bootstrapToken:            embedded.BootstrapToken,
 		adminKubeconfigFile:       embedded.AdminKubeconfigFile,
 		serviceAccountKeyFile:     embedded.ServiceAccountKeyFile,
 	}

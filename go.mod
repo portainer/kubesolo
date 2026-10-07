@@ -19,6 +19,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
+	go.etcd.io/etcd/client/pkg/v3 v3.6.12
 	golang.org/x/sys v0.47.0
 	gopkg.in/evanphx/json-patch.v4 v4.13.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -26,6 +27,7 @@ require (
 	k8s.io/apimachinery v0.35.7
 	k8s.io/apiserver v0.35.7
 	k8s.io/client-go v0.35.7
+	k8s.io/cluster-bootstrap v0.0.0
 	k8s.io/component-base v0.35.7
 	k8s.io/cri-api v0.35.6
 	k8s.io/cri-client v0.33.6
@@ -227,7 +229,6 @@ require (
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.12 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.6.12 // indirect
 	go.etcd.io/etcd/client/v3 v3.6.12 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.6.12 // indirect
 	go.etcd.io/etcd/server/v3 v3.6.12 // indirect
@@ -268,7 +269,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.33.6 // indirect
 	k8s.io/cloud-provider v0.33.6 // indirect
-	k8s.io/cluster-bootstrap v0.0.0 // indirect
 	k8s.io/component-helpers v0.33.6 // indirect
 	k8s.io/controller-manager v0.32.2 // indirect
 	k8s.io/csi-translation-lib v0.0.0 // indirect
