@@ -346,7 +346,7 @@ func (s *kubesolo) run() {
 
 	}
 
-	<-sigCh
+	<-ctx.Done()
 	log.Info().Str("component", "kubesolo").Msg("shutting down...")
 
 	// Wait for all service goroutines to complete gracefully
