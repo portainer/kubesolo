@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"net"
 	"slices"
 	"strings"
 
@@ -103,6 +104,15 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	}
 	cfg.Kubernetes.Kubelet.CPUManager = cpuManager
 	cfg.Kubernetes.Kubelet.SystemReserved = systemReserved
+
+	// Both are used verbatim as addresses: in the API server's advertise
+	// address, the kubelet's node IP, the kubeconfig and Service EXTERNAL-IPs.
+	// A typo there does not fail until KubeSolo is already down.
+	for field, ip := range map[string]string{"network.nodeIP": cfg.Network.NodeIP, "network.loadBalancer.ip": cfg.Network.LoadBalancer.IP} {
+		if ip != "" && net.ParseIP(ip) == nil {
+			return warnings, fmt.Errorf("%s: %q is not an IP address", field, ip)
+		}
+	}
 
 	if cfg.API.Enabled && len(cfg.API.SocketPath) > maxUnixSocketPath {
 		return warnings, fmt.Errorf("api.socketPath is %d characters, which exceeds the %d-byte limit for a unix socket; shorten it or shorten path, from which it is derived",

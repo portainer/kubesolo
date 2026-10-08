@@ -1,46 +1,70 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
-	"github.com/portainer/kubesolo/internal/cli/download"
 	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
-	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/spf13/cobra"
 )
 
 func upgradeCmd(cfg *config.Config) *cobra.Command {
+	var opts upgradeOptions
 	cmd := &cobra.Command{
 		Use:   "upgrade",
 		Short: "Upgrade KubeSolo to a newer version",
-		Long: `Download a newer KubeSolo release, stop the running service, replace the
-binary, and restart the service. Cluster state (certificates, database) is
-preserved across the upgrade.
+		Long: `Upgrade KubeSolo in place, with a backup and automatic rollback.
+
+Everything that can fail is checked while KubeSolo keeps running: the release is
+downloaded and its checksum verified, the binary is checked against this host's
+architecture and C library, the datastore is backed up, and the new version
+opens a copy of it. Only then is KubeSolo stopped and the binary replaced. If
+the new version does not become healthy, the previous binary, datastore and
+configuration are restored automatically.
+
+When KubeSolo serves its API, the upgrade goes through it, so it cannot collide
+with one Portainer started. Otherwise kubesoloctl runs the same upgrade itself.
 
 Examples:
-  sudo kubesoloctl upgrade --version=v1.2.1
-  sudo kubesoloctl upgrade --version=v1.2.1 --offline-install=/tmp/kubesolo-v1.2.1-linux-amd64.tar.gz`,
+  sudo kubesoloctl upgrade --version=v1.2.2
+  sudo kubesoloctl upgrade --version=v1.2.2 --offline-install=/tmp/kubesolo-v1.2.2-linux-amd64.tar.gz`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUpgrade(cfg)
+			return runUpgrade(cfg, opts)
 		},
 	}
 	f := cmd.Flags()
 	f.StringVar(&cfg.Version, "version", "", "KubeSolo version to upgrade to (required)")
 	_ = cmd.MarkFlagRequired("version")
 	f.StringVar(&cfg.OfflineInstall, "offline-install", "",
-		"Path to a local tarball or binary to install instead of downloading")
+		"Path to a local release archive or binary to install instead of downloading")
+	f.StringVar(&opts.sha256, "sha256", "",
+		"Expected SHA-256 of the archive or binary (default: taken from the release's SHA256SUMS)")
+	f.BoolVar(&opts.force, "force", false, "Allow installing a version that is not newer than the installed one")
+	f.DurationVar(&opts.healthTimeout, "health-timeout", upgrade.DefaultHealthTimeout,
+		"How long the new version has to become healthy before it is rolled back")
+	f.BoolVar(&opts.detach, "detach", false, "Return once the upgrade has started instead of following it")
 	f.StringVar(&cfg.Name, "name", envOr("KUBESOLO_NAME", config.AppName),
 		"Name of the KubeSolo instance to upgrade (default: kubesolo)")
 	return cmd
 }
 
-func runUpgrade(cfg *config.Config) error {
+type upgradeOptions struct {
+	sha256        string
+	force         bool
+	healthTimeout time.Duration
+	detach        bool
+}
+
+func runUpgrade(cfg *config.Config, opts upgradeOptions) error {
 	p := ui.New()
 	p.Header("upgrade")
 
@@ -52,41 +76,132 @@ func runUpgrade(cfg *config.Config) error {
 		return p.Fail("root check", err)
 	}
 
-	// ── Detect system ─────────────────────────────────────────────────────────
-	p.Step("Detecting system")
+	req := upgrade.Request{
+		Version:              cfg.Version,
+		SHA256:               opts.sha256,
+		Force:                opts.force,
+		HealthTimeoutSeconds: int(opts.healthTimeout / time.Second),
+	}
+	if cfg.OfflineInstall != "" {
+		abs, err := filepath.Abs(cfg.OfflineInstall)
+		if err != nil {
+			return p.Fail("offline source", err)
+		}
+		req.Source = abs
+	}
+	if err := req.Validate(); err != nil {
+		return p.Fail("upgrade request", err)
+	}
+
+	h, err := findHost()
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	from, err := installedVersion()
+	if err != nil {
+		return p.Fail("installed version", err)
+	}
+
+	var id string
+	if h.api != nil {
+		p.Step(fmt.Sprintf("Requesting the upgrade from %s to %s from KubeSolo", from, req.Version))
+		accepted, err := h.api.Upgrade(req)
+		if err != nil {
+			return p.Fail("upgrade request", err)
+		}
+		id = accepted.ID
+	} else {
+		if id, err = startLocalUpgrade(p, h, req, from); err != nil {
+			return err
+		}
+	}
+	p.OK("Upgrade started", "run "+id)
+
+	if opts.detach {
+		p.Info("follow it with: kubesoloctl status")
+		return nil
+	}
+
+	p.Step("Upgrading")
+	run, err := follow(p, h.layout, id)
+	if err != nil {
+		return p.Fail("upgrade", err)
+	}
+	if err := reportRun(p, run); err != nil {
+		return err
+	}
+
+	// Releases from v1.2.1 read a configuration file. A host still configured
+	// by flags in its service definition is moved onto one now.
+	if v, err := upgrade.ParseVersion(req.Version); err == nil && v.Compare(configFileSince) >= 0 {
+		if info, err := detect.Detect(); err == nil {
+			migrateToConfigFile(p, cfg, info)
+		}
+	}
+
+	p.Done(fmt.Sprintf("KubeSolo upgraded from %s to %s", run.From, run.To))
+	return nil
+}
+
+// configFileSince is the first release that reads a configuration file.
+var configFileSince, _ = upgrade.ParseVersion("v1.2.1")
+
+// startLocalUpgrade stages the release and starts the executor without the
+// API. It stages here, rather than in the executor, so that the executor can
+// be the new binary: a KubeSolo from before the executor existed cannot run
+// one, but the release replacing it can.
+func startLocalUpgrade(p *ui.Printer, h *host, req upgrade.Request, from string) (string, error) {
 	info, err := detect.Detect()
 	if err != nil {
-		return p.Fail("system detection", err)
+		return "", p.Fail("system detection", err)
 	}
-	p.OK("System detected", fmt.Sprintf("%s · %s · %s", info.Arch, info.LibC, info.InitSystem))
 
-	// ── Stop service ──────────────────────────────────────────────────────────
-	p.Step("Stopping KubeSolo")
-	process.StopAll(initControlBinary(info.InitSystem))
-	p.OK("KubeSolo stopped", "")
+	id := upgrade.NewRunID()
+	staging := h.layout.RunStagingDir("ctl-" + id)
+	// Once the executor starts it owns the staging directory and removes it
+	// when it finishes; until then, a failure here must clean it up.
+	started := false
+	defer func() {
+		if !started {
+			_ = os.RemoveAll(staging)
+		}
+	}()
 
-	// ── Replace binary ────────────────────────────────────────────────────────
-	p.Step(fmt.Sprintf("Installing KubeSolo %s", cfg.Version))
-	if err := download.Install(cfg.OfflineInstall, info.ArchiveName(cfg.Version), cfg.Version); err != nil {
-		return p.Fail("binary installation", err)
+	p.Step(fmt.Sprintf("Fetching and verifying KubeSolo %s", req.Version))
+	staged, err := upgrade.Stage(context.Background(), h.layout, staging, req, info,
+		func(format string, args ...any) { p.Info(fmt.Sprintf(format, args...)) })
+	if err != nil {
+		p.Warn("nothing was changed: KubeSolo " + from + " is still running")
+		return "", p.Fail("release verification", err)
 	}
-	restoreSELinux(config.DefaultInstallPath)
-	p.OK(fmt.Sprintf("KubeSolo %s installed", cfg.Version), config.DefaultInstallPath)
+	p.OK("Release verified", staged.ChecksumSource)
 
-	// ── Move flags into a configuration file ──────────────────────────────────
-	// Runs after the binary is replaced, so the conversion is performed by the
-	// version that will actually read the result. A no-op once migrated.
-	migrateToConfigFile(p, cfg, info)
-
-	// ── Restart service ───────────────────────────────────────────────────────
-	p.Step(fmt.Sprintf("Restarting %s service", info.InitSystem))
-	if err := runServiceAction(info.InitSystem, "start"); err != nil {
-		return p.Fail("service restart", err)
+	executor := staged.Binary
+	if !supportsExecutor(executor) {
+		executor = upgrade.BinaryPath
+		if !supportsExecutor(executor) {
+			return "", p.Fail("upgrade", fmt.Errorf("neither %s nor the installed %s can run the upgrade; upgrade to a newer release first", req.Version, from))
+		}
 	}
-	p.OK("Service restarted", "")
 
-	p.Done(fmt.Sprintf("KubeSolo upgraded to %s", cfg.Version))
-	return nil
+	// The executor installs the binary staged here: a hard link of it, so no
+	// second copy, verified again against its own checksum.
+	sum, err := upgrade.FileSHA256(staged.Binary)
+	if err != nil {
+		return "", p.Fail("upgrade", err)
+	}
+	local := req
+	local.Source, local.SHA256 = staged.Binary, sum
+
+	job := upgrade.Job{
+		ID: id, Operation: upgrade.OpUpgrade, Request: local,
+		DataDir: h.layout.DataDir, ConfigFile: h.layout.ConfigFile, From: from,
+	}
+	if err := startLocally(h, job, executor, info); err != nil {
+		return "", p.Fail("upgrade", err)
+	}
+	started = true
+	return id, nil
 }
 
 func runContainerUpgrade(p *ui.Printer, cfg *config.Config) error {

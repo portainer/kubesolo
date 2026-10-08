@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -9,8 +10,10 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/config/flags"
 	"github.com/portainer/kubesolo/internal/core/embedded"
@@ -20,6 +23,8 @@ import (
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/internal/system"
+	"github.com/portainer/kubesolo/internal/upgrade"
+	"github.com/portainer/kubesolo/internal/upgrade/executor"
 	"github.com/portainer/kubesolo/pkg/components/configapi"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/d2k"
@@ -120,6 +125,19 @@ func main() {
 
 	if *flags.Version {
 		log.Info().Str("version", Version).Msg("kubesolo version")
+		os.Exit(0)
+	}
+
+	// The upgrade runs the binary as its own helpers. Neither is KubeSolo, so
+	// they are dispatched before any configuration is loaded or validated.
+	if *flags.UpgradeExecutor != "" {
+		os.Exit(executor.Main(*flags.UpgradeExecutor))
+	}
+	if *flags.UpgradeCheckDatastore != "" {
+		if err := executor.CheckDatastore(*flags.UpgradeCheckDatastore); err != nil {
+			fmt.Fprintln(os.Stderr, "datastore check failed:", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -329,6 +347,7 @@ func (s *kubesolo) run() {
 			EdgeKey:          s.cfg.Portainer.EdgeKey,
 			EdgeAsync:        s.cfg.Portainer.Async,
 			EdgeInsecurePoll: "true",
+			APISocketDir:     s.agentSocketDir(),
 		}); err != nil {
 			log.Error().Err(err).Msg("failed to deploy portainer edge agent, continuing without it")
 		}
@@ -345,6 +364,8 @@ func (s *kubesolo) run() {
 		}
 
 	}
+
+	s.wg.Go(func() { s.verifyPendingUpgrade(ctx) })
 
 	<-sigCh
 	log.Info().Str("component", "kubesolo").Msg("shutting down...")
@@ -394,6 +415,19 @@ func cleanStaleState(basePath string, runtimeExternal, containerMode bool) {
 
 	// Clean all containerd subdirectories except images/ (embedded tar archives)
 	containerdDir := filepath.Join(basePath, types.DefaultContainerdDir)
+
+	// The boot marker is not proof of a reboot. It is missing on the first start
+	// after an upgrade from a release that never wrote one, and an unreadable
+	// marker counts as a reboot too. A shim still attached to this containerd is
+	// proof of the opposite: its containers are running, and clearing state/
+	// would strand them while kubelet starts a second copy of every pod.
+	if rebooted && !containerMode {
+		if shims := liveShims("/proc", filepath.Join(containerdDir, types.DefaultContainerdSocket)); shims > 0 {
+			log.Warn().Str("component", "kubesolo").Int("shims", shims).
+				Msg("boot marker says this is a new boot, but containerd shims from the previous run are still alive; keeping containerd task state")
+			rebooted = false
+		}
+	}
 	entries, err := os.ReadDir(containerdDir)
 	if err != nil {
 		return
@@ -476,6 +510,114 @@ func rebootedSinceLastRun(basePath string) bool {
 	return strings.TrimSpace(string(previous)) != current
 }
 
+// verifyPendingUpgrade finishes what an upgrade executor that is no longer
+// running left behind, once KubeSolo has been healthy for a while: it clears a
+// pending verification of this version, and closes a run the executor never
+// recorded the end of.
+//
+// Normally the executor does both. This covers it not being there — the host
+// lost power or rebooted mid-upgrade — so that a version that came up fine is
+// not later reverted by the boot guard for restarts that had nothing to do with
+// it, and so that /api/v1/status does not report a run as forever unfinished.
+func (s *kubesolo) verifyPendingUpgrade(ctx context.Context) {
+	l := upgrade.NewLayout(s.cfg.Path, *flags.Config)
+
+	raw, _ := os.ReadFile(l.PendingFile())
+	pendingHere := strings.TrimSpace(string(raw)) == Version
+	st, _ := upgrade.LoadState(l)
+	interrupted := st != nil && st.Current != nil && !st.InFlight()
+	if !pendingHere && !interrupted {
+		return
+	}
+	if pendingHere {
+		log.Info().Str("component", "upgrade").Str("version", Version).Msg("this version is pending verification after an upgrade")
+	}
+
+	const settle = time.Minute
+	var healthySince time.Time
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		h := executor.CheckHealth(ctx, l.AdminKubeconfig(), Version)
+		if !h.Healthy {
+			healthySince = time.Time{}
+			continue
+		}
+		if healthySince.IsZero() {
+			healthySince = time.Now()
+		}
+		if time.Since(healthySince) < settle {
+			continue
+		}
+
+		// An executor holding the lock is verifying this version itself.
+		lock, err := upgrade.TryLock(l)
+		if err != nil {
+			continue
+		}
+		if raw, _ := os.ReadFile(l.PendingFile()); strings.TrimSpace(string(raw)) == Version {
+			_ = os.Remove(l.PendingFile())
+			_ = os.Remove(l.AttemptsFile())
+			log.Info().Str("component", "upgrade").Str("version", Version).Msg("upgrade verified: KubeSolo is healthy")
+		}
+		if st, err := upgrade.LoadState(l); err == nil && st.CloseInterrupted(Version, lastGuardEvent(l)) {
+			upgrade.SettleBackups(l, st.Last.Operation, st.Last.Result)
+			_ = upgrade.SaveState(l, st)
+			log.Info().Str("component", "upgrade").Str("result", string(st.Last.Result)).Msg("closed an upgrade run whose executor stopped before it finished")
+		}
+		lock.Unlock()
+		return
+	}
+}
+
+// lastGuardEvent is the boot guard's most recent record of a restore, if any.
+func lastGuardEvent(l upgrade.Layout) string {
+	raw, err := os.ReadFile(l.GuardLog())
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	return lines[len(lines)-1]
+}
+
+// liveShims counts the containerd shims under procRoot that serve the containerd
+// listening on socket. A shim names its containerd with -address, so a shim of a
+// containerd managed by the host, or of another KubeSolo, is not counted.
+func liveShims(procRoot, socket string) int {
+	entries, err := os.ReadDir(procRoot)
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if !entry.IsDir() || strings.Trim(entry.Name(), "0123456789") != "" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(procRoot, entry.Name(), "cmdline"))
+		if err != nil || len(raw) == 0 {
+			continue
+		}
+		args := strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00")
+		if !strings.Contains(filepath.Base(args[0]), "containerd-shim") {
+			continue
+		}
+		for i, arg := range args {
+			if (arg == "-address" || arg == "--address") && i+1 < len(args) && args[i+1] == socket {
+				count++
+				break
+			}
+		}
+	}
+	return count
+}
+
 // startMetricsService starts the optional kubesolo metrics endpoint and
 // passes in every component readiness channel so per-component up gauges
 // can flip in real time as services come online. It does not block on its
@@ -520,13 +662,28 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 		Str("socket", s.cfg.API.SocketPath).
 		Msg("starting configuration API...")
 
+	kubeconfig := s.embedded.AdminKubeconfigFile
 	configAPIService := configapi.NewService(ctx, cancel, configAPIReadyCh, configapi.Options{
-		SocketPath: s.cfg.API.SocketPath,
-		ConfigPath: *flags.Config,
+		SocketPath:      s.cfg.API.SocketPath,
+		AgentSocketPath: s.agentSocketPath(),
+		ConfigPath:      *flags.Config,
 		Host: config.Host{
 			NumCPU:        runtime.NumCPU(),
 			GOARCH:        runtime.GOARCH,
 			ContainerMode: s.embedded.ContainerMode,
+		},
+		Lifecycle: &configapi.Lifecycle{
+			Version:       Version,
+			Commit:        Commit,
+			DataDir:       s.cfg.Path,
+			ContainerMode: s.embedded.ContainerMode,
+			Spawn:         spawnUpgradeExecutor,
+			Health: func(ctx context.Context) upgrade.Health {
+				return executor.CheckHealth(ctx, kubeconfig, "")
+			},
+			AgentImage: func(ctx context.Context) (string, error) {
+				return portainer.RunningAgentImage(ctx, kubeconfig)
+			},
 		},
 	})
 	s.wg.Go(func() {
@@ -537,6 +694,46 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 				Msg("configuration API exited with error")
 		}
 	})
+}
+
+// agentSocketPath is the API socket mounted into the Portainer agent's pod, or
+// "" when the agent gets none: it needs both the API enabled and an agent to
+// give it to.
+//
+// This hands the agent upgrade, rollback and configuration control of the
+// host. The agent already runs as cluster-admin, so it is little more than it
+// can do anyway, but it is the reason the API must be enabled explicitly.
+func (s *kubesolo) agentSocketPath() string {
+	if !s.cfg.API.Enabled || s.cfg.Portainer.EdgeID == "" || s.cfg.Portainer.EdgeKey == "" {
+		return ""
+	}
+	return filepath.Join(s.cfg.Path, agentSocketDirName, portainer.AgentSocketName)
+}
+
+// agentSocketDir is the directory mounted into the agent's pod, or "".
+func (s *kubesolo) agentSocketDir() string {
+	if p := s.agentSocketPath(); p != "" {
+		return filepath.Dir(p)
+	}
+	return ""
+}
+
+// agentSocketDirName holds only the agent's API socket, so that it can be mounted
+// into a pod without the rest of the data directory.
+const agentSocketDirName = "agent-api"
+
+// spawnUpgradeExecutor starts this binary as the upgrade executor, outside the
+// KubeSolo service.
+func spawnUpgradeExecutor(jobFile string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	info, err := detect.Detect()
+	if err != nil {
+		return err
+	}
+	return upgrade.SpawnExecutor(exe, jobFile, info.InitSystem)
 }
 
 // waitForService waits for a service to be ready

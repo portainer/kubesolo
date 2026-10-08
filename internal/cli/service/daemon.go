@@ -56,12 +56,15 @@ func (m *daemonManager) Install(cfg *config.Config, cmdArgs []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to start KubeSolo daemon: %w", err)
 	}
+	// Read before Release, which sets Pid to -1. A pid file holding -1 turns the
+	// printed `kill $(cat pidfile)` into `kill -1`: every process the user can
+	// signal.
+	pid := proc.Pid
+
 	// Detach — let the child run independently
 	if err := proc.Release(); err != nil {
 		return fmt.Errorf("failed to release daemon process: %w", err)
 	}
-
-	pid := proc.Pid
 	// PID file write failure is non-fatal: the daemon is already running at this
 	// point, so returning an error would leave the system in an inconsistent state.
 	// A warning is enough — Uninstall() cross-checks /proc/<pid>/exe rather than

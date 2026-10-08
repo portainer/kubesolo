@@ -16,6 +16,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/spf13/cobra"
 )
 
@@ -100,6 +101,12 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	}
 	if err := mgr.Uninstall(); err != nil {
 		return p.Fail("service removal", err)
+	}
+	// The upgrade's boot-guard drop-in outlives the unit it extends, and the
+	// flags-to-configuration-file migration keeps the definition it replaced.
+	upgrade.RemoveGuardHook()
+	if def := service.FilePath(info.InitSystem); def != "" {
+		_ = os.Remove(def + ".bak")
 	}
 	p.OK(fmt.Sprintf("%s service removed", info.InitSystem), "")
 

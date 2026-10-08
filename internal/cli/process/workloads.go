@@ -93,11 +93,15 @@ func podPIDs() []int {
 	return pids
 }
 
-// serviceCgroupRoots returns the KubeSolo service cgroups. After systemd stops
+// serviceCgroupRoots returns the KubeSolo service cgroup. After systemd stops
 // the unit, what remains is the shims KillMode=process spared. The unit-name
 // match excludes a host-managed containerd, whose shims run under its own unit.
+//
+// It is the one unit, not a pattern: kubesolo-upgrade-<id>.service is the
+// upgrade executor, which calls this while restoring a backup, and any other
+// unit whose name happens to start with "kubesolo" is not KubeSolo's either.
 func serviceCgroupRoots() []string {
-	matches, _ := filepath.Glob("/sys/fs/cgroup/system.slice/kubesolo*.service")
+	matches, _ := filepath.Glob("/sys/fs/cgroup/system.slice/kubesolo.service")
 	return matches
 }
 

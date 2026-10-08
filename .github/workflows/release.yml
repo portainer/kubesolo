@@ -198,6 +198,29 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  checksums:
+    name: publish SHA256SUMS
+    runs-on: ubuntu-latest
+    needs: [build, build-kubesoloctl]
+    steps:
+      # kubesoloctl upgrade/download and the upgrade API verify every archive
+      # against this file before installing it.
+      - name: "[execution] checksum every release asset"
+        run: |
+          mkdir -p assets && cd assets
+          gh release download --repo portainer/kubesolo "${{ github.event.inputs.kubesolo_version }}" \
+            --pattern 'kubesolo-*.tar.gz' --pattern 'kubesoloctl-*'
+          sha256sum kubesolo-*.tar.gz kubesoloctl-* | sort -k2 > SHA256SUMS
+          cat SHA256SUMS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: "[post] upload SHA256SUMS to github release"
+        run: |
+          gh release upload --clobber --repo portainer/kubesolo \
+            "${{ github.event.inputs.kubesolo_version }}" assets/SHA256SUMS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   docker-manifest:
     name: create multi-arch docker manifest
     runs-on: ubuntu-latest

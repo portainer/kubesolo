@@ -70,6 +70,12 @@ func (s *Service) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/config", s.handleDelete)
 	mux.HandleFunc("POST /api/v1/config:validate", s.handleValidate)
 
+	if s.opts.Lifecycle != nil {
+		mux.HandleFunc("POST /api/v1/upgrade", s.handleUpgrade)
+		mux.HandleFunc("POST /api/v1/rollback", s.handleRollback)
+		mux.HandleFunc("GET /api/v1/status", s.handleStatus)
+	}
+
 	return withLogging(mux)
 }
 

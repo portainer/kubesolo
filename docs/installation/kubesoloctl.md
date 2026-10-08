@@ -82,7 +82,9 @@ kubesoloctl kubeconfig fetch
 |---|---|
 | `install` | Install KubeSolo and configure the service / start the container |
 | `check` | Run pre-flight checks only, without installing |
-| `upgrade --version=<v>` | Upgrade to a newer version, preserving configuration |
+| `upgrade --version=<v>` | Upgrade to a newer version, with a backup and automatic rollback |
+| `rollback` | Restore the version, datastore and configuration from before the last upgrade |
+| `status` | Show the running version, health, and the last upgrade or rollback |
 | `reset` | Wipe all cluster state and start fresh (keeps the install) |
 | `uninstall` | Stop and remove KubeSolo, service files, and (optionally) data |
 | `kubeconfig` | Print, write, fetch, or view the admin kubeconfig |
@@ -130,15 +132,47 @@ kubesoloctl kubeconfig fetch      # merge it into ~/.kube/config
 
 `fetch` reads from the container when one is running, otherwise from the local data directory.
 
-### upgrade / reset / uninstall
+### upgrade / rollback / status
 
 ```bash
-kubesoloctl upgrade --version=v1.2.1   # preserves your original flags
+sudo kubesoloctl upgrade --version=v1.2.2      # verified, backed up, rolled back automatically on failure
+sudo kubesoloctl upgrade --version=v1.2.2 --offline-install=/tmp/bundle/kubesolo-v1.2.2-linux-amd64.tar.gz
+sudo kubesoloctl rollback                      # undo the last upgrade (loses cluster changes made since)
+sudo kubesoloctl status                        # version, health, last run, rollback target
+```
+
+On a host install, `upgrade` checks everything it can while KubeSolo keeps
+running — the release checksum, the binary's architecture and C library, disk
+space — backs up the datastore, binary and configuration file, and has the new
+version open a copy of the datastore. Only then does it stop KubeSolo and switch
+over. If the new version is not healthy within `--health-timeout` (default
+10m), the previous binary, datastore and configuration are restored. A failure
+before the switch-over changes nothing at all.
+
+Checksums come from the release's `SHA256SUMS` or, for older GitHub releases, the
+digest GitHub publishes; pass `--sha256` to give one yourself. An
+`--offline-install` archive needs a `SHA256SUMS` beside it, which `kubesoloctl
+download` writes. Downgrades need `--force`; to undo the last upgrade, use
+`rollback`.
+
+When KubeSolo's [API](../configuration/upgrade-api.md) is enabled, kubesoloctl
+asks KubeSolo to upgrade itself, so it cannot collide with an upgrade Portainer
+started. Otherwise it runs the same upgrade directly. See the
+[upgrade API](../configuration/upgrade-api.md) for how it works and what
+`status` reports.
+
+### reset / uninstall
+
+```bash
 kubesoloctl reset                      # wipe cluster state, keep the install (--force to skip the prompt)
 kubesoloctl uninstall                  # remove KubeSolo; --purge also deletes data; container mode also cleans kubeconfig + Docker context
 ```
 
 These commands detect automatically whether the instance runs as a container or a host service and act accordingly.
+
+In container mode, `upgrade` pulls the new image before touching the running
+container, and the replacement keeps the container's hostname, which is the
+node's name.
 
 ---
 
@@ -185,7 +219,7 @@ Use `--name` to run independent KubeSolo instances side by side in container mod
 
 ## Offline / air-gapped
 
-`download` assembles a self-contained bundle (the KubeSolo release tarball plus the running `kubesoloctl` binary) for transfer to an air-gapped machine:
+`download` assembles a self-contained bundle — the KubeSolo release tarball, the `kubesoloctl` binary for the target architecture, and a `SHA256SUMS` — for transfer to an air-gapped machine. Both downloads are verified against the release's published checksums:
 
 ```bash
 # On a connected machine (specify --arch when the target differs):

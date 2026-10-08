@@ -232,4 +232,9 @@ type EdgeAgentConfig struct {
 	EdgeInsecurePoll string
 	EdgeSecret       string
 	EnvVars          map[string]string
+
+	// APISocketDir is a host directory holding a KubeSolo API socket for the
+	// agent, mounted into its pod. Empty means the agent gets no access to the
+	// API.
+	APISocketDir string
 }

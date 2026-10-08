@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/ui"
 	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/config/cpumanager"
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -209,10 +213,6 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		return p.Fail("system detection", err)
 	}
 	if !containerMode {
-		// On Linux, stop any existing KubeSolo before the step closes — its log
-		// output appears as detail lines under the step.
-		process.StopAll(initControlBinary(info.InitSystem))
-		process.CleanupFileConflicts(cfg.Path)
 		p.OK("System detected", fmt.Sprintf("%s · %s", info.Arch, info.LibC))
 		p.Info(fmt.Sprintf("Init system:  %s", info.InitSystem))
 	} else {
@@ -220,7 +220,48 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		p.Info("Run mode:  container")
 	}
 
+	// Everything that can be checked is checked before a running KubeSolo is
+	// stopped: an install that fails on a bad flag, an unknown version or a
+	// corrupt archive must leave the cluster that was there running.
+	mgr, err := service.New(info, cfg.RunMode, cfg.Name)
+	if err != nil {
+		return p.Fail("service setup", err)
+	}
+
+	var staged *upgrade.Staged
+	if !containerMode {
+		if _, err := configDocument(p, cfg, containerMode, false); err != nil {
+			return p.Fail("configuration", err)
+		}
+		cleanup, s, err := stageRelease(p, cfg, info)
+		defer cleanup()
+		if err != nil {
+			return err
+		}
+		staged = s
+	}
+
+	// ── Stop what runs now ────────────────────────────────────────────────────
+	wasRunning := false
+	if !containerMode {
+		wasRunning = len(upgrade.MainPIDs(upgrade.BinaryPath)) > 0
+		if wasRunning {
+			p.Step("Stopping the running KubeSolo")
+		}
+		if changed, err := upgrade.EnsureProcessKillMode(); err != nil {
+			p.Warn("could not set KillMode=process on the existing unit; its workloads may be started twice: " + err.Error())
+		} else if changed {
+			p.Info("set KillMode=process on the existing unit so its containers survive the stop")
+		}
+		process.StopAll(initControlBinary(info.InitSystem))
+		process.CleanupFileConflicts(cfg.Path)
+		if wasRunning {
+			p.OK("KubeSolo stopped", "")
+		}
+	}
+
 	// ── Pre-flight ────────────────────────────────────────────────────────────
+	// After the stop, since KubeSolo holds the ports these check for.
 	p.Step("Pre-flight checks")
 	var checks []preflight.Check
 	if containerMode {
@@ -229,14 +270,27 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer)
 	}
 	if err := preflight.RunSuite(checks); err != nil {
+		if wasRunning {
+			// Nothing has been replaced yet, so the previous install still works.
+			if startErr := runServiceAction(info.InitSystem, "start"); startErr == nil {
+				p.Warn("the previous KubeSolo was started again; nothing was changed")
+			} else {
+				p.Warn("the previous KubeSolo could not be started again: " + startErr.Error())
+			}
+		}
 		return p.Fail("pre-flight checks", err)
 	}
 	p.OK(fmt.Sprintf("Pre-flight checks passed (%d/%d)", len(checks), len(checks)), "")
 
-	// ── Download / install binary (host mode only) ────────────────────────────
+	// ── Install binary (host mode only) ───────────────────────────────────────
 	if !containerMode {
 		p.Step(fmt.Sprintf("Installing KubeSolo %s", cfg.Version))
-		if err := download.Install(cfg.OfflineInstall, info.ArchiveName(cfg.Version), cfg.Version); err != nil {
+		if staged != nil {
+			err = upgrade.Install(staged.Binary, config.DefaultInstallPath)
+		} else {
+			err = download.Install(cfg.OfflineInstall, info.ArchiveName(cfg.Version), cfg.Version)
+		}
+		if err != nil {
 			return p.Fail("binary installation", err)
 		}
 		restoreSELinux(config.DefaultInstallPath)
@@ -256,10 +310,6 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		return p.Fail("configuration", err)
 	}
 
-	mgr, err := service.New(info, cfg.RunMode, cfg.Name)
-	if err != nil {
-		return p.Fail("service setup", err)
-	}
 	if err := mgr.Install(cfg, cfg.CmdArgs()); err != nil {
 		return p.Fail("service setup", err)
 	}
@@ -278,6 +328,8 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		}
 		containerKubeconfig, _ = kubeconfig.WaitForContainerKubeconfig(service.ContainerNameFor(cfg.Name), "")
 		p.OK(fmt.Sprintf("KubeSolo %s container running", cfg.Version), cfg.Name)
+	} else if cfg.RunMode == config.RunModeDaemon {
+		p.OK("KubeSolo started as a background daemon", config.PIDFile)
 	} else {
 		p.OK(fmt.Sprintf("%s service configured", info.InitSystem), "")
 	}
@@ -319,6 +371,10 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		app := config.AppName
 		if containerMode {
 			p.Label("Refresh", "kubesoloctl kubeconfig fetch")
+		} else if cfg.RunMode == config.RunModeDaemon {
+			// No supervisor: nothing restarts it, and the init system knows nothing of it.
+			p.Label("Stop", fmt.Sprintf("kill $(cat %s)", config.PIDFile))
+			p.Label("Logs", fmt.Sprintf("tail -f %s", config.LogFile))
 		} else {
 			switch info.InitSystem {
 			case detect.InitSystemd:
@@ -358,28 +414,79 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 // default, where container mode is the only supported mode. Container mode is a
 // developer and CI convenience, so it keeps the flag-based command line.
 func writeConfigFile(p *ui.Printer, cfg *config.Config, containerMode bool) error {
+	// Validated, and its warnings shown, before anything was stopped.
+	doc, err := configDocument(p, cfg, containerMode, true)
+	if err != nil || doc == nil {
+		return err
+	}
+	if err := kubesoloconfig.Write(cfg.ConfigFile, doc); err != nil {
+		return err
+	}
+	p.OK("Configuration written", cfg.ConfigFile)
+	return nil
+}
+
+// configDocument builds and validates the configuration file the install will
+// write, or returns nil when there is none to write: in container mode, and for
+// releases that predate the configuration file. quiet leaves out the warnings.
+func configDocument(p *ui.Printer, cfg *config.Config, containerMode, quiet bool) (*types.Config, error) {
 	if containerMode {
-		return nil
+		return nil, nil
 	}
 	if cmp, ok := compareVersions(cfg.Version, config.MinConfigFileVersion); ok && cmp < 0 {
 		log.Info().Msgf("kubesolo %s predates the configuration file; installing with flags instead", cfg.Version)
-		return nil
+		return nil, nil
 	}
 
 	cfg.ConfigFile = types.DefaultConfigFile
 
 	doc, warnings, err := cfg.ToKubeSoloConfig()
-	for _, w := range warnings {
-		p.Warn(w.String())
-	}
 	if err != nil {
-		return err
+		return nil, err
+	}
+	if !quiet {
+		for _, w := range warnings {
+			p.Warn(w.String())
+		}
+	}
+	return doc, nil
+}
+
+// stageRelease fetches the release and verifies it — checksum, architecture,
+// C library, version — before anything on the host changes. An offline
+// archive without a SHA256SUMS beside it, as bundles from older kubesoloctl
+// releases are, is installed unverified with a warning, as before.
+func stageRelease(p *ui.Printer, cfg *config.Config, info *detect.SystemInfo) (func(), *upgrade.Staged, error) {
+	req := upgrade.Request{Version: cfg.Version}
+	if cfg.OfflineInstall != "" {
+		abs, err := filepath.Abs(cfg.OfflineInstall)
+		if err != nil {
+			return func() {}, nil, p.Fail("offline source", err)
+		}
+		req.Source = abs
+		// The archive names its own version. Trust it over a --version left at
+		// its default, which would otherwise fail the version check below.
+		if v, ok := upgrade.VersionFromArchiveName(abs); ok && v != cfg.Version {
+			p.Info(fmt.Sprintf("installing %s, the version %s contains", v, filepath.Base(abs)))
+			cfg.Version, req.Version = v, v
+		}
 	}
 
-	if err := kubesoloconfig.Write(cfg.ConfigFile, doc); err != nil {
-		return err
-	}
+	layout := upgrade.NewLayout(cfg.Path, types.DefaultConfigFile)
+	staging := layout.RunStagingDir("install-" + upgrade.NewRunID())
+	cleanup := func() { _ = os.RemoveAll(staging) }
 
-	p.OK("Configuration written", cfg.ConfigFile)
-	return nil
+	p.Step(fmt.Sprintf("Fetching and verifying KubeSolo %s", req.Version))
+	staged, err := upgrade.Stage(context.Background(), layout, staging, req, info,
+		func(format string, args ...any) { p.Info(fmt.Sprintf(format, args...)) })
+	switch {
+	case err == nil:
+		p.OK("Release verified", staged.ChecksumSource)
+		return cleanup, staged, nil
+	case req.Source != "" && errors.Is(err, upgrade.ErrNoChecksum):
+		p.Warn(fmt.Sprintf("%s has no %s beside it, so it cannot be verified; `kubesoloctl download` writes one", filepath.Base(req.Source), upgrade.SumsFile))
+		return cleanup, nil, nil
+	default:
+		return cleanup, nil, p.Fail("release verification", err)
+	}
 }

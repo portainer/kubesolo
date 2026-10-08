@@ -137,6 +137,14 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	// caller did not pass --container-ports. 6443/2376 are excluded — those are
 	// re-bound fresh below with new random host ports.
 	prevWorkloadPorts := nat.PortMap{}
+
+	// The hostname is the node name, and the kubelet's client certificate and
+	// the Node object in the datastore are both issued for it. Docker defaults
+	// the hostname to the container ID, so every replacement container came up
+	// as a new node the old certificate is not authorised for, and never became
+	// Ready. A replacement keeps its predecessor's hostname, whatever it was; a
+	// first install uses the container name, which survives replacement.
+	hostname := m.cname()
 	if insp, err := cli.ContainerInspect(ctx, m.cname()); err == nil {
 		for p, b := range insp.HostConfig.PortBindings {
 			if p == "6443/tcp" || p == "2376/tcp" {
@@ -144,7 +152,20 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 			}
 			prevWorkloadPorts[p] = b
 		}
+		if insp.Config != nil && insp.Config.Hostname != "" {
+			hostname = insp.Config.Hostname
+		}
 	}
+
+	// Pull before touching the running container: a pull that fails (a typo in
+	// the tag, no network) must leave the cluster running, not removed.
+	log.Info().Msgf("pulling %s...", img)
+	rc, err := cli.ImagePull(ctx, img, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", img, err)
+	}
+	logPullProgress(rc)
+	_ = rc.Close()
 
 	// Stop and remove any existing container so install is idempotent.
 	timeout := 10
@@ -155,15 +176,6 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	if err := ensureNetwork(ctx, cli, m.nname(), mtu); err != nil {
 		return err
 	}
-
-	// Pull image, streaming meaningful status lines to zerolog.
-	log.Info().Msgf("pulling %s...", img)
-	rc, err := cli.ImagePull(ctx, img, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image %s: %w", img, err)
-	}
-	logPullProgress(rc)
-	_ = rc.Close()
 
 	// Bind to 127.0.0.1 with an empty HostPort so Docker picks a random
 	// ephemeral port. This allows multiple named clusters to run concurrently.
@@ -199,6 +211,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	resp, err := cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:        img,
+			Hostname:     hostname,
 			Cmd:          cmdArgs,
 			ExposedPorts: exposedPorts,
 		},
@@ -327,7 +340,10 @@ func ResetContainer(name string) error {
 	log.Info().Msgf("creating fresh container %q...", cname)
 	createResp, err := cli.ContainerCreate(ctx,
 		&container.Config{
-			Image:        img,
+			Image: img,
+			// The volume is fresh, so the node identity can move to the stable
+			// container name; see Install.
+			Hostname:     cname,
 			Cmd:          cmdArgs,
 			ExposedPorts: exposedPorts,
 		},
