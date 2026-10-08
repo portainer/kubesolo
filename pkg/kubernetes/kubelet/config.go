@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 
+	"github.com/portainer/kubesolo/internal/logging"
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
@@ -119,6 +120,11 @@ func (s *service) generateKubeletConfig() map[string]any {
 		"rotateCertificates": true,
 
 		"failSwapOn": false,
+
+		// write through the kubesolo logger
+		"logging": map[string]any{
+			"format": logging.K8sLogFormat,
+		},
 	}
 
 	if s.cpuManager.Policy == types.CPUManagerPolicyStatic {

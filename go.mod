@@ -10,12 +10,14 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.5.0
+	github.com/go-logr/logr v1.4.4
 	github.com/k3s-io/kine v0.16.3
 	github.com/klauspost/compress v1.18.6
 	github.com/mattn/go-sqlite3 v1.14.47
 	github.com/pelletier/go-toml v1.9.5
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/zerolog v1.33.0
+	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
@@ -29,6 +31,7 @@ require (
 	k8s.io/component-base v0.35.7
 	k8s.io/cri-api v0.35.6
 	k8s.io/cri-client v0.33.6
+	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubernetes v1.35.7
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	sigs.k8s.io/yaml v1.6.0
@@ -104,7 +107,6 @@ require (
 	github.com/getsentry/sentry-go v0.27.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
-	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.3-0.20220714215716-96bad1d688c5 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect
@@ -207,7 +209,6 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
-	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/smallstep/pkcs7 v0.1.1 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -275,7 +276,6 @@ require (
 	k8s.io/dynamic-resource-allocation v0.0.0 // indirect
 	k8s.io/endpointslice v0.32.0 // indirect
 	k8s.io/externaljwt v1.32.0 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kms v0.32.2 // indirect
 	k8s.io/kube-aggregator v0.33.6 // indirect
 	k8s.io/kube-controller-manager v0.0.0 // indirect

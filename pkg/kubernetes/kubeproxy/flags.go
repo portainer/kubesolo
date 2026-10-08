@@ -3,6 +3,7 @@ package kubeproxy
 import (
 	"os"
 
+	"github.com/portainer/kubesolo/internal/logging"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -49,4 +50,7 @@ func (s *service) configureKubeProxyFlags(command *cobra.Command) {
 	if proxyMode == "iptables" {
 		_ = flags.Set("masquerade-all", "true")
 	}
+
+	// logging - write through the kubesolo logger
+	_ = flags.Set("logging-format", logging.K8sLogFormat)
 }

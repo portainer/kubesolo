@@ -2,8 +2,10 @@ package logging
 
 import (
 	"fmt"
+	"io"
 	stdlog "log"
 	"os"
+	"sync/atomic"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -11,6 +13,16 @@ import (
 
 	logsapi "k8s.io/component-base/logs/api/v1"
 )
+
+// bridge is the logger that log lines from Kubernetes and containerd are written
+// through. It shares the output of the default logger but carries no caller hook:
+// the caller of a bridged line is somewhere inside the library that logged it, so
+// the bridge looks it up and sets the field itself.
+var bridge atomic.Pointer[zerolog.Logger]
+
+func init() {
+	setBridgeOutput(os.Stderr)
+}
 
 // ConfigureLogger configures the default logger for kubesolo
 // it is configured to use the zerolog library
@@ -44,23 +56,34 @@ func SetLoggingLevel(level string) {
 // SetLoggingMode sets the logging mode for the zerolog library
 // it switches on the logging mode
 func SetLoggingMode(mode string) {
+	var out io.Writer
 	switch mode {
 	case "PRETTY":
-		log.Logger = log.Output(zerolog.ConsoleWriter{
+		out = zerolog.ConsoleWriter{
 			Out:           os.Stderr,
 			TimeFormat:    "2006/01/02 03:04PM",
 			FormatMessage: formatMessage,
-		})
+		}
 	case "NOCOLOR":
-		log.Logger = log.Output(zerolog.ConsoleWriter{
+		out = zerolog.ConsoleWriter{
 			Out:           os.Stderr,
 			TimeFormat:    "2006/01/02 03:04PM",
 			FormatMessage: formatMessage,
 			NoColor:       true,
-		})
+		}
 	case "JSON":
-		log.Logger = log.Output(os.Stderr)
+		out = os.Stderr
+	default:
+		return
 	}
+
+	log.Logger = log.Output(out)
+	setBridgeOutput(out)
+}
+
+func setBridgeOutput(out io.Writer) {
+	l := zerolog.New(out).With().Timestamp().Logger()
+	bridge.Store(&l)
 }
 
 // FormatMessage formats the message for the zerolog library
@@ -74,7 +97,10 @@ func formatMessage(i any) string {
 }
 
 // ConfigureK8sDefaultLogging configures the default logging for kubernetes
-// it sets the reapply handling to ignore unchanged
+// it sets the reapply handling to ignore unchanged, and routes klog through the
+// kubesolo logger so that output written before the first Kubernetes component
+// applies its logging configuration is formatted the same way
 func ConfigureK8sDefaultLogging() {
 	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
+	configureKlog()
 }

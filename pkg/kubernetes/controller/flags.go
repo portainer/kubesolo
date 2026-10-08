@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/portainer/kubesolo/internal/logging"
 	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
 )
@@ -21,4 +22,7 @@ func (s *service) configureControllerManagerFlags(command *cobra.Command) {
 	_ = flags.Set("tls-private-key-file", s.controllerManagerKeyFile)
 	_ = flags.Set("leader-elect", "false")
 	_ = flags.Set("use-service-account-credentials", "true")
+
+	// logging - write through the kubesolo logger
+	_ = flags.Set("logging-format", logging.K8sLogFormat)
 }
