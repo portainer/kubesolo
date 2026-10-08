@@ -26,6 +26,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/upgrade"
+	"github.com/rs/zerolog/log"
 )
 
 // lockWait is how long the executor waits for the lock. The API or kubesoloctl
@@ -41,7 +42,7 @@ func Main(jobFile string) int {
 
 	job, err := upgrade.ReadJob(jobFile)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "upgrade executor:", err)
+		log.Error().Str("component", "upgrade").Err(err).Msg("upgrade executor: cannot read the job")
 		return 2
 	}
 	defer func() { _ = os.Remove(jobFile) }()
@@ -51,9 +52,9 @@ func Main(jobFile string) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
-	e := &executor{job: job, l: job.Layout(), ctx: ctx, out: os.Stdout}
+	e := &executor{job: job, l: job.Layout(), ctx: ctx}
 	if err := e.execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "upgrade executor:", err)
+		log.Error().Str("component", "upgrade").Err(err).Msg("upgrade executor failed")
 		return 1
 	}
 	return 0
@@ -63,7 +64,6 @@ type executor struct {
 	job upgrade.Job
 	l   upgrade.Layout
 	ctx context.Context
-	out io.Writer
 
 	state *upgrade.State
 	run   *upgrade.Run
@@ -129,7 +129,7 @@ func (e *executor) phase(p upgrade.Phase) {
 
 func (e *executor) logf(format string, args ...any) {
 	e.run.Log(format, args...)
-	_, _ = fmt.Fprintf(e.out, format+"\n", args...)
+	log.Info().Str("component", "upgrade").Msgf(format, args...)
 	if f, err := os.OpenFile(e.l.RunLog(e.run.ID), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
 		_, _ = fmt.Fprintf(f, format+"\n", args...)
 		_ = f.Close()
@@ -139,7 +139,7 @@ func (e *executor) logf(format string, args ...any) {
 
 func (e *executor) save() {
 	if err := upgrade.SaveState(e.l, e.state); err != nil {
-		_, _ = fmt.Fprintf(e.out, "could not save the upgrade state: %v\n", err)
+		log.Warn().Str("component", "upgrade").Err(err).Msg("could not save the upgrade state")
 	}
 }
 

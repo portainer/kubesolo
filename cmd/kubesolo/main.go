@@ -131,6 +131,10 @@ func main() {
 	// The upgrade runs the binary as its own helpers. Neither is KubeSolo, so
 	// they are dispatched before any configuration is loaded or validated.
 	if *flags.UpgradeExecutor != "" {
+		// The executor is not KubeSolo, but it logs in the same format.
+		logging.ConfigureLogger()
+		logging.SetLoggingMode("PRETTY")
+		logging.SetLoggingLevel("INFO")
 		os.Exit(executor.Main(*flags.UpgradeExecutor))
 	}
 	if *flags.UpgradeCheckDatastore != "" {
