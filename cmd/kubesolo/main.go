@@ -193,11 +193,12 @@ func (s *kubesolo) run() {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		log.Info().Msg("the main process received interrupt signal, shutting down...")
+		log.Info().Str("component", "kubesolo").Msg("the main process received interrupt signal, shutting down...")
 		cancel()
 	}()
 
 	log.Info().
+		Str("component", "kubesolo").
 		Str("version", Version).
 		Str("build-date", BuildDate).
 		Str("commit", Commit).

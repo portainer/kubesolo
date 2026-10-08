@@ -28,7 +28,7 @@ func (s *service) checkAPIServerReadiness() error {
 			return fmt.Errorf("failed to create %s check request: %v", endpoint, err)
 		}
 
-		if err := network.IsComponentHealthy(client, req, fmt.Sprintf("apiserver%s", endpoint)); err != nil {
+		if err := network.IsComponentHealthy(client, req, "apiserver"); err != nil {
 			return fmt.Errorf("apiserver %s check failed: %v", endpoint, err)
 		}
 	}
