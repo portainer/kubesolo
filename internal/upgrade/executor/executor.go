@@ -74,9 +74,6 @@ type executor struct {
 	from string
 }
 
-// abort is a failure before the host was changed.
-type abort struct{ error }
-
 func (e *executor) execute() error {
 	lock, err := upgrade.WaitLock(e.l, lockWait)
 	if err != nil {
@@ -652,7 +649,7 @@ const (
 func (e *executor) gate(want string, timeout time.Duration, watchGuard bool) gateOutcome {
 	deadline := time.Now().Add(timeout)
 	guardEvents := guardLogLines(e.l)
-	reason := "KubeSolo has not started"
+	var reason string
 
 	var pid int
 	var since, missingSince time.Time
