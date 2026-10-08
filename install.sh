@@ -1251,6 +1251,7 @@ upgrade_existing() {
         place_binary
         restart_service
         echo "✅ $APP_NAME upgraded from $from to $STAGED_VERSION"
+        migrate_to_config_file
         exit 0
     fi
 
@@ -1331,6 +1332,7 @@ JOB
     case "$result" in
         succeeded)
             echo "✅ $APP_NAME upgraded from $from to $STAGED_VERSION"
+            migrate_to_config_file
             echo "💡 To undo it: kubesoloctl rollback"
             exit 0
             ;;
@@ -1348,6 +1350,64 @@ JOB
     # printf, not echo: dash's echo would expand backslashes in the message.
     [ -n "$reason" ] && printf '   Reason: %s\n' "$reason"
     exit 1
+}
+
+# service_definition prints the file that holds KubeSolo's command line under
+# INIT_SYSTEM, in the form the create_*_service functions write it.
+service_definition() {
+    case "$INIT_SYSTEM" in
+        systemd) echo "/etc/systemd/system/$APP_NAME.service" ;;
+        openrc|sysvinit) echo "/etc/init.d/$APP_NAME" ;;
+        s6) echo "/etc/s6/sv/$APP_NAME/run" ;;
+        runit) echo "/etc/runit/sv/$APP_NAME/run" ;;
+        upstart) echo "/etc/init/$APP_NAME.conf" ;;
+    esac
+}
+
+# migrate_to_config_file moves an upgraded install that still passes its
+# settings as flags (installed before the configuration file existed) onto
+# CONFIG_FILE, as kubesoloctl upgrade does. An upgrade skips the steps below
+# that would otherwise write the file.
+#
+# The flags are read back from the service definition rather than taken from
+# this run, whose settings an upgrade does not apply. Only the arguments are
+# replaced, so everything else in the definition, such as proxy variables, is
+# kept, and the previous definition is left beside it as .bak. KubeSolo is not
+# restarted: the file holds what the running flags already resolve to, and the
+# next start reads it.
+migrate_to_config_file() {
+    local definition args tmp
+    [ -f "$CONFIG_FILE" ] && return 0
+    definition=$(service_definition)
+    [ -n "$definition" ] && [ -f "$definition" ] || return 0
+    args=$(sed -n \
+        -e "s|^ExecStart=$INSTALL_PATH \\(.*\\)\$|\\1|p" \
+        -e 's|^DAEMON_ARGS="\(.*\)"$|\1|p' \
+        -e 's|^command_args="\(.*\)"$|\1|p' \
+        -e "s|^exec $INSTALL_PATH \\(.*\\)\$|\\1|p" "$definition" | head -n1)
+    case " $args " in
+        "  "|*" --config"*) return 0 ;;
+    esac
+    "$INSTALL_PATH" --help 2>&1 | grep -q -- 'print-config' || return 0
+
+    mkdir -p "$(dirname "$CONFIG_FILE")" || return 0
+    tmp="$CONFIG_FILE.tmp.$$"
+    # Unquoted and not eval'd, as when the file is first written below.
+    if ! ( set -f; "$INSTALL_PATH" $args --print-config ) > "$tmp" 2>/dev/null || [ ! -s "$tmp" ]; then
+        rm -f "$tmp"
+        echo "⚠️  Could not convert the service's flags into $CONFIG_FILE; leaving them in place"
+        return 0
+    fi
+    chmod 600 "$tmp"
+    cp "$definition" "$definition.bak" || { rm -f "$tmp"; return 0; }
+    mv "$tmp" "$CONFIG_FILE" || return 0
+    sed -i \
+        -e "s|^ExecStart=$INSTALL_PATH .*\$|ExecStart=$INSTALL_PATH --config=$CONFIG_FILE|" \
+        -e "s|^DAEMON_ARGS=\".*\"\$|DAEMON_ARGS=\"--config=$CONFIG_FILE\"|" \
+        -e "s|^command_args=\".*\"\$|command_args=\"--config=$CONFIG_FILE\"|" \
+        -e "s|^exec $INSTALL_PATH .*\$|exec $INSTALL_PATH --config=$CONFIG_FILE|" "$definition" || return 0
+    [ "$INIT_SYSTEM" = "systemd" ] && systemctl daemon-reload
+    echo "✅ Settings moved to $CONFIG_FILE (previous service definition kept at $definition.bak)"
 }
 
 # run_error STATE_FILE ID prints the error the executor recorded for run ID, if
