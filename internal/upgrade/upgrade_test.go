@@ -3,6 +3,7 @@ package upgrade
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -204,6 +205,30 @@ func TestRequestValidate(t *testing.T) {
 	}
 	if (Request{}).HealthTimeout() != DefaultHealthTimeout || (Request{HealthTimeoutSeconds: 30}).HealthTimeout() != 30*time.Second {
 		t.Error("HealthTimeout")
+	}
+}
+
+func TestValidateHealthTimeout(t *testing.T) {
+	// 18446744134s is 2^64ns + ~60.3s: converted to a Duration it wraps to about a
+	// minute and would pass a duration-based minimum. Built at run time so the
+	// literal also compiles where int is 32 bits.
+	var wraps int64 = 18446744134
+	cases := []struct {
+		seconds int
+		ok      bool
+	}{
+		{-1, false},
+		{0, true},
+		{59, false},
+		{60, true},
+		{600, true},
+		{int(wraps), false},
+		{math.MaxInt, false},
+	}
+	for _, c := range cases {
+		if err := ValidateHealthTimeout(c.seconds); (err == nil) != c.ok {
+			t.Errorf("ValidateHealthTimeout(%d) = %v, want ok=%v", c.seconds, err, c.ok)
+		}
 	}
 }
 

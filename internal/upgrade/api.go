@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -46,6 +47,29 @@ const DefaultHealthTimeout = 10 * time.Minute
 // after it has started, so a shorter timeout can never be met.
 const MinHealthTimeout = time.Minute
 
+// maxHealthTimeoutSeconds is the largest healthTimeoutSeconds that converts to a
+// time.Duration without overflowing.
+const maxHealthTimeoutSeconds = math.MaxInt64 / int64(time.Second)
+
+// ValidateHealthTimeout checks a healthTimeoutSeconds value: 0 for the default,
+// or from MinHealthTimeout up to the longest duration that can be represented.
+// Upgrades and rollbacks both carry one. The seconds are compared as they are:
+// converting first could overflow, and a wrapped value can land on a plausible
+// timeout.
+func ValidateHealthTimeout(seconds int) error {
+	switch {
+	case seconds < 0:
+		return errors.New("healthTimeoutSeconds cannot be negative")
+	case seconds == 0:
+		return nil
+	case seconds < int(MinHealthTimeout/time.Second):
+		return fmt.Errorf("healthTimeoutSeconds must be at least %d: KubeSolo has to stay up and healthy for 30s after it starts", int(MinHealthTimeout/time.Second))
+	case int64(seconds) > maxHealthTimeoutSeconds:
+		return fmt.Errorf("healthTimeoutSeconds %d is too large", seconds)
+	}
+	return nil
+}
+
 // HealthTimeout returns the effective health-gate timeout.
 func (r Request) HealthTimeout() time.Duration {
 	if r.HealthTimeoutSeconds > 0 {
@@ -79,13 +103,7 @@ func (r Request) Validate() error {
 			return fmt.Errorf("sha256 %q is not a hex-encoded SHA-256 checksum", r.SHA256)
 		}
 	}
-	if r.HealthTimeoutSeconds < 0 {
-		return errors.New("healthTimeoutSeconds cannot be negative")
-	}
-	if r.HealthTimeoutSeconds > 0 && r.HealthTimeout() < MinHealthTimeout {
-		return fmt.Errorf("healthTimeoutSeconds must be at least %d: KubeSolo has to stay up and healthy for 30s after it starts", int(MinHealthTimeout/time.Second))
-	}
-	return nil
+	return ValidateHealthTimeout(r.HealthTimeoutSeconds)
 }
 
 // Accepted is the body of a 202 from POST /api/v1/upgrade or /rollback.
