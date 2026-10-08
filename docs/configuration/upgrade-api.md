@@ -127,7 +127,7 @@ and only until the next upgrade replaces the backup. Restoring the datastore
 together with the binary is what makes it safe: an older Kubernetes API server
 reading objects a newer one wrote can silently drop fields it does not know.
 
-Body (optional): `{"healthTimeoutSeconds": 600}`.
+Body (optional): `{"healthTimeoutSeconds": 600}` (minimum 60).
 
 `409` when there is no valid backup — none was taken, or it belongs to an
 upgrade other than the one that installed the running version.

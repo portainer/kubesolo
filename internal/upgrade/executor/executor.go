@@ -470,6 +470,9 @@ func restoreSELinuxContext(path string) {
 
 func (e *executor) rollback() (upgrade.Result, error) {
 	e.phase(upgrade.PhasePreflight)
+	if err := upgrade.ValidateHealthTimeout(e.job.Request.HealthTimeoutSeconds); err != nil {
+		return upgrade.ResultAborted, err
+	}
 	if err := e.detectHost(); err != nil {
 		return upgrade.ResultAborted, err
 	}

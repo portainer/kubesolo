@@ -304,6 +304,16 @@ func TestRollback(t *testing.T) {
 		t.Errorf("unknown field: %d %s", resp.StatusCode, raw)
 	}
 
+	for _, seconds := range []any{1, -1, uint64(18446744134)} {
+		resp, raw = do(t, a.client, "POST", "/api/v1/rollback", map[string]any{"healthTimeoutSeconds": seconds}, nil)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("healthTimeoutSeconds %v: %d %s", seconds, resp.StatusCode, raw)
+		}
+	}
+	if len(a.spawned()) != 0 {
+		t.Fatal("a rejected rollback started the executor")
+	}
+
 	resp, raw = do(t, a.client, "POST", "/api/v1/rollback", map[string]any{"healthTimeoutSeconds": 90}, nil)
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("valid rollback: %d %s", resp.StatusCode, raw)
