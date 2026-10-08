@@ -29,7 +29,7 @@ func configureLogging(debug bool) {
 		log.Logger = log.Output(zerolog.ConsoleWriter{
 			Out:        os.Stderr,
 			NoColor:    !color,
-			TimeFormat: "2006/01/02 03:04PM",
+			TimeFormat: "2006/01/02 15:04:05.000",
 		})
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 		return

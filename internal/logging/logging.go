@@ -30,7 +30,8 @@ func init() {
 func ConfigureLogger() {
 	zerolog.ErrorStackFieldName = "stack_trace"
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	// Milliseconds, so the console time below has them to show.
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
 	zerolog.CallerMarshalFunc = callerMarshal
 
 	stdlog.SetFlags(0)
@@ -54,6 +55,11 @@ func SetLoggingLevel(level string) {
 	}
 }
 
+// consoleTimeFormat is the time in console output: 24-hour, to the millisecond,
+// the precision the Kubernetes and containerd formats had before their lines
+// were written through this logger.
+const consoleTimeFormat = "2006/01/02 15:04:05.000"
+
 // SetLoggingMode sets the logging mode for the zerolog library
 // it switches on the logging mode
 func SetLoggingMode(mode string) {
@@ -62,14 +68,14 @@ func SetLoggingMode(mode string) {
 	case "PRETTY":
 		out = zerolog.ConsoleWriter{
 			Out:           os.Stderr,
-			TimeFormat:    "2006/01/02 03:04PM",
+			TimeFormat:    consoleTimeFormat,
 			FormatMessage: formatMessage,
 			NoColor:       !isTerminal(os.Stderr),
 		}
 	case "NOCOLOR":
 		out = zerolog.ConsoleWriter{
 			Out:           os.Stderr,
-			TimeFormat:    "2006/01/02 03:04PM",
+			TimeFormat:    consoleTimeFormat,
 			FormatMessage: formatMessage,
 			NoColor:       true,
 		}
