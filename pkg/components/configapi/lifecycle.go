@@ -132,10 +132,14 @@ func (s *Service) handleRollback(w http.ResponseWriter, r *http.Request) {
 	if len(bytes.TrimSpace(body)) > 0 {
 		dec := json.NewDecoder(bytes.NewReader(body))
 		dec.DisallowUnknownFields()
-		if err := dec.Decode(&rb); err != nil || rb.HealthTimeoutSeconds < 0 {
+		if err := dec.Decode(&rb); err != nil {
 			writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: "body is not a valid rollback request"})
 			return
 		}
+	}
+	if err := upgrade.ValidateHealthTimeout(rb.HealthTimeoutSeconds); err != nil {
+		writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
 	}
 
 	target, err := upgrade.RollbackTarget(s.layout(), lc.Version)

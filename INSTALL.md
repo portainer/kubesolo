@@ -49,7 +49,7 @@ The existing `/etc/kubesolo/config.yaml` is kept as it is. Settings passed to an
 | Variable | Effect |
 |---|---|
 | `KUBESOLO_FORCE=true` | Allow installing a version older than the installed one. To undo the last upgrade, use `kubesoloctl rollback` instead. |
-| `KUBESOLO_HEALTH_TIMEOUT=SECONDS` | How long the new version has to become healthy before it is rolled back (default 600). |
+| `KUBESOLO_HEALTH_TIMEOUT=SECONDS` | How long the new version has to become healthy before it is rolled back (default 600, minimum 60). |
 | `KUBESOLO_SHA256=SUM` | The expected checksum of the archive, instead of the published one. |
 
 See the [upgrade API](docs/configuration/upgrade-api.md) for how the upgrade works and what is backed up.

@@ -49,6 +49,9 @@ func runRollback(yes, detach bool, healthTimeout time.Duration) error {
 	p := ui.New()
 	p.Header("rollback")
 
+	if err := upgrade.ValidateHealthTimeout(int(healthTimeout / time.Second)); err != nil {
+		return p.Fail("--health-timeout", err)
+	}
 	if err := preflight.CheckRoot(); err != nil {
 		return p.Fail("root check", err)
 	}

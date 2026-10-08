@@ -268,7 +268,7 @@ func (e *executor) upgrade() (upgrade.Result, error) {
 		// came up.
 		e.run.Phase = upgrade.PhaseRollingBack
 		e.logf("%s", outcome.reason)
-		if back := e.gate(e.from, req.HealthTimeout(), false); back.kind != gateHealthy {
+		if back := e.gate(e.from, req.RestoreHealthTimeout(), false); back.kind != gateHealthy {
 			return upgrade.ResultFailed, fmt.Errorf("%s, and %s did not become healthy: %s", outcome.reason, e.from, back.reason)
 		}
 		return upgrade.ResultRolledBack, errors.New(outcome.reason)
@@ -470,6 +470,9 @@ func restoreSELinuxContext(path string) {
 
 func (e *executor) rollback() (upgrade.Result, error) {
 	e.phase(upgrade.PhasePreflight)
+	if err := upgrade.ValidateHealthTimeout(e.job.Request.HealthTimeoutSeconds); err != nil {
+		return upgrade.ResultAborted, err
+	}
 	if err := e.detectHost(); err != nil {
 		return upgrade.ResultAborted, err
 	}
@@ -542,7 +545,7 @@ func (e *executor) restore(cause error) (upgrade.Result, error) {
 	if err := e.svc.Start(); err != nil {
 		return upgrade.ResultFailed, fmt.Errorf("%w; and starting %s again failed: %v", cause, m.From, err)
 	}
-	if back := e.gate(m.From, e.job.Request.HealthTimeout(), false); back.kind != gateHealthy {
+	if back := e.gate(m.From, e.job.Request.RestoreHealthTimeout(), false); back.kind != gateHealthy {
 		return upgrade.ResultFailed, fmt.Errorf("%w; %s was restored but did not become healthy: %s", cause, m.From, back.reason)
 	}
 	e.logf("%s restored and healthy", m.From)

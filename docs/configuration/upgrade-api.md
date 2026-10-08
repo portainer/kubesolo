@@ -82,7 +82,7 @@ curl --unix-socket /var/lib/kubesolo/config.sock -X POST http://localhost/api/v1
 | `source` | no | Absolute path to a release archive (`.tar.gz`) or binary already on the host — for air-gapped upgrades. |
 | `sha256` | no | Expected checksum of the archive or binary. Otherwise taken from `SHA256SUMS`. |
 | `force` | no | Allow a version that is not newer than the running one. |
-| `healthTimeoutSeconds` | no | How long the new version has to become healthy. Default 600. |
+| `healthTimeoutSeconds` | no | How long the new version has to become healthy. Default 600, minimum 60. If it is rolled back, the restored version gets at least the default. |
 
 ```json
 {"id": "3f9c2a1b7e40", "operation": "upgrade", "from": "v1.2.1", "to": "v1.2.2", "statusPath": "/api/v1/status"}
@@ -127,7 +127,7 @@ and only until the next upgrade replaces the backup. Restoring the datastore
 together with the binary is what makes it safe: an older Kubernetes API server
 reading objects a newer one wrote can silently drop fields it does not know.
 
-Body (optional): `{"healthTimeoutSeconds": 600}`.
+Body (optional): `{"healthTimeoutSeconds": 600}` (minimum 60).
 
 `409` when there is no valid backup — none was taken, or it belongs to an
 upgrade other than the one that installed the running version.

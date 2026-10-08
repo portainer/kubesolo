@@ -3,6 +3,7 @@ package upgrade
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -192,6 +193,10 @@ func TestRequestValidate(t *testing.T) {
 		{Request{Version: "v1.2.2", SHA256: "abc"}, false},
 		{Request{Version: "v1.2.2", SHA256: strings.Repeat("zz", 32)}, false},
 		{Request{Version: "v1.2.2", HealthTimeoutSeconds: -1}, false},
+		// Below MinHealthTimeout the gate's stability window cannot fit.
+		{Request{Version: "v1.2.2", HealthTimeoutSeconds: 20}, false},
+		{Request{Version: "v1.2.2", HealthTimeoutSeconds: 59}, false},
+		{Request{Version: "v1.2.2", HealthTimeoutSeconds: 60}, true},
 	}
 	for _, c := range cases {
 		if err := c.req.Validate(); (err == nil) != c.ok {
@@ -200,6 +205,48 @@ func TestRequestValidate(t *testing.T) {
 	}
 	if (Request{}).HealthTimeout() != DefaultHealthTimeout || (Request{HealthTimeoutSeconds: 30}).HealthTimeout() != 30*time.Second {
 		t.Error("HealthTimeout")
+	}
+}
+
+func TestValidateHealthTimeout(t *testing.T) {
+	// 18446744134s is 2^64ns + ~60.3s: converted to a Duration it wraps to about a
+	// minute and would pass a duration-based minimum. Built at run time so the
+	// literal also compiles where int is 32 bits.
+	var wraps int64 = 18446744134
+	cases := []struct {
+		seconds int
+		ok      bool
+	}{
+		{-1, false},
+		{0, true},
+		{59, false},
+		{60, true},
+		{600, true},
+		{int(wraps), false},
+		{math.MaxInt, false},
+	}
+	for _, c := range cases {
+		if err := ValidateHealthTimeout(c.seconds); (err == nil) != c.ok {
+			t.Errorf("ValidateHealthTimeout(%d) = %v, want ok=%v", c.seconds, err, c.ok)
+		}
+	}
+}
+
+// A version restored after a failed upgrade gets at least the default timeout,
+// whatever short one the new version was given.
+func TestRestoreHealthTimeout(t *testing.T) {
+	cases := []struct {
+		seconds int
+		want    time.Duration
+	}{
+		{0, DefaultHealthTimeout},
+		{60, DefaultHealthTimeout},
+		{3600, time.Hour},
+	}
+	for _, c := range cases {
+		if got := (Request{HealthTimeoutSeconds: c.seconds}).RestoreHealthTimeout(); got != c.want {
+			t.Errorf("RestoreHealthTimeout(%ds) = %s, want %s", c.seconds, got, c.want)
+		}
 	}
 }
 
