@@ -181,3 +181,58 @@ func TestLogrusComponent(t *testing.T) {
 	assert.Equal(t, "kine", logging.LogrusComponent("github.com/k3s-io/kine/pkg/logstructured/sqllog.(*SQLLog).compactor"))
 	assert.Equal(t, "", logging.LogrusComponent("github.com/containerd/containerd/v2/cmd/containerd/server.New"))
 }
+
+// zerolog's Fatal() and Panic() exit and panic, but WithLevel does not. The
+// bridges rely on that so klog and logrus keep their own fatal and panic
+// handling; these tests fail if a zerolog upgrade changes it.
+
+func TestLogrusPanicKeepsLogrusControlFlow(t *testing.T) {
+	read := capture(t, zerolog.InfoLevel)
+
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		logrus.Panic("bad state")
+	}()
+
+	_, isEntry := recovered.(*logrus.Entry)
+	assert.True(t, isEntry, "logrus, not zerolog, should raise the panic, got %T", recovered)
+
+	lines := read()
+	require.Len(t, lines, 1)
+	assert.Equal(t, "panic", lines[0]["level"])
+	assert.Equal(t, "bad state", lines[0]["message"])
+}
+
+func TestLogrusFatalLeavesExitToLogrus(t *testing.T) {
+	read := capture(t, zerolog.InfoLevel)
+
+	exited := 0
+	logger := logrus.StandardLogger()
+	previousExit := logger.ExitFunc
+	logger.ExitFunc = func(int) { exited++ }
+	t.Cleanup(func() { logger.ExitFunc = previousExit })
+
+	// Called through a value: linters treat logrus.Fatal as never returning,
+	// which it does here with ExitFunc stubbed out.
+	fatal := logger.Fatal
+	fatal("cannot continue")
+
+	assert.Equal(t, 1, exited, "logrus's ExitFunc should run")
+	lines := read()
+	require.Len(t, lines, 1)
+	assert.Equal(t, "fatal", lines[0]["level"])
+}
+
+func TestKlogFatalBufferDoesNotExit(t *testing.T) {
+	read := capture(t, zerolog.InfoLevel)
+
+	// The buffer klog hands over for klog.Fatal, before klog exits on its own.
+	sink := klog.Background().GetSink().(interface{ WriteKlogBuffer([]byte) })
+	sink.WriteKlogBuffer([]byte("F1008 21:29:01.123456    1234 server.go:42] cannot bind\n"))
+
+	lines := read()
+	require.Len(t, lines, 1)
+	assert.Equal(t, "fatal", lines[0]["level"])
+	assert.Equal(t, "cannot bind", lines[0]["message"])
+}
