@@ -37,10 +37,23 @@ func (s *Service) Run() error {
 		Str("socket", s.opts.SocketPath).
 		Msg("starting kubesolo configuration API...")
 
-	srv, err := s.startServer()
+	srv, err := s.startServer(s.opts.SocketPath)
 	if err != nil {
 		log.Error().Str("component", "configapi").Err(err).Msg("failed to start configuration API")
 		return err
+	}
+
+	// The agent's socket is a second listener on the same API, in a directory
+	// of its own that can be mounted into the agent's pod without exposing the
+	// rest of the data directory. Failing to open it costs the agent its
+	// access, not KubeSolo its API.
+	var agentSrv *http.Server
+	if s.opts.AgentSocketPath != "" {
+		if agentSrv, err = s.startServer(s.opts.AgentSocketPath); err != nil {
+			log.Error().Str("component", "configapi").Err(err).Msg("failed to open the API socket for the Portainer agent")
+		} else {
+			log.Info().Str("component", "configapi").Str("socket", s.opts.AgentSocketPath).Msg("API socket for the Portainer agent is ready")
+		}
 	}
 
 	close(s.readyCh)
@@ -53,13 +66,19 @@ func (s *Service) Run() error {
 	log.Info().Str("component", "configapi").Msg("shutting down configuration API...")
 
 	s.shutdownServer(srv)
+	s.shutdownServer(agentSrv)
 	s.wg.Wait()
 
 	// The socket is a filesystem entry and does not disappear with the process.
 	// Removing it on the way out is what makes the next start clean rather than
 	// a reclaim.
-	if err := os.Remove(s.opts.SocketPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		log.Warn().Str("component", "configapi").Err(err).Msg("could not remove the configuration API socket")
+	for _, path := range []string{s.opts.SocketPath, s.opts.AgentSocketPath} {
+		if path == "" {
+			continue
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			log.Warn().Str("component", "configapi").Err(err).Str("socket", path).Msg("could not remove the configuration API socket")
+		}
 	}
 
 	log.Info().Str("component", "configapi").Msg("configuration API stopped")
@@ -70,28 +89,28 @@ func (s *Service) Run() error {
 //
 // The listener is created synchronously so that a bind failure reaches the
 // caller rather than being swallowed inside a goroutine.
-func (s *Service) startServer() (*http.Server, error) {
-	if err := s.clearStaleSocket(); err != nil {
+func (s *Service) startServer(socketPath string) (*http.Server, error) {
+	if err := clearStaleSocket(socketPath); err != nil {
 		return nil, err
 	}
 
-	dir := filepath.Dir(s.opts.SocketPath)
+	dir := filepath.Dir(socketPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create %s: %w", dir, err)
 	}
 
-	listener, err := net.Listen("unix", s.opts.SocketPath)
+	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return nil, fmt.Errorf("listen on %s: %w", s.opts.SocketPath, err)
+		return nil, fmt.Errorf("listen on %s: %w", socketPath, err)
 	}
 
 	// Between Listen and Chmod the socket exists with the process umask applied.
 	// net.Listen creates it 0777&^umask, so a permissive umask would leave a
 	// window where anyone could connect. Narrow it immediately, and refuse to
 	// serve at all if that fails.
-	if err := os.Chmod(s.opts.SocketPath, socketMode); err != nil {
+	if err := os.Chmod(socketPath, socketMode); err != nil {
 		_ = listener.Close()
-		return nil, fmt.Errorf("restrict %s to its owner: %w", s.opts.SocketPath, err)
+		return nil, fmt.Errorf("restrict %s to its owner: %w", socketPath, err)
 	}
 
 	srv := &http.Server{
@@ -118,30 +137,30 @@ func (s *Service) startServer() (*http.Server, error) {
 // the original serving a socket no longer reachable by name. So the path is
 // removed only when it is a socket *and* nothing answers on it. Anything else —
 // a regular file, a directory, or a socket with a live listener — is an error.
-func (s *Service) clearStaleSocket() error {
-	info, err := os.Lstat(s.opts.SocketPath)
+func clearStaleSocket(socketPath string) error {
+	info, err := os.Lstat(socketPath)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("inspect %s: %w", s.opts.SocketPath, err)
+		return fmt.Errorf("inspect %s: %w", socketPath, err)
 	}
 
 	if info.Mode()&os.ModeSocket == 0 {
-		return fmt.Errorf("%s exists and is not a socket; refusing to replace it", s.opts.SocketPath)
+		return fmt.Errorf("%s exists and is not a socket; refusing to replace it", socketPath)
 	}
 
-	if conn, err := net.DialTimeout("unix", s.opts.SocketPath, dialProbeTimeout); err == nil {
+	if conn, err := net.DialTimeout("unix", socketPath, dialProbeTimeout); err == nil {
 		_ = conn.Close()
-		return fmt.Errorf("%s is already in use by another process", s.opts.SocketPath)
+		return fmt.Errorf("%s is already in use by another process", socketPath)
 	}
 
 	log.Info().
 		Str("component", "configapi").
-		Str("socket", s.opts.SocketPath).
+		Str("socket", socketPath).
 		Msg("removing a socket left behind by a previous run")
-	if err := os.Remove(s.opts.SocketPath); err != nil {
-		return fmt.Errorf("remove stale socket %s: %w", s.opts.SocketPath, err)
+	if err := os.Remove(socketPath); err != nil {
+		return fmt.Errorf("remove stale socket %s: %w", socketPath, err)
 	}
 	return nil
 }

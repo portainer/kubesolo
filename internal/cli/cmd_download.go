@@ -58,7 +58,8 @@ Examples:
 
 			archiveName := info.ArchiveName(cfg.Version)
 			p.Step(fmt.Sprintf("Downloading KubeSolo %s", cfg.Version))
-			if err := download.DownloadBundle(dir, archiveName, cfg.Version); err != nil {
+			sameArch := targetArch == "" || info.Arch == runtime.GOARCH && runtime.GOOS == "linux"
+			if err := download.DownloadBundle(dir, archiveName, info.InstallerName(), cfg.Version, sameArch); err != nil {
 				return p.Fail("download", err)
 			}
 

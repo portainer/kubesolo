@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/types"
 )
 
@@ -93,7 +94,43 @@ func (c *Client) Reset() (*Response, error) {
 	return c.do(http.MethodDelete, "/api/v1/config", nil, "")
 }
 
+// Upgrade asks KubeSolo to upgrade itself. It returns once the upgrade has been
+// accepted; follow it with Status.
+func (c *Client) Upgrade(req upgrade.Request) (*upgrade.Accepted, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	var out upgrade.Accepted
+	return &out, c.doJSON(http.MethodPost, "/api/v1/upgrade", body, "application/json", &out)
+}
+
+// Rollback asks KubeSolo to restore the version before the last upgrade.
+func (c *Client) Rollback(healthTimeoutSeconds int) (*upgrade.Accepted, error) {
+	body, err := json.Marshal(rollbackRequest{HealthTimeoutSeconds: healthTimeoutSeconds})
+	if err != nil {
+		return nil, err
+	}
+	var out upgrade.Accepted
+	return &out, c.doJSON(http.MethodPost, "/api/v1/rollback", body, "application/json", &out)
+}
+
+// Status reads the running version, health and upgrade record.
+func (c *Client) Status() (*upgrade.Status, error) {
+	var out upgrade.Status
+	return &out, c.doJSON(http.MethodGet, "/api/v1/status", nil, "", &out)
+}
+
 func (c *Client) do(method, path string, body []byte, contentType string) (*Response, error) {
+	var out Response
+	if err := c.doJSON(method, path, body, contentType, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// doJSON sends a request and decodes a successful response into out.
+func (c *Client) doJSON(method, path string, body []byte, contentType string, out any) error {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -101,7 +138,7 @@ func (c *Client) do(method, path string, body []byte, contentType string) (*Resp
 
 	req, err := http.NewRequest(method, "http://localhost"+path, reader)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
@@ -109,13 +146,13 @@ func (c *Client) do(method, path string, body []byte, contentType string) (*Resp
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("configuration API at %s: %w", c.socketPath, err)
+		return fmt.Errorf("configuration API at %s: %w", c.socketPath, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if resp.StatusCode >= 300 {
@@ -124,16 +161,23 @@ func (c *Client) do(method, path string, body []byte, contentType string) (*Resp
 		var failure ErrorResponse
 		if err := json.Unmarshal(raw, &failure); err == nil && failure.Error != "" {
 			if failure.Field != "" {
-				return nil, fmt.Errorf("%s: %s", failure.Field, failure.Error)
+				return &APIError{Status: resp.StatusCode, Message: failure.Field + ": " + failure.Error}
 			}
-			return nil, fmt.Errorf("%s", failure.Error)
+			return &APIError{Status: resp.StatusCode, Message: failure.Error}
 		}
-		return nil, fmt.Errorf("configuration API returned %s", resp.Status)
+		return &APIError{Status: resp.StatusCode, Message: "configuration API returned " + resp.Status}
 	}
 
-	var out Response
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("could not read the response from the configuration API: %w", err)
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("could not read the response from the configuration API: %w", err)
 	}
-	return &out, nil
+	return nil
 }
+
+// APIError is a request the API answered with an error status.
+type APIError struct {
+	Status  int
+	Message string
+}
+
+func (e *APIError) Error() string { return e.Message }

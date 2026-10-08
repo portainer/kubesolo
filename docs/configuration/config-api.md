@@ -226,5 +226,6 @@ A `412` means the configuration moved; read it again and reapply.
 
 ## See also
 
+- [Upgrade API](upgrade-api.md) — upgrade, rollback and status over the same socket
 - [Configuration file](config-file.md)
 - [kubesoloctl](../installation/kubesoloctl.md) — `kubesoloctl config` uses this API when it is running

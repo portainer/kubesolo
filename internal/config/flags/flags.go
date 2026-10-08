@@ -50,6 +50,11 @@ var (
 	Config                   = Application.Flag("config", "Path to the KubeSolo configuration file.").Envar("KUBESOLO_CONFIG").Default(types.DefaultConfigFile).String()
 	PrintConfig              = Application.Flag("print-config", "Print the effective configuration to stdout and exit, without starting anything. Useful for migrating an existing flag-based install: run it with the flags currently in the service unit and save the result as the config file.").Bool()
 	ReservedCPUs             = tracked(Application.Flag("reserved-cpus", "Cpuset reserved for the host and kubesolo itself, for example 0 or 0-1. These CPUs are never given out as exclusive cores. Only honoured when --cpu-manager-policy=static, where it defaults to 0 because the static policy requires a non-empty reservation. Deprecated: set this in the KubeSolo config file instead.").Envar("KUBESOLO_RESERVED_CPUS")).String()
+	// UpgradeExecutor and UpgradeCheckDatastore run the binary as one of the
+	// upgrade's own helpers instead of as KubeSolo. They are internal: the
+	// upgrade starts them, nobody else should.
+	UpgradeExecutor       = Application.Flag("upgrade-executor", "Run as the upgrade executor for the given job file.").Hidden().String()
+	UpgradeCheckDatastore = Application.Flag("upgrade-check-datastore", "Migrate and check a copy of the datastore, then exit.").Hidden().String()
 )
 
 // setByUser records, per flag name, whether the value came from the command line.

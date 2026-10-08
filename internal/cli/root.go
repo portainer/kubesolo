@@ -49,8 +49,12 @@ Examples:
   # Air-gap install from a local archive:
   sudo kubesoloctl install --offline-install=/tmp/kubesolo-v1.2.1-linux-amd64.tar.gz
 
-  # Upgrade to a newer version:
-  sudo kubesoloctl upgrade --version=v1.2.1
+  # Upgrade to a newer version, rolling back automatically if it fails:
+  sudo kubesoloctl upgrade --version=v1.2.2
+
+  # Undo the last upgrade, and see how the last one went:
+  sudo kubesoloctl rollback
+  sudo kubesoloctl status
 
   # Check pre-flight conditions without installing:
   kubesoloctl check`,
@@ -65,6 +69,8 @@ Examples:
 		installCmd(&cfg),
 		uninstallCmd(),
 		upgradeCmd(&cfg),
+		rollbackCmd(),
+		statusCmd(),
 		kubeconfigCmd(),
 		configCmd(),
 		d2kCmd(),

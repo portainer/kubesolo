@@ -17,17 +17,16 @@ The script only accepts the flags listed on this page, plus `--help`. Any other 
 The installer does not write the file itself. It runs the newly installed binary with the resolved settings plus `--print-config`, saves the output as `/etc/kubesolo/config.yaml` (mode `0600`), and starts the service with `--config=/etc/kubesolo/config.yaml` as its only flag. The binary resolves settings in its usual order, so the file reflects:
 
 1. the built-in defaults,
-2. an existing `/etc/kubesolo/config.yaml`, if there is one (a reinstall keeps its settings, except `path`; see below),
-3. every `KUBESOLO_*` environment variable in the installer's environment that KubeSolo recognises, including ones the installer has no flag for, such as `KUBESOLO_MTU` or `KUBESOLO_NODE_IP` ([full list](../configuration/config-file.md#flag-and-environment-variable-equivalents)),
-4. the installer flags.
+2. every `KUBESOLO_*` environment variable in the installer's environment that KubeSolo recognises, including ones the installer has no flag for, such as `KUBESOLO_MTU` or `KUBESOLO_NODE_IP` ([full list](../configuration/config-file.md#flag-and-environment-variable-equivalents)),
+3. the installer flags.
 
-Three consequences of that order:
+The file is generated with the new binary before anything that is running is stopped, so a setting KubeSolo rejects — an address that is not an IP, say — fails the install with nothing changed.
 
-- The installer always passes `--path`, defaulting to `/var/lib/kubesolo`, so it overrides `path` from an existing file. When reinstalling or upgrading a node that uses a custom data directory, pass `--path` again (for example `--path=/data/kubesolo`); otherwise KubeSolo starts against an empty `/var/lib/kubesolo` and the existing cluster appears to be gone.
-- A boolean the installer only passes when it is `true` (`--debug`, `--pprof-server`, `--portainer-edge-async`, `--d2k`) cannot switch off a value an existing file has set to `true`. Use `kubesoloctl config set` for that.
-- Environment variables only reach the file if they reach the script. `sudo` drops them unless you use `sudo -E` (the installer also tries to recover `KUBESOLO_*` variables from the parent process when `KUBESOLO_PORTAINER_EDGE_KEY` is missing).
+On a host where KubeSolo is already installed, the existing file is kept as it is and the settings passed to the installer are not applied; the installer says so. A different version is installed as an [upgrade](../../INSTALL.md#upgrading-with-the-installer). Change the settings of an existing install with `kubesoloctl config set`.
 
-If the binary predates the configuration file, or `--print-config` fails, the installer falls back to passing flags on the service command line, and only the settings the installer itself knows about are applied.
+Environment variables only reach the file if they reach the script. `sudo` drops them unless you use `sudo -E` (the installer also tries to recover `KUBESOLO_*` variables from the parent process when `KUBESOLO_PORTAINER_EDGE_KEY` is missing).
+
+If the binary predates the configuration file, the installer passes flags on the service command line instead, and only the settings the installer itself knows about are applied.
 
 ---
 
@@ -319,7 +318,7 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --proxy=http://proxy.corp.inte
 
 ### --offline-install
 
-Install from a local binary or archive instead of downloading from GitHub. Accepts a path to a `.tar.gz` archive, a `.zip` archive, or a raw binary. Useful in air-gapped environments.
+Install from a local binary or archive instead of downloading from GitHub. Accepts a path to a `.tar.gz` archive, a `.zip` archive, or a raw binary. Useful in air-gapped environments. The file is checked against a `SHA256SUMS` beside it, which `--download-only` writes, or against `KUBESOLO_SHA256`; without either it is installed with a warning that it could not be verified. The version installed is the one the binary reports, whatever `--version` says.
 
 | Flag | Env var | Default |
 |---|---|---|

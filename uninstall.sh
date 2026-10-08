@@ -92,9 +92,13 @@ stop_systemd_service() {
         systemctl disable "$APP_NAME" || echo "⚠️  Failed to disable service"
     fi
     
-    if [ -f "/etc/systemd/system/$APP_NAME.service" ]; then
+    if [ -f "/etc/systemd/system/$APP_NAME.service" ] || [ -f "/etc/systemd/system/$APP_NAME.service.bak" ] \
+        || [ -d "/etc/systemd/system/$APP_NAME.service.d" ]; then
         echo "🗑️  Removing systemd service file..."
-        rm -f "/etc/systemd/system/$APP_NAME.service"
+        # The .d directory holds the upgrade's boot-guard drop-in; .bak is the
+        # unit the flags-to-configuration-file migration replaced.
+        rm -rf "/etc/systemd/system/$APP_NAME.service" "/etc/systemd/system/$APP_NAME.service.bak" \
+            "/etc/systemd/system/$APP_NAME.service.d"
         systemctl daemon-reload || echo "⚠️  Failed to reload systemd daemon"
     fi
 }
@@ -273,31 +277,44 @@ kill_port_processes() {
 }
 
 # Function to kill all remaining kubesolo processes
+#
+# Processes are matched by their executable — the KubeSolo binary, or anything
+# run from its data directory (containerd, its shims, crun) — not by the word
+# "kubesolo" in their command line. That matched far more: an editor open on
+# /etc/kubesolo/config.yaml, a `tail -f /var/log/kubesolo.log`, or the shell
+# that ran this script, which was killed partway through the uninstall.
+kubesolo_pids() {
+    for d in /proc/[0-9]*; do
+        pid=${d#/proc/}
+        [ "$pid" = "$$" ] && continue
+        exe=$(readlink "$d/exe" 2>/dev/null) || continue
+        exe=${exe% (deleted)}
+        case "$exe" in
+            "$INSTALL_PATH"|"$CONFIG_PATH"/*) echo "$pid" ;;
+        esac
+    done
+}
+
 kill_all_kubesolo_processes() {
     echo "🔍 Checking for any remaining KubeSolo processes..."
-    
-    # Find all processes with kubesolo in the command line
-    local pids
-    pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
-    
+
+    pids=$(kubesolo_pids)
     if [ -z "$pids" ]; then
         echo "ℹ️  No remaining KubeSolo processes found"
         return 0
     fi
-    
+
     echo "🛑 Killing remaining KubeSolo processes..."
     for pid in $pids; do
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "   Killing PID $pid"
-            kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
-        fi
+        echo "   Killing PID $pid ($(readlink "/proc/$pid/exe" 2>/dev/null || echo exited))"
+        kill -TERM "$pid" 2>/dev/null || true
     done
-    
+
     # Wait a bit for processes to terminate
     sleep 2
-    
+
     # Force kill any that are still running
-    pids=$(pgrep -f "kubesolo" 2>/dev/null || true)
+    pids=$(kubesolo_pids)
     if [ -n "$pids" ]; then
         echo "🛑 Force killing remaining processes..."
         for pid in $pids; do
@@ -347,6 +364,47 @@ EOF
     else
         echo "✅ All mounts unmounted successfully"
     fi
+}
+
+# Function to stop an upgrade or rollback in progress. Left running, it would
+# start KubeSolo again partway through the uninstall.
+stop_upgrade_executor() {
+    if command -v systemctl >/dev/null 2>&1; then
+        for unit in $(systemctl list-units --plain --no-legend 'kubesolo-upgrade-*' 2>/dev/null | awk '{print $1}'); do
+            echo "🛑 Stopping upgrade in progress ($unit)..."
+            systemctl stop "$unit" 2>/dev/null || true
+        done
+    fi
+    for f in /proc/[0-9]*/cmdline; do
+        if { tr '\0' ' ' < "$f"; } 2>/dev/null | grep -q -- '--upgrade-executor='; then
+            pid=${f#/proc/}; pid=${pid%/cmdline}
+            echo "🛑 Stopping upgrade in progress (PID $pid)..."
+            kill -KILL "$pid" 2>/dev/null || true
+        fi
+    done
+}
+
+# Function to stop pod processes. The service runs with KillMode=process so that
+# a restart reattaches to running containers; stopping it for good leaves them
+# running, so they are stopped here.
+stop_workloads() {
+    pids=""
+    for procs in $(find /sys/fs/cgroup -path '*kubepods*' -name cgroup.procs 2>/dev/null); do
+        pids="$pids $(cat "$procs" 2>/dev/null || true)"
+    done
+    pids=$(echo "$pids" | tr ' ' '\n' | grep -v '^$' | sort -u)
+    [ -z "$pids" ] && return 0
+    echo "🛑 Stopping $(echo "$pids" | wc -l | tr -d ' ') pod process(es)..."
+    for pid in $pids; do kill -TERM "$pid" 2>/dev/null || true; done
+    i=0
+    while [ $i -lt 10 ]; do
+        alive=""
+        for pid in $pids; do kill -0 "$pid" 2>/dev/null && alive="$alive $pid"; done
+        [ -z "$alive" ] && return 0
+        sleep 1
+        i=$((i + 1))
+    done
+    for pid in $alive; do kill -KILL "$pid" 2>/dev/null || true; done
 }
 
 # Function to remove kubeconfig
@@ -402,6 +460,8 @@ check_root "$@"
 # Main uninstall process
 echo "🗑️  Uninstalling $APP_NAME..."
 
+stop_upgrade_executor
+
 # Stop and remove service based on init system
 case "$INIT_SYSTEM" in
     "systemd")
@@ -437,6 +497,14 @@ kill_port_processes
 
 # Kill any remaining KubeSolo processes
 kill_all_kubesolo_processes
+
+# Stop the pods' own processes, which outlive the service
+stop_workloads
+
+# Service definitions the flags-to-configuration-file migration replaced
+for def in "/etc/init.d/$APP_NAME" "/etc/init/$APP_NAME.conf"; do
+    rm -f "$def.bak"
+done
 
 # Remove binary
 if [ -f "$INSTALL_PATH" ]; then

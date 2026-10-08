@@ -34,6 +34,15 @@ type Options struct {
 
 	// Host describes the machine, for validating candidate configurations.
 	Host config.Host
+
+	// Lifecycle enables the upgrade, rollback and status endpoints. Nil leaves
+	// them out.
+	Lifecycle *Lifecycle
+
+	// AgentSocketPath, when set, is a second socket serving the same API, for
+	// the Portainer agent. It sits in a directory of its own, which is what is
+	// mounted into the agent's pod.
+	AgentSocketPath string
 }
 
 // Service is the configuration API. It follows the same NewService/Run + readyCh

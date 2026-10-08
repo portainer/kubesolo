@@ -6,6 +6,7 @@ package download
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/rs/zerolog/log"
 )
 
@@ -36,41 +38,85 @@ func Install(offlineSrc, archiveName, version string) error {
 	return installOnline(archiveName, version)
 }
 
-// DownloadBundle downloads the KubeSolo release tarball into outDir and copies
-// the running kubesoloctl binary alongside it, producing a fully self-contained
-// offline bundle ready to be transferred to an air-gapped machine.
+// DownloadBundle downloads the KubeSolo release tarball and the kubesoloctl
+// binary for the target into outDir, verifies both against the release's
+// published checksums, and writes a SHA256SUMS beside them, producing a
+// self-contained offline bundle for an air-gapped machine. The SHA256SUMS is
+// what an offline install or upgrade on that machine checks the archive
+// against.
 //
-//   - archiveName is the kubesolo release tarball, e.g. "kubesolo-v1.2.1-linux-amd64.tar.gz"
-//   - version     is the kubesolo release tag, e.g. "v1.2.1"
-func DownloadBundle(outDir, archiveName, version string) error {
+//   - archiveName   is the kubesolo release tarball, e.g. "kubesolo-v1.2.1-linux-amd64.tar.gz"
+//   - installerName is the target's kubesoloctl asset, e.g. "kubesoloctl-linux-arm64"
+//   - version       is the kubesolo release tag, e.g. "v1.2.1"
+//
+// When the target is this host, the running kubesoloctl is copied rather than
+// downloaded. Otherwise the target's own build is downloaded: a copy of this
+// one would not run there.
+func DownloadBundle(outDir, archiveName, installerName, version string, sameArch bool) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory %s: %w", outDir, err)
 	}
+	ctx := context.Background()
 
-	// 1. KubeSolo binary tarball
-	tarURL := fmt.Sprintf("%s/%s/%s", releaseBaseURL, version, archiveName)
 	tarDest := filepath.Join(outDir, archiveName)
 	log.Info().Msgf("downloading KubeSolo %s (%s)...", version, archiveName)
-	if err := downloadFile(tarURL, tarDest); err != nil {
+	if err := downloadFile(fmt.Sprintf("%s/%s/%s", upgrade.ReleaseBaseURL(), version, archiveName), tarDest); err != nil {
 		return fmt.Errorf("failed to download KubeSolo archive: %w", err)
+	}
+	archiveSum, err := verifyAsset(ctx, version, archiveName, tarDest)
+	if err != nil {
+		return err
 	}
 	log.Info().Msgf("KubeSolo archive saved to: %s", tarDest)
 
-	// 2. Copy the running kubesoloctl binary — no need to download what we already have.
-	selfPath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to locate running kubesoloctl binary: %w", err)
-	}
 	installerDest := filepath.Join(outDir, "kubesoloctl")
-	log.Info().Msgf("copying kubesoloctl to %s...", installerDest)
-	if err := copyFile(selfPath, installerDest); err != nil {
-		return fmt.Errorf("failed to copy kubesoloctl binary: %w", err)
+	if sameArch {
+		selfPath, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("failed to locate running kubesoloctl binary: %w", err)
+		}
+		log.Info().Msgf("copying kubesoloctl to %s...", installerDest)
+		if err := copyFile(selfPath, installerDest); err != nil {
+			return fmt.Errorf("failed to copy kubesoloctl binary: %w", err)
+		}
+	} else {
+		log.Info().Msgf("downloading %s...", installerName)
+		if err := downloadFile(fmt.Sprintf("%s/%s/%s", upgrade.ReleaseBaseURL(), version, installerName), installerDest); err != nil {
+			return fmt.Errorf("failed to download kubesoloctl for the target: %w", err)
+		}
+		if _, err := verifyAsset(ctx, version, installerName, installerDest); err != nil {
+			return err
+		}
 	}
 	if err := os.Chmod(installerDest, 0o755); err != nil {
 		return fmt.Errorf("failed to make kubesoloctl executable: %w", err)
 	}
 	log.Info().Msgf("kubesoloctl saved to: %s", installerDest)
+
+	sums := fmt.Sprintf("%s  %s\n", archiveSum, archiveName)
+	if err := os.WriteFile(filepath.Join(outDir, upgrade.SumsFile), []byte(sums), 0o644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", upgrade.SumsFile, err)
+	}
 	return nil
+}
+
+// verifyAsset checks a downloaded release asset against its published
+// checksum and returns the checksum.
+func verifyAsset(ctx context.Context, version, name, path string) (string, error) {
+	want, source, err := upgrade.ReleaseChecksum(ctx, version, name)
+	if err != nil {
+		return "", fmt.Errorf("could not find a checksum for %s: %w", name, err)
+	}
+	got, err := upgrade.FileSHA256(path)
+	if err != nil {
+		return "", err
+	}
+	if !strings.EqualFold(got, want) {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("%s does not match its published checksum (%s): expected %s, got %s", name, source, want, got)
+	}
+	log.Info().Msgf("%s verified against %s", name, source)
+	return got, nil
 }
 
 // ── online installation ────────────────────────────────────────────────────────

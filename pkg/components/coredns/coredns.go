@@ -21,6 +21,9 @@ const (
 	coreDNSClusterRoleName    = "system:coredns"
 )
 
+// PodSelector selects the CoreDNS pods KubeSolo deploys, in kube-system.
+const PodSelector = "k8s-app=coredns"
+
 // Deploy deploys all the necessary Kubernetes resources for CoreDNS
 func Deploy(adminKubeconfig string, containerMode bool, disableIPv6 bool) error {
 	time.Sleep(types.DefaultComponentSleep)

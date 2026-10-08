@@ -330,3 +330,27 @@ func TestDefaultSocketPathFitsComfortably(t *testing.T) {
 		t.Errorf("default socket path is %d characters, over the %d limit", got, maxUnixSocketPath)
 	}
 }
+
+func TestValidateRejectsMalformedAddresses(t *testing.T) {
+	for _, c := range []struct {
+		set  func(*types.Config)
+		want string
+	}{
+		{func(c *types.Config) { c.Network.NodeIP = "not-an-ip" }, "network.nodeIP"},
+		{func(c *types.Config) { c.Network.NodeIP = "10.0.0.300" }, "network.nodeIP"},
+		{func(c *types.Config) { c.Network.LoadBalancer.IP = "lb.example.com" }, "network.loadBalancer.ip"},
+	} {
+		cfg := Defaults()
+		c.set(cfg)
+		if _, err := Validate(cfg, Host{NumCPU: 4, GOARCH: "amd64"}); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("err = %v, want one naming %s", err, c.want)
+		}
+	}
+	for _, ip := range []string{"10.0.0.5", "fd00::5"} {
+		cfg := Defaults()
+		cfg.Network.NodeIP, cfg.Network.LoadBalancer.IP = ip, ip
+		if _, err := Validate(cfg, Host{NumCPU: 4, GOARCH: "amd64"}); err != nil {
+			t.Errorf("%s: %v", ip, err)
+		}
+	}
+}
