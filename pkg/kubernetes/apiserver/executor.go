@@ -1,9 +1,6 @@
 package apiserver
 
 import (
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	kubesoloservice "github.com/portainer/kubesolo/internal/runtime/service"
@@ -18,7 +15,7 @@ import (
 // 2. it registers the admission plugins
 // 3. it sets the API server flags
 // 4. it starts the API server
-// 5. it waits for a signal to stop the API server
+// 5. it waits for shutdown to be requested, then stops the API server
 // 6. it logs the termination of the API server
 func (s *service) Run(kineReadyCh chan struct{}) error {
 	log.Info().Str("component", "apiserver").Msg("starting API server...")
@@ -63,11 +60,9 @@ func (s *service) Run(kineReadyCh chan struct{}) error {
 		close(s.apiServerReady)
 	})
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
+	<-s.ctx.Done()
 
-	log.Info().Str("component", "apiserver").Msg("received signal, stopping the API server...")
+	log.Info().Str("component", "apiserver").Msg("shutdown requested, stopping the API server...")
 	s.terminate()
 
 	return nil

@@ -42,5 +42,9 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	// feature gates - disable SizeBasedListCostEstimate to suppress "Error getting keys" messages
 	_ = flags.Set("feature-gates", "SizeBasedListCostEstimate=false")
 
+	// shutdown - close the listener once in-flight requests drain instead of
+	// waiting up to --request-timeout (60s) for open watches to go away
+	_ = flags.Set("shutdown-send-retry-after", "true")
+
 	return nil
 }

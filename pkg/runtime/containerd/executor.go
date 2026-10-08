@@ -3,9 +3,7 @@ package containerd
 import (
 	"context"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/containerd/containerd/v2/client"
@@ -20,7 +18,7 @@ import (
 // 1. it validates the containerd
 // 2. it writes the containerd config
 // 3. it starts the containerd
-// 4. it waits for a signal to stop the containerd
+// 4. it waits for shutdown to be requested, then stops the containerd
 // 5. it logs the termination of the containerd
 func (s *service) Run() error {
 	log.Info().Str("component", "containerd").Str("config", s.containerdConfigFile).Msg("starting containerd...")
@@ -67,11 +65,9 @@ func (s *service) Run() error {
 	})
 	log.Info().Str("component", "containerd").Msg("containerd started successfully...")
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
+	<-s.ctx.Done()
 
-	log.Debug().Str("component", "containerd").Msg("received signal, stopping containerd")
+	log.Debug().Str("component", "containerd").Msg("shutdown requested, stopping containerd")
 	s.terminate()
 
 	return nil
