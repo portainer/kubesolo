@@ -31,6 +31,7 @@ func ConfigureLogger() {
 	zerolog.ErrorStackFieldName = "stack_trace"
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.CallerMarshalFunc = callerMarshal
 
 	stdlog.SetFlags(0)
 	stdlog.SetOutput(log.Logger)
