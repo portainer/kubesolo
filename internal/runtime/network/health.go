@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,13 +12,16 @@ import (
 )
 
 // IsComponentHealthy checks if a component is healthy by sending a health check request
-// and waiting for a response.
+// and waiting for a response. It stops retrying once the request's context is cancelled.
 func IsComponentHealthy(client *http.Client, request *http.Request, component string) error {
+	ctx := request.Context()
 	for range types.DefaultRetryCount {
 		resp, err := client.Do(request)
 		if err != nil {
 			log.Warn().Str("component", component).Msgf("component health check failed: %v", err)
-			time.Sleep(types.DefaultComponentSleep)
+			if err := sleepUnlessDone(ctx); err != nil {
+				return err
+			}
 			continue
 		}
 		defer func() { _ = resp.Body.Close() }()
@@ -33,8 +37,21 @@ func IsComponentHealthy(client *http.Client, request *http.Request, component st
 		}
 
 		log.Warn().Str("component", component).Msgf("component health check failed: status=%d, body=%s", resp.StatusCode, string(body))
-		time.Sleep(types.DefaultComponentSleep)
+		if err := sleepUnlessDone(ctx); err != nil {
+			return err
+		}
 	}
 
 	return fmt.Errorf("component health check failed after multiple attempts")
+}
+
+// sleepUnlessDone waits one retry interval, returning the context's error early if
+// it is cancelled first.
+func sleepUnlessDone(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(types.DefaultComponentSleep):
+		return nil
+	}
 }
