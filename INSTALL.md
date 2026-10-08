@@ -34,6 +34,26 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- \
 
 The installer writes the resolved settings to `/etc/kubesolo/config.yaml` and starts the service with `--config=/etc/kubesolo/config.yaml`. To change a setting later, edit that file (or use `kubesoloctl config set`) and restart, rather than reinstalling. See the [installer flags reference](docs/installation/flags.md) for every flag and the [configuration file reference](docs/configuration/config-file.md) for every setting.
 
+Every download is checked against the release's published SHA-256 checksum before anything is installed, and the binary is run once to confirm it suits this host and is the version asked for. All of that, and generating the configuration, happens before a running KubeSolo is stopped: an install that fails — a wrong version, a bad setting, a corrupt archive — leaves the cluster that was there running.
+
+#### Upgrading with the installer
+
+Run the installer again with a newer version on a host where KubeSolo is already installed, and it upgrades it the way [`kubesoloctl upgrade`](docs/installation/kubesoloctl.md#upgrade--rollback--status) does: the datastore, binary and configuration are backed up, the new version opens a copy of the datastore first, and if it is not healthy within ten minutes the previous version is restored automatically.
+
+```bash
+curl -sfL https://get.kubesolo.io | sudo KUBESOLO_VERSION=v1.2.2 sh -
+```
+
+The existing `/etc/kubesolo/config.yaml` is kept as it is. Settings passed to an upgrade are not applied — the installer says so. Change settings with `kubesoloctl config set`, which validates them against the running KubeSolo. Running the installer again with the version already installed reinstalls the service, also keeping the configuration.
+
+| Variable | Effect |
+|---|---|
+| `KUBESOLO_FORCE=true` | Allow installing a version older than the installed one. To undo the last upgrade, use `kubesoloctl rollback` instead. |
+| `KUBESOLO_HEALTH_TIMEOUT=SECONDS` | How long the new version has to become healthy before it is rolled back (default 600). |
+| `KUBESOLO_SHA256=SUM` | The expected checksum of the archive, instead of the published one. |
+
+See the [upgrade API](docs/configuration/upgrade-api.md) for how the upgrade works and what is backed up.
+
 The pre-flight checks stop the install if Docker is installed or running, if the hostname is not RFC 1123 compliant (lowercase only), if `iptables` or its comment module is missing, or if required cgroup controllers are not available.
 
 **Automatic Detection:**
@@ -129,6 +149,9 @@ export KUBESOLO_OFFLINE="false"                 # Download the offline build
 export KUBESOLO_OFFLINE_INSTALL=""              # Install from a local archive or binary
 export KUBESOLO_DOWNLOAD_DIR=""                 # Same as --download-only=DIR
 export KUBESOLO_INSTALL_PREREQS="false"         # Install missing prerequisites (nftables on Alpine)
+export KUBESOLO_SHA256=""                       # Expected archive checksum (default: the published one)
+export KUBESOLO_FORCE="false"                   # Allow installing an older version over a newer one
+export KUBESOLO_HEALTH_TIMEOUT="600"            # Seconds an upgrade has to become healthy
 ```
 
 Any other `KUBESOLO_*` variable that KubeSolo itself recognises, such as `KUBESOLO_MTU`, `KUBESOLO_NODE_IP` or `KUBESOLO_METRICS_SERVER`, is also written into `/etc/kubesolo/config.yaml` when it is set during the install. See [Settings without an installer flag](docs/installation/flags.md#settings-without-an-installer-flag).
@@ -179,6 +202,8 @@ curl -sfL https://get.kubesolo.io | sh -s -- --offline --download-only=./kubesol
 cd kubesolo-bundle
 sudo sh install.sh --offline-install=<downloaded archive>
 ```
+
+Copy the `SHA256SUMS` file `--download-only` writes along with the archive: the install checks the archive against it. An archive with no `SHA256SUMS` beside it still installs, with a warning that it could not be verified.
 
 Pass the archive that `--download-only` saved. Its name is `kubesolo-<version>-linux-<arch>[-musl]-offline.tar.gz`, for example `kubesolo-v1.2.1-linux-amd64-offline.tar.gz`. The bundle is built for the OS, architecture and libc of the machine that downloads it, so download on Linux (not macOS), and on a glibc machine for a glibc target or a musl machine (such as Alpine) for a musl target. If you can't, download the matching archive from the [releases page](https://github.com/portainer/kubesolo/releases) instead.
 
@@ -298,7 +323,7 @@ If `kubectl` is installed when you run the installer, it merges the KubeSolo con
 
 ## Uninstalling
 
-`uninstall.sh` stops KubeSolo and removes the binary, service files, CNI configuration and `/etc/kubesolo/config.yaml`:
+`uninstall.sh` stops KubeSolo — and any upgrade in progress, and the pods' own processes, which outlive the service — and removes the binary, service files, CNI configuration and `/etc/kubesolo/config.yaml`:
 
 ```bash
 curl -sfL https://raw.githubusercontent.com/portainer/kubesolo/develop/uninstall.sh | sudo sh -s --

@@ -993,7 +993,13 @@ download_bundle() {
 
     echo "📥 Downloading kubesolo ${KUBESOLO_VERSION} (${os}/${arch}${libc_suffix})..."
     curl -sfL "$bin_url" -o "$outdir/$archive" || handle_error "Failed to download from $bin_url"
-    echo "✅ Binary archive saved to: $outdir/$archive"
+    local expected
+    expected=$(release_checksum "$KUBESOLO_VERSION" "$archive")
+    [ -n "$expected" ] || { rm -f "$outdir/$archive"; handle_error "No published checksum found for $archive"; }
+    verify_checksum "$outdir/$archive" "$expected" "the published checksum"
+    # The offline install checks the archive against this.
+    echo "$expected  $archive" > "$outdir/SHA256SUMS"
+    echo "✅ Binary archive saved to: $outdir/$archive (checksum in $outdir/SHA256SUMS)"
 
     echo "📥 Downloading install script..."
     curl -sfL "$script_url" -o "$outdir/install.sh" || handle_error "Failed to download install script"
@@ -1002,55 +1008,360 @@ download_bundle() {
 
     echo ""
     echo "✅ Download complete! Files saved to: $outdir"
-    echo "💡 To install offline, transfer these files to the target machine and run:"
+    echo "💡 To install offline, transfer these files (including SHA256SUMS) to the target machine and run:"
     echo "   sudo sh install.sh --offline-install=$archive"
 }
 
-# Function to install the kubesolo binary from a local archive/binary or by downloading it.
-# Requires globals: KUBESOLO_OFFLINE_INSTALL, BIN_URL, APP_NAME, INSTALL_PATH, KUBESOLO_VERSION
-install_binary() {
-    local temp_dir
+# ── Release verification ──────────────────────────────────────────────────────
+#
+# Everything below runs before a running KubeSolo is stopped. A wrong version, a
+# failed download or a corrupt archive must leave the cluster that was there
+# running — the same order kubesoloctl and the upgrade API keep.
+
+RELEASE_BASE_URL="https://github.com/portainer/kubesolo/releases/download"
+
+# sha256_of FILE prints the file's SHA-256.
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$1" | sed 's/.*= *//'
+    else
+        handle_error "Neither sha256sum nor openssl is available to verify the download"
+    fi
+}
+
+# sum_from_file SUMSFILE NAME prints NAME's checksum from a sha256sum-format file.
+sum_from_file() {
+    awk -v n="$2" '($2 == n || $2 == "*" n) && length($1) == 64 { print tolower($1); exit }' "$1" 2>/dev/null
+}
+
+# release_checksum VERSION ASSET prints the published checksum of a release
+# asset: from the release's SHA256SUMS, or — for releases published before
+# SHA256SUMS existed — the digest GitHub computes for every asset. Prints
+# nothing when neither is available.
+release_checksum() {
+    local sums
+    # || true: a release without SHA256SUMS is a 404, which set -e would turn
+    # into an exit instead of the fallback below.
+    sums=$(curl -sfL "$RELEASE_BASE_URL/$1/SHA256SUMS" 2>/dev/null) || true
+    if [ -n "$sums" ]; then
+        echo "$sums" | awk -v n="$2" '($2 == n || $2 == "*" n) && length($1) == 64 { print tolower($1); exit }'
+        return
+    fi
+    # No jq: split the JSON into one token per line, find the asset by name,
+    # and take the digest that follows it.
+    curl -sfL "https://api.github.com/repos/portainer/kubesolo/releases/tags/$1" 2>/dev/null \
+        | tr ',{}' '\n\n\n' \
+        | awk -v n="$2" '
+            index($0, "\"name\"") && index($0, "\"" n "\"") { f = 1; next }
+            f && index($0, "\"name\"") { f = 0 }
+            f && index($0, "\"digest\"") && index($0, "sha256:") { sub(/.*sha256:/, ""); gsub(/[^0-9a-fA-F]/, ""); print tolower($0); exit }'
+}
+
+# verify_checksum FILE EXPECTED SOURCE fails unless FILE's checksum is EXPECTED.
+verify_checksum() {
+    local got
+    got=$(sha256_of "$1")
+    if [ "$got" != "$2" ]; then
+        handle_error "Checksum mismatch for $(basename "$1"): expected $2 ($3), got $got. Nothing was changed."
+    fi
+    echo "🔐 Checksum verified against $3"
+}
+
+# reported_version BINARY prints the version a kubesolo binary reports.
+reported_version() {
+    "$1" --version 2>&1 | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -n1
+}
+
+# stage_release fetches the release into STAGE_DIR, verifies it, and sets
+# STAGED_BIN to the extracted binary. Nothing outside STAGE_DIR is touched.
+# Requires globals: KUBESOLO_OFFLINE_INSTALL, BIN_URL, ARCHIVE_NAME, KUBESOLO_VERSION
+stage_release() {
+    STAGE_DIR=$(mktemp -d -p "$HOME") || handle_error "Failed to create temporary directory"
+    # Removed however the script ends, including a failed verification below.
+    trap 'rm -rf "$STAGE_DIR"' EXIT
+    STAGED_BIN="$STAGE_DIR/kubesolo"
+    local fetched expected source
 
     if [ -n "$KUBESOLO_OFFLINE_INSTALL" ]; then
-        [ -e "$KUBESOLO_OFFLINE_INSTALL" ] || handle_error "Specified offline-install path does not exist: $KUBESOLO_OFFLINE_INSTALL"
-        temp_dir=$(mktemp -d -p "$HOME") || handle_error "Failed to create temporary directory"
-
-        case "$KUBESOLO_OFFLINE_INSTALL" in
-            *.tar.gz|*.tgz)
-                echo "📦 Extracting $APP_NAME from local archive $KUBESOLO_OFFLINE_INSTALL..."
-                tar -xzf "$KUBESOLO_OFFLINE_INSTALL" -C "$temp_dir" || handle_error "Failed to extract $KUBESOLO_OFFLINE_INSTALL"
-                echo "📝 Installing binary..."
-                mv "$temp_dir/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
-                ;;
-            *.zip)
-                command -v unzip >/dev/null 2>&1 || handle_error "unzip is required to extract .zip archives but was not found"
-                echo "📦 Extracting $APP_NAME from local zip archive $KUBESOLO_OFFLINE_INSTALL..."
-                unzip -o "$KUBESOLO_OFFLINE_INSTALL" -d "$temp_dir" || handle_error "Failed to extract $KUBESOLO_OFFLINE_INSTALL"
-                echo "📝 Installing binary..."
-                mv "$temp_dir/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
-                ;;
-            *)
-                echo "📝 Installing binary from local path $KUBESOLO_OFFLINE_INSTALL..."
-                cp "$KUBESOLO_OFFLINE_INSTALL" "$temp_dir/kubesolo" || handle_error "Failed to copy binary to temporary directory"
-                mv "$temp_dir/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
-                ;;
-        esac
-
-        rm -rf "$temp_dir"
+        [ -f "$KUBESOLO_OFFLINE_INSTALL" ] || handle_error "Specified offline-install path does not exist: $KUBESOLO_OFFLINE_INSTALL"
+        fetched="$KUBESOLO_OFFLINE_INSTALL"
+        local sums
+        sums="$(dirname "$fetched")/SHA256SUMS"
+        if [ -n "$KUBESOLO_SHA256" ]; then
+            verify_checksum "$fetched" "$KUBESOLO_SHA256" "KUBESOLO_SHA256"
+        elif [ -f "$sums" ]; then
+            expected=$(sum_from_file "$sums" "$(basename "$fetched")")
+            [ -n "$expected" ] || handle_error "$sums has no entry for $(basename "$fetched"). Nothing was changed."
+            verify_checksum "$fetched" "$expected" "$sums"
+        else
+            echo "⚠️  $(basename "$fetched") has no SHA256SUMS beside it, so it cannot be verified"
+            echo "   (sh install.sh --download-only writes one)"
+        fi
     else
-        temp_dir=$(mktemp -d -p "$HOME") || handle_error "Failed to create temporary directory"
+        fetched="$STAGE_DIR/$ARCHIVE_NAME"
         echo "📥 Downloading $APP_NAME $KUBESOLO_VERSION..."
-        curl -sfL "$BIN_URL" -o "$temp_dir/kubesolo.tar.gz" || handle_error "Failed to download $APP_NAME from $BIN_URL"
-
-        echo "📦 Extracting $APP_NAME..."
-        tar -xzf "$temp_dir/kubesolo.tar.gz" -C "$temp_dir" || handle_error "Failed to extract $APP_NAME archive"
-
-        echo "📝 Installing binary..."
-        mv "$temp_dir/kubesolo" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
-        rm -rf "$temp_dir"
+        curl -sfL "$BIN_URL" -o "$fetched" || handle_error "Failed to download $APP_NAME from $BIN_URL. Nothing was changed."
+        if [ -n "$KUBESOLO_SHA256" ]; then
+            expected="$KUBESOLO_SHA256"; source="KUBESOLO_SHA256"
+        else
+            expected=$(release_checksum "$KUBESOLO_VERSION" "$ARCHIVE_NAME"); source="the published checksum"
+        fi
+        [ -n "$expected" ] || handle_error "No published checksum found for $ARCHIVE_NAME; refusing to install an unverified download. Set KUBESOLO_SHA256 to provide one."
+        verify_checksum "$fetched" "$expected" "$source"
     fi
 
-    chmod +x "$INSTALL_PATH" || handle_error "Failed to set executable permissions on $INSTALL_PATH"
+    case "$fetched" in
+        *.tar.gz|*.tgz)
+            echo "📦 Extracting $APP_NAME..."
+            tar -xzf "$fetched" -C "$STAGE_DIR" || handle_error "Failed to extract $fetched. Nothing was changed."
+            # Release archives keep the binary under dist/; take it from wherever it is.
+            if [ ! -f "$STAGED_BIN" ]; then
+                local found
+                found=$(find "$STAGE_DIR" -type f -name kubesolo | head -n1)
+                [ -n "$found" ] || handle_error "$fetched does not contain a kubesolo binary. Nothing was changed."
+                mv "$found" "$STAGED_BIN"
+            fi
+            ;;
+        *.zip)
+            command -v unzip >/dev/null 2>&1 || handle_error "unzip is required to extract .zip archives but was not found"
+            unzip -o "$fetched" -d "$STAGE_DIR" >/dev/null || handle_error "Failed to extract $fetched. Nothing was changed."
+            ;;
+        *)
+            cp "$fetched" "$STAGED_BIN" || handle_error "Failed to copy $fetched"
+            ;;
+    esac
+    chmod +x "$STAGED_BIN"
+
+    # Running it proves it is an executable for this architecture and C library,
+    # and that it is the version asked for.
+    STAGED_VERSION=$(reported_version "$STAGED_BIN")
+    [ -n "$STAGED_VERSION" ] || handle_error "The new kubesolo binary does not run on this host ($(uname -m)$LIBC_SUFFIX): $("$STAGED_BIN" --version 2>&1 | head -n1). Nothing was changed."
+    if [ -n "$KUBESOLO_OFFLINE_INSTALL" ]; then
+        # A local archive or binary says which version it is.
+        KUBESOLO_VERSION="$STAGED_VERSION"
+    elif [ "$STAGED_VERSION" != "$KUBESOLO_VERSION" ]; then
+        handle_error "The downloaded binary reports itself as $STAGED_VERSION, not $KUBESOLO_VERSION. Nothing was changed."
+    fi
+    echo "✅ Verified kubesolo $STAGED_VERSION"
+}
+
+# place_binary installs STAGED_BIN at INSTALL_PATH atomically: a copy beside
+# it, then a rename over it.
+place_binary() {
+    cp "$STAGED_BIN" "$INSTALL_PATH.new" || handle_error "Failed to copy binary to $INSTALL_PATH.new"
+    chmod +x "$INSTALL_PATH.new"
+    mv -f "$INSTALL_PATH.new" "$INSTALL_PATH" || handle_error "Failed to move binary to $INSTALL_PATH"
+}
+
+# ── Upgrading an existing install ─────────────────────────────────────────────
+#
+# On a host that already runs KubeSolo, a different version is an upgrade, and
+# it is done by the same executor kubesoloctl and the upgrade API use: backup
+# of the binary, datastore and configuration, a dry-run of the datastore
+# migration, a health check, and automatic rollback if the new version does not
+# come up. See docs/configuration/upgrade-api.md.
+
+# existing_install prints the installed version when KubeSolo is installed.
+existing_install() {
+    [ -x "$INSTALL_PATH" ] || return 1
+    if [ -f "/etc/systemd/system/$APP_NAME.service" ] || [ -f "/etc/init.d/$APP_NAME" ] \
+        || [ -d "/etc/s6/sv/$APP_NAME" ] || [ -d "/etc/runit/sv/$APP_NAME" ] \
+        || [ -f "/etc/init/$APP_NAME.conf" ] || [ -n "$(find_kubesolo_binary_pids)" ]; then
+        reported_version "$INSTALL_PATH"
+        return 0
+    fi
+    return 1
+}
+
+# version_lt A B succeeds when release version A sorts before B, pre-releases
+# before their release.
+version_lt() {
+    # awk, not sort -V: BusyBox sort has no -V, and Alpine is a supported host.
+    awk -v a="$1" -v b="$2" 'function split3(v, out,   core, pre, n, p) {
+            sub(/^v/, "", v); pre = ""
+            if ((p = index(v, "-")) > 0) { pre = substr(v, p + 1); v = substr(v, 1, p - 1) }
+            n = split(v, out, "."); out[4] = pre
+        }
+        BEGIN {
+            split3(a, x); split3(b, y)
+            for (i = 1; i <= 3; i++) { if (x[i] + 0 < y[i] + 0) exit 0; if (x[i] + 0 > y[i] + 0) exit 1 }
+            # Same release: a pre-release sorts before it.
+            if (x[4] == y[4]) exit 1
+            if (x[4] == "") exit 1
+            if (y[4] == "") exit 0
+            exit !(x[4] < y[4])
+        }'
+}
+
+# supports_executor BINARY succeeds when the binary can run the upgrade executor.
+supports_executor() {
+    ! "$1" --upgrade-executor=/nonexistent 2>&1 | grep -q "unknown long flag"
+}
+
+# upgrade_in_flight succeeds while an upgrade executor is running.
+upgrade_in_flight() {
+    for f in /proc/[0-9]*/cmdline; do
+        { tr '\0' ' ' < "$f"; } 2>/dev/null | grep -q -- '--upgrade-executor=' && return 0
+    done
+    return 1
+}
+
+upgrade_existing() {
+    local from="$1" data_dir executor id dir job_file log printed line result
+
+    if version_lt "$STAGED_VERSION" "$from" && [ "$KUBESOLO_FORCE" != "true" ]; then
+        handle_error "$STAGED_VERSION is older than the installed $from. A downgrade needs KUBESOLO_FORCE=true; to undo the last upgrade, run: kubesoloctl rollback. Nothing was changed."
+    fi
+    if [ "$SETTINGS_GIVEN" = "true" ]; then
+        echo "⚠️  KubeSolo $from is already installed: this run upgrades it and keeps its configuration."
+        echo "   Settings passed to this run are not applied. Change them with: kubesoloctl config set <setting> <value>"
+    fi
+
+    # The data directory the running install uses, from its configuration.
+    data_dir="$CONFIG_PATH"
+    if [ -f "$CONFIG_FILE" ]; then
+        data_dir=$(sed -n 's/^path: *//p' "$CONFIG_FILE" | head -n1)
+        [ -n "$data_dir" ] || data_dir="$CONFIG_PATH"
+    fi
+
+    if supports_executor "$STAGED_BIN"; then
+        executor="new"
+    elif supports_executor "$INSTALL_PATH"; then
+        executor="installed"
+    else
+        # Both releases predate the upgrade executor: replace the binary in
+        # place, as earlier installers did, keeping the configuration.
+        echo "ℹ️  Neither $from nor $STAGED_VERSION has the upgrade executor; replacing the binary without a backup"
+        ensure_process_killmode
+        stop_running_processes
+        place_binary
+        restart_service
+        echo "✅ $APP_NAME upgraded from $from to $STAGED_VERSION"
+        exit 0
+    fi
+
+    upgrade_in_flight && handle_error "Another upgrade or rollback is in progress. Check it with: kubesoloctl status"
+
+    id=$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')
+    dir="$data_dir/upgrade"
+    mkdir -p "$dir/staging/sh-$id" && chmod 700 "$dir" || handle_error "Failed to create $dir"
+    mv "$STAGED_BIN" "$dir/staging/sh-$id/kubesolo" || handle_error "Failed to stage the new binary"
+    STAGED_BIN="$dir/staging/sh-$id/kubesolo"
+    if [ "$executor" = "new" ]; then
+        executor="$STAGED_BIN"
+    else
+        executor="$INSTALL_PATH"
+    fi
+
+    job_file="$dir/job-$id.json"
+    cat > "$job_file" <<JOB || handle_error "Failed to write $job_file"
+{
+  "id": "$id",
+  "operation": "upgrade",
+  "request": {
+    "version": "$STAGED_VERSION",
+    "source": "$STAGED_BIN",
+    "sha256": "$(sha256_of "$STAGED_BIN")",
+    "force": ${KUBESOLO_FORCE:-false},
+    "healthTimeoutSeconds": ${KUBESOLO_HEALTH_TIMEOUT:-0}
+  },
+  "dataDir": "$data_dir",
+  "configFile": "$CONFIG_FILE",
+  "from": "$from"
+}
+JOB
+    chmod 600 "$job_file"
+
+    echo "🔄 Upgrading $APP_NAME from $from to $STAGED_VERSION (run $id)..."
+    # The executor must outlive the KubeSolo service it stops, so it runs
+    # outside it: its own transient unit under systemd, its own session elsewhere.
+    if [ "$INIT_SYSTEM" = "systemd" ] && command -v systemd-run >/dev/null 2>&1; then
+        set -- --unit="kubesolo-upgrade-$id" --description="KubeSolo upgrade $id" --collect --quiet --property=KillMode=process
+        for v in HTTP_PROXY HTTPS_PROXY NO_PROXY; do
+            eval "val=\${$v:-}"
+            [ -n "$val" ] && set -- "$@" --setenv="$v=$val"
+        done
+        systemd-run "$@" "$executor" --upgrade-executor="$job_file" || handle_error "Failed to start the upgrade"
+    elif command -v setsid >/dev/null 2>&1; then
+        setsid "$executor" --upgrade-executor="$job_file" </dev/null >/dev/null 2>&1 &
+    else
+        nohup "$executor" --upgrade-executor="$job_file" </dev/null >/dev/null 2>&1 &
+    fi
+
+    # Follow the run's log until it finishes. It survives the restart, and is
+    # written by the executor whichever version that is.
+    log="$dir/run-$id.log"
+    printed=0
+    i=0
+    while [ ! -f "$log" ]; do
+        i=$((i + 1))
+        [ $i -gt 120 ] && handle_error "The upgrade did not start; check: kubesoloctl status"
+        sleep 1
+    done
+    result=""
+    while [ -z "$result" ]; do
+        total=$(wc -l < "$log")
+        if [ "$total" -gt "$printed" ]; then
+            sed -n "$((printed + 1)),${total}p" "$log" | while IFS= read -r line; do echo "   $line"; done
+            result=$(sed -n "$((printed + 1)),${total}p" "$log" | sed -n 's/^finished: //p' | tail -n1)
+            printed=$total
+        fi
+        if [ -z "$result" ] && ! upgrade_in_flight; then
+            sleep 2
+            result=$(sed -n 's/^finished: //p' "$log" | tail -n1)
+            [ -n "$result" ] || result="interrupted"
+        fi
+        [ -z "$result" ] && sleep 1
+    done
+
+    case "$result" in
+        succeeded)
+            echo "✅ $APP_NAME upgraded from $from to $STAGED_VERSION"
+            echo "💡 To undo it: kubesoloctl rollback"
+            exit 0
+            ;;
+        aborted)
+            echo "❌ Upgrade aborted before anything was changed: $APP_NAME $from kept running"
+            ;;
+        rolled-back)
+            echo "❌ $STAGED_VERSION did not come up healthy; $from, its datastore and configuration were restored and are running"
+            ;;
+        *)
+            echo "❌ Upgrade $result: KubeSolo needs attention. Check: kubesoloctl status, and the service logs"
+            ;;
+    esac
+    exit 1
+}
+
+# ensure_process_killmode makes an existing systemd unit stop with
+# KillMode=process. Units this script wrote before it set KillMode use systemd's
+# default, control-group: stopping one kills the containerd shims but not the
+# containers, which carry on where the new KubeSolo cannot reattach to them, and
+# it starts a second copy of every pod. A drop-in fixes the running unit before
+# the stop.
+ensure_process_killmode() {
+    if [ -f "/etc/systemd/system/$APP_NAME.service" ] && command -v systemctl >/dev/null 2>&1 \
+        && [ "$(systemctl show "$APP_NAME" -p KillMode --value 2>/dev/null)" != "process" ]; then
+        mkdir -p "/etc/systemd/system/$APP_NAME.service.d"
+        printf '[Service]\nKillMode=process\nDelegate=yes\n' > "/etc/systemd/system/$APP_NAME.service.d/05-killmode.conf"
+        systemctl daemon-reload
+        echo "🔧 Set KillMode=process on the existing service so its containers survive the restart"
+    fi
+}
+
+# restart_service starts KubeSolo again under the init system it is installed for.
+restart_service() {
+    case "$INIT_SYSTEM" in
+        systemd) systemctl start "$APP_NAME" ;;
+        openrc) rc-service "$APP_NAME" start ;;
+        sysvinit) "/etc/init.d/$APP_NAME" start ;;
+        upstart) initctl start "$APP_NAME" ;;
+        s6) s6-svc -u "/etc/s6/sv/$APP_NAME" ;;
+        runit) sv up "/etc/runit/sv/$APP_NAME" ;;
+        *) run_daemon ;;
+    esac
 }
 
 # ── Script entry point ────────────────────────────────────────────────────────
@@ -1071,8 +1382,19 @@ _PENV
     unset _kv
 fi
 
+# Whether this run was given any settings, as opposed to only a version or a
+# source. On an existing install they are not applied, and the user is told.
+SETTINGS_GIVEN=false
+if env | grep -qE '^KUBESOLO_(PATH|APISERVER_EXTRA_SANS|PORTAINER_[A-Z_]+|LOAD_BALANCER|LOCAL_STORAGE[A-Z_]*|DB_WAL_REPAIR|DISABLE_IPV6|CPU_MANAGER_[A-Z_]+|RESERVED_CPUS|SYSTEM_RESERVED|STARTUP_TIMEOUT|D2K[A-Z_]*|DEBUG|PPROF_SERVER|RUN_MODE|PROXY)=.'; then
+    SETTINGS_GIVEN=true
+fi
+
 # Default configuration from environment variables
 KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.2.1}"
+KUBESOLO_SHA256="${KUBESOLO_SHA256:-}"      # expected checksum of the archive or binary
+KUBESOLO_FORCE="${KUBESOLO_FORCE:-false}"     # allow installing an older version over a newer one
+KUBESOLO_HEALTH_TIMEOUT="${KUBESOLO_HEALTH_TIMEOUT:-0}"  # seconds an upgrade has to become healthy; 0 = 600
+CONFIG_FILE="/etc/kubesolo/config.yaml"
 CONFIG_PATH="${KUBESOLO_PATH:-/var/lib/kubesolo}"
 APISERVER_EXTRA_SANS="${KUBESOLO_APISERVER_EXTRA_SANS:-}"
 PORTAINER_EDGE_ID="${KUBESOLO_PORTAINER_EDGE_ID:-}"
@@ -1102,6 +1424,10 @@ OFFLINE="${KUBESOLO_OFFLINE:-false}"
 
 # Parse command line arguments
 for arg in "$@"; do
+  case $arg in
+    --version=*|--offline-install=*|--offline|--install-prereqs|--download-only|--download-only=*|--help) ;;
+    --*) SETTINGS_GIVEN=true ;;
+  esac
   case $arg in
     --version=*)
       KUBESOLO_VERSION="${arg#*=}"
@@ -1197,6 +1523,13 @@ for arg in "$@"; do
       echo "  --offline-install=PATH       Use a local binary or archive instead of downloading"
       echo "  --download-only[=DIR]        Download binary archive and install script for offline use (default dir: .)"
       echo "  --install-prereqs            Automatically install missing prerequisites (e.g. nftables on Alpine)"
+      echo ""
+      echo "On a host where KubeSolo is already installed, a different version is installed as an"
+      echo "upgrade: verified, backed up, health-checked, and rolled back automatically if it fails."
+      echo "The existing configuration is kept. Environment:"
+      echo "  KUBESOLO_SHA256=SUM          Expected SHA-256 of the archive (default: the published checksum)"
+      echo "  KUBESOLO_FORCE=true          Allow installing an older version over a newer one"
+      echo "  KUBESOLO_HEALTH_TIMEOUT=SECS How long an upgrade has to become healthy (default: 600)"
       echo "  --help                       Show this help message"
       echo ""
       echo "Supported Init Systems: systemd, sysvinit, s6, runit, openrc, upstart"
@@ -1283,22 +1616,32 @@ ensure_alpine_cgroups_service
 # Function to check for required cgroups controllers
 check_cgroups
 
-# Stop any running KubeSolo processes and clean up conflicts
-stop_running_processes
-stop_port_processes
-cleanup_file_conflicts
-
 # Service configuration
 INSTALL_PATH="/usr/local/bin/$APP_NAME"
 
-echo "🔄 Installing $APP_NAME $KUBESOLO_VERSION for $INIT_SYSTEM init system..."
+# Fetch and verify the release before anything that is running is touched.
+stage_release
 
-install_binary
+# An existing install at a different version is upgraded, not reinstalled.
+INSTALLED_VERSION=""
+if INSTALLED_VERSION=$(existing_install) && [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" != "$STAGED_VERSION" ]; then
+    upgrade_existing "$INSTALLED_VERSION"
+fi
 
-# Handle SELinux file contexts if SELinux tools are available
-if command -v restorecon >/dev/null 2>&1; then
-    echo "🔒 Restoring SELinux contexts for installed binary..."
-    restorecon -v "$INSTALL_PATH" || echo "⚠️  Could not restore SELinux context (this may be normal)"
+# The same version again keeps the configuration it is running with, as an
+# upgrade does. Rebuilding it from this run's settings would apply --path, which
+# is always passed and defaults to /var/lib/kubesolo, over a node's custom data
+# directory, and the cluster would appear to be gone.
+KEEP_EXISTING_CONFIG=false
+if [ -n "$INSTALLED_VERSION" ] && [ -f "$CONFIG_FILE" ]; then
+    KEEP_EXISTING_CONFIG=true
+    # The data directory is the one the kept configuration names.
+    _path=$(sed -n 's/^path: *//p' "$CONFIG_FILE" | head -n1)
+    [ -n "$_path" ] && CONFIG_PATH="$_path"
+    echo "ℹ️  KubeSolo $INSTALLED_VERSION is already installed; reinstalling it with its existing configuration"
+    if [ "$SETTINGS_GIVEN" = "true" ]; then
+        echo "⚠️  Settings passed to this run are not applied. Change them with: kubesoloctl config set <setting> <value>"
+    fi
 fi
 
 # Construct command arguments
@@ -1378,37 +1721,60 @@ fi
 
 # Write the configuration file, and reduce the command line to a single flag.
 #
-# The document is produced by the installed binary itself, via --print-config,
+# The document is produced by the new binary itself, via --print-config,
 # rather than assembled here. That guarantees it matches exactly what KubeSolo
 # would have resolved from these flags — a hand-written heredoc would be a second
 # implementation of the same mapping, free to drift from it.
 #
 # Support is detected from --help rather than compared against a version number,
 # so this works for any release, including "latest" and locally built binaries.
-CONFIG_FILE="/etc/kubesolo/config.yaml"
-
-if "$INSTALL_PATH" --help 2>&1 | grep -q -- 'print-config'; then
-    echo "📝 Writing configuration to $CONFIG_FILE..."
+#
+# Generated with the new binary while the old one is still running, and only
+# put in place after the stop: an invalid setting fails here, changing nothing.
+CONFIG_TMP=""
+if [ "$KEEP_EXISTING_CONFIG" = "true" ]; then
+    CMD_ARGS="--config=$CONFIG_FILE"
+elif "$STAGED_BIN" --help 2>&1 | grep -q -- 'print-config'; then
     mkdir -p "$(dirname "$CONFIG_FILE")"
-
-    # Written via a temporary file so a failure part-way through cannot leave a
-    # truncated configuration in place.
     CONFIG_TMP="$CONFIG_FILE.tmp.$$"
     # $CMD_ARGS is deliberately unquoted so it splits into separate arguments,
     # and deliberately not eval'd: these values come from installer flags and the
     # environment, and eval would re-evaluate a command substitution inside one.
     # set -f runs in a subshell so a value such as a wildcard SAN is not globbed.
-    if ( set -f; "$INSTALL_PATH" $CMD_ARGS --print-config ) > "$CONFIG_TMP" 2>/dev/null && [ -s "$CONFIG_TMP" ]; then
+    if ( set -f; "$STAGED_BIN" $CMD_ARGS --print-config ) > "$CONFIG_TMP" 2>"$CONFIG_TMP.err" && [ -s "$CONFIG_TMP" ]; then
         chmod 600 "$CONFIG_TMP"
-        mv "$CONFIG_TMP" "$CONFIG_FILE"
-        CMD_ARGS="--config=$CONFIG_FILE"
-        echo "✅ Configuration written to $CONFIG_FILE"
+        rm -f "$CONFIG_TMP.err"
     else
-        rm -f "$CONFIG_TMP"
-        echo "⚠️  Could not generate $CONFIG_FILE; falling back to command-line flags"
+        echo "❌ The configuration is invalid: $(tail -n1 "$CONFIG_TMP.err")"
+        rm -f "$CONFIG_TMP" "$CONFIG_TMP.err"
+        handle_error "Nothing was changed."
     fi
 else
-    echo "ℹ️  kubesolo $VERSION predates the configuration file; using command-line flags"
+    echo "ℹ️  kubesolo $STAGED_VERSION predates the configuration file; using command-line flags"
+fi
+
+# ── Nothing above this line changed the host ──
+
+ensure_process_killmode
+
+# Stop any running KubeSolo processes and clean up conflicts
+stop_running_processes
+stop_port_processes
+cleanup_file_conflicts
+
+echo "🔄 Installing $APP_NAME $STAGED_VERSION for $INIT_SYSTEM init system..."
+place_binary
+
+# Handle SELinux file contexts if SELinux tools are available
+if command -v restorecon >/dev/null 2>&1; then
+    echo "🔒 Restoring SELinux contexts for installed binary..."
+    restorecon -v "$INSTALL_PATH" || echo "⚠️  Could not restore SELinux context (this may be normal)"
+fi
+
+if [ -n "$CONFIG_TMP" ]; then
+    mv "$CONFIG_TMP" "$CONFIG_FILE" || handle_error "Failed to write $CONFIG_FILE"
+    CMD_ARGS="--config=$CONFIG_FILE"
+    echo "✅ Configuration written to $CONFIG_FILE"
 fi
 
 # Main service creation logic
@@ -1529,8 +1895,11 @@ if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foregro
         # Create .kube directory if it doesn't exist
         mkdir -p "$REAL_HOME/.kube" || handle_error "Failed to create .kube directory"
 
-        # Merge the configs
-        export KUBECONFIG="$REAL_HOME/.kube/config:$CONFIG_PATH/pki/admin/admin.kubeconfig"
+        # Merge the configs. The new admin kubeconfig comes first: in a merge
+        # the first file wins for entries of the same name, and a reinstall
+        # issues new certificates under the same names, which an earlier
+        # install's entries would otherwise shadow.
+        export KUBECONFIG="$CONFIG_PATH/pki/admin/admin.kubeconfig:$REAL_HOME/.kube/config"
         if "$KUBECTL_PATH" config view --flatten > "$REAL_HOME/.kube/config.tmp" 2>/dev/null; then
             mv "$REAL_HOME/.kube/config.tmp" "$REAL_HOME/.kube/config" || handle_error "Failed to update kubeconfig"
             echo "✅ Kubeconfig merged successfully"
