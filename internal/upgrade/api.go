@@ -41,12 +41,26 @@ type Request struct {
 // minutes to start the control plane and import images.
 const DefaultHealthTimeout = 10 * time.Minute
 
+// MinHealthTimeout is the shortest health-gate timeout a request may ask for.
+// The gate passes only once KubeSolo has run healthy for 30s as one process,
+// after it has started, so a shorter timeout can never be met.
+const MinHealthTimeout = time.Minute
+
 // HealthTimeout returns the effective health-gate timeout.
 func (r Request) HealthTimeout() time.Duration {
 	if r.HealthTimeoutSeconds > 0 {
 		return time.Duration(r.HealthTimeoutSeconds) * time.Second
 	}
 	return DefaultHealthTimeout
+}
+
+// RestoreHealthTimeout returns how long the version restored after a failed
+// upgrade has to become healthy: the request's timeout, but never less than
+// DefaultHealthTimeout. That version was running before the upgrade, and a
+// short timeout chosen for the new one should not decide whether the rollback
+// counts as one.
+func (r Request) RestoreHealthTimeout() time.Duration {
+	return max(r.HealthTimeout(), DefaultHealthTimeout)
 }
 
 // Validate checks the request on its own, without looking at the host.
@@ -67,6 +81,9 @@ func (r Request) Validate() error {
 	}
 	if r.HealthTimeoutSeconds < 0 {
 		return errors.New("healthTimeoutSeconds cannot be negative")
+	}
+	if r.HealthTimeoutSeconds > 0 && r.HealthTimeout() < MinHealthTimeout {
+		return fmt.Errorf("healthTimeoutSeconds must be at least %d: KubeSolo has to stay up and healthy for 30s after it starts", int(MinHealthTimeout/time.Second))
 	}
 	return nil
 }

@@ -192,6 +192,10 @@ func TestRequestValidate(t *testing.T) {
 		{Request{Version: "v1.2.2", SHA256: "abc"}, false},
 		{Request{Version: "v1.2.2", SHA256: strings.Repeat("zz", 32)}, false},
 		{Request{Version: "v1.2.2", HealthTimeoutSeconds: -1}, false},
+		// Below MinHealthTimeout the gate's stability window cannot fit.
+		{Request{Version: "v1.2.2", HealthTimeoutSeconds: 20}, false},
+		{Request{Version: "v1.2.2", HealthTimeoutSeconds: 59}, false},
+		{Request{Version: "v1.2.2", HealthTimeoutSeconds: 60}, true},
 	}
 	for _, c := range cases {
 		if err := c.req.Validate(); (err == nil) != c.ok {
@@ -200,6 +204,24 @@ func TestRequestValidate(t *testing.T) {
 	}
 	if (Request{}).HealthTimeout() != DefaultHealthTimeout || (Request{HealthTimeoutSeconds: 30}).HealthTimeout() != 30*time.Second {
 		t.Error("HealthTimeout")
+	}
+}
+
+// A version restored after a failed upgrade gets at least the default timeout,
+// whatever short one the new version was given.
+func TestRestoreHealthTimeout(t *testing.T) {
+	cases := []struct {
+		seconds int
+		want    time.Duration
+	}{
+		{0, DefaultHealthTimeout},
+		{60, DefaultHealthTimeout},
+		{3600, time.Hour},
+	}
+	for _, c := range cases {
+		if got := (Request{HealthTimeoutSeconds: c.seconds}).RestoreHealthTimeout(); got != c.want {
+			t.Errorf("RestoreHealthTimeout(%ds) = %s, want %s", c.seconds, got, c.want)
+		}
 	}
 }
 

@@ -1612,7 +1612,7 @@ for arg in "$@"; do
       echo "The existing configuration is kept. Environment:"
       echo "  KUBESOLO_SHA256=SUM          Expected SHA-256 of the archive (default: the published checksum)"
       echo "  KUBESOLO_FORCE=true          Allow installing an older version over a newer one"
-      echo "  KUBESOLO_HEALTH_TIMEOUT=SECS How long an upgrade has to become healthy (default: 600)"
+      echo "  KUBESOLO_HEALTH_TIMEOUT=SECS How long an upgrade has to become healthy (default: 600, minimum: 60)"
       echo "  --help                       Show this help message"
       echo ""
       echo "Supported Init Systems: systemd, sysvinit, s6, runit, openrc, upstart"

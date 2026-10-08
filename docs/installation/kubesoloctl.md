@@ -146,7 +146,7 @@ running — the release checksum, the binary's architecture and C library, disk
 space — backs up the datastore, binary and configuration file, and has the new
 version open a copy of the datastore. Only then does it stop KubeSolo and switch
 over. If the new version is not healthy within `--health-timeout` (default
-10m), the previous binary, datastore and configuration are restored. A failure
+10m, minimum 1m), the previous binary, datastore and configuration are restored. A failure
 before the switch-over changes nothing at all.
 
 Checksums come from the release's `SHA256SUMS` or, for older GitHub releases, the
