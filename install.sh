@@ -1221,7 +1221,7 @@ upgrade_in_flight() {
 }
 
 upgrade_existing() {
-    local from="$1" data_dir executor id dir job_file log printed line result
+    local from="$1" data_dir executor id dir job_file log printed line result reason
 
     if version_lt "$STAGED_VERSION" "$from" && [ "$KUBESOLO_FORCE" != "true" ]; then
         handle_error "$STAGED_VERSION is older than the installed $from. A downgrade needs KUBESOLO_FORCE=true; to undo the last upgrade, run: kubesoloctl rollback. Nothing was changed."
@@ -1344,7 +1344,18 @@ JOB
             echo "❌ Upgrade $result: KubeSolo needs attention. Check: kubesoloctl status, and the service logs"
             ;;
     esac
+    reason=$(run_error "$dir/state.json" "$id")
+    # printf, not echo: dash's echo would expand backslashes in the message.
+    [ -n "$reason" ] && printf '   Reason: %s\n' "$reason"
     exit 1
+}
+
+# run_error STATE_FILE ID prints the error the executor recorded for run ID, if
+# any. The run log only has the phases; the reason is kept in the state file.
+run_error() {
+    grep -q "\"id\": \"$2\"" "$1" 2>/dev/null || return 0
+    sed -n 's/^ *"error": "\(.*\)",\{0,1\}$/\1/p' "$1" | tail -n1 \
+        | sed 's/\\"/"/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g; s/\\\\/\\/g'
 }
 
 # ensure_process_killmode makes an existing systemd unit stop with
