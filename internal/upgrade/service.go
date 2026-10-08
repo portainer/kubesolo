@@ -84,6 +84,36 @@ func DetectService(l Layout, info *detect.SystemInfo) (*Service, error) {
 	return s, nil
 }
 
+// DefinitionFile is the file that defines how the init system runs KubeSolo,
+// or "" in daemon mode, which has none. The upgrade backs it up, because
+// what happens after an upgrade — the move from flags to a configuration file
+// — rewrites it into a form an older release cannot run.
+func (s *Service) DefinitionFile() string {
+	if s.Daemon {
+		return ""
+	}
+	switch s.Init {
+	case detect.InitS6:
+		return filepath.Join(s6Dir, "run")
+	case detect.InitRunit:
+		return filepath.Join(runitDir, "run")
+	}
+	return definitionPath(s.Init)
+}
+
+// ReloadDefinitions makes the init system reread a service definition that has
+// changed on disk. Only systemd caches them.
+func (s *Service) ReloadDefinitions() error {
+	if s.Daemon || s.Init != detect.InitSystemd {
+		return nil
+	}
+	out, err := exec.Command("systemctl", "daemon-reload").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("systemctl daemon-reload: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func definitionPath(init detect.InitSystem) string {
 	switch init {
 	case detect.InitSystemd:

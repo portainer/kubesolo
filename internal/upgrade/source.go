@@ -106,10 +106,25 @@ func Stage(ctx context.Context, l Layout, staging string, req Request, info *det
 			return nil, fmt.Errorf("source %s is not a regular file", req.Source)
 		}
 		fetched = req.Source
+		// A source anywhere else may be writable by someone other than root,
+		// who could replace it between the checksum below and its extraction,
+		// or change a bare binary through the hard link staging makes of it,
+		// and have different code run as root than the code that was verified.
+		// So it is copied into staging, which only root can write, and every
+		// check and use is of the copy. A source already in staging was put
+		// there by kubesoloctl or install.sh, as root.
+		if !isWithin(req.Source, l.StagingDir()) {
+			// Its own name: a bare binary is usually called kubesolo, which
+			// is where the staged binary goes.
+			fetched = filepath.Join(staging, "source-"+filepath.Base(req.Source))
+			if err := copyFile(req.Source, fetched, 0o600); err != nil {
+				return nil, fmt.Errorf("copy %s into staging: %w", req.Source, err)
+			}
+		}
 		logf("using %s", req.Source)
 	}
 
-	want, from, err := expectedChecksum(ctx, req, fetched, archiveName)
+	want, from, err := expectedChecksum(ctx, req, archiveName)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +133,11 @@ func Stage(ctx context.Context, l Layout, staging string, req Request, info *det
 		return nil, err
 	}
 	if !strings.EqualFold(got, want) {
-		return nil, fmt.Errorf("checksum mismatch for %s: expected %s (%s), got %s", filepath.Base(fetched), want, from, got)
+		name := archiveName
+		if req.Source != "" {
+			name = filepath.Base(req.Source)
+		}
+		return nil, fmt.Errorf("checksum mismatch for %s: expected %s (%s), got %s", name, want, from, got)
 	}
 	staged.SHA256, staged.ChecksumSource = got, from
 	logf("checksum verified against %s", from)
@@ -194,13 +213,15 @@ func FreeBytes(path string) (uint64, error) {
 
 // expectedChecksum finds the checksum fetched should have, and says where it
 // came from.
-func expectedChecksum(ctx context.Context, req Request, fetched, archiveName string) (sum, source string, err error) {
+func expectedChecksum(ctx context.Context, req Request, archiveName string) (sum, source string, err error) {
 	if req.SHA256 != "" {
 		return strings.ToLower(req.SHA256), "the request", nil
 	}
 
-	name := filepath.Base(fetched)
 	if req.Source != "" {
+		// The name the checksum file knows it by is the original's, not the
+		// staged copy's.
+		name := filepath.Base(req.Source)
 		sumsPath := filepath.Join(filepath.Dir(req.Source), SumsFile)
 		raw, err := os.ReadFile(sumsPath)
 		if err != nil {
@@ -464,7 +485,8 @@ func Install(src, dst string) error {
 }
 
 // VersionFromArchiveName returns the version in a release archive's name, such
-// as v1.2.2 in kubesolo-v1.2.2-linux-arm64-musl.tar.gz.
+// as v1.2.2 in kubesolo-v1.2.2-linux-arm64-musl.tar.gz or
+// kubesolo-v1.2.2-linux-amd64-offline.tar.gz.
 func VersionFromArchiveName(path string) (string, bool) {
 	m := archiveNamePattern.FindStringSubmatch(filepath.Base(path))
 	if m == nil {
@@ -473,7 +495,24 @@ func VersionFromArchiveName(path string) (string, bool) {
 	return m[1], true
 }
 
-var archiveNamePattern = regexp.MustCompile(`^kubesolo-(v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)-linux-[a-z0-9]+(?:-musl)?\.(?:tar\.gz|tgz)$`)
+// The version is matched lazily, so the -linux-<arch>[-musl][-offline] suffix
+// is never taken for part of a pre-release.
+var archiveNamePattern = regexp.MustCompile(`^kubesolo-(v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+?)?)-linux-[a-z0-9]+(?:-musl)?(?:-offline)?\.(?:tar\.gz|tgz)$`)
+
+// isWithin reports whether path is inside dir, after resolving symlinks in both,
+// so a link into staging from elsewhere does not count.
+func isWithin(path, dir string) bool {
+	p, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	d, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(d, p)
+	return err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
+}
 
 // linkOrCopy hard-links src to dst, so staging a binary already on the same
 // filesystem costs no space, and copies it otherwise. The checksum was verified

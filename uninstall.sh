@@ -92,7 +92,8 @@ stop_systemd_service() {
         systemctl disable "$APP_NAME" || echo "⚠️  Failed to disable service"
     fi
     
-    if [ -f "/etc/systemd/system/$APP_NAME.service" ] || [ -d "/etc/systemd/system/$APP_NAME.service.d" ]; then
+    if [ -f "/etc/systemd/system/$APP_NAME.service" ] || [ -f "/etc/systemd/system/$APP_NAME.service.bak" ] \
+        || [ -d "/etc/systemd/system/$APP_NAME.service.d" ]; then
         echo "🗑️  Removing systemd service file..."
         # The .d directory holds the upgrade's boot-guard drop-in; .bak is the
         # unit the flags-to-configuration-file migration replaced.

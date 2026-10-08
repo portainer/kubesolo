@@ -100,6 +100,10 @@ type Manifest struct {
 	DatastoreBytes int64  `json:"datastoreBytes"`
 	BinarySHA256   string `json:"binarySha256"`
 	HasConfigFile  bool   `json:"hasConfigFile"`
+
+	// ServiceDefinition is where the backed-up service definition goes back
+	// to; empty when there was none to back up (daemon mode).
+	ServiceDefinition string `json:"serviceDefinition,omitempty"`
 }
 
 // LoadManifest reads the backup manifest. It returns nil, nil when there is no
@@ -245,12 +249,25 @@ func CommitBackup(l Layout, staged string) error {
 	if err := os.RemoveAll(l.PreviousBackupDir()); err != nil {
 		return err
 	}
+	moved := false
 	if _, err := os.Stat(l.BackupDir()); err == nil {
 		if err := os.Rename(l.BackupDir(), l.PreviousBackupDir()); err != nil {
 			return err
 		}
+		moved = true
 	}
-	return os.Rename(staged, l.BackupDir())
+	if err := os.Rename(staged, l.BackupDir()); err != nil {
+		// The upgrade aborts on this error, and an abort settles nothing, so
+		// the previous backup has to be put back here or it stops being the
+		// rollback target.
+		if moved {
+			if rerr := os.Rename(l.PreviousBackupDir(), l.BackupDir()); rerr != nil {
+				return fmt.Errorf("%w; and restoring the previous backup from %s failed: %v", err, l.PreviousBackupDir(), rerr)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 // SettleBackups decides which backup to keep once an upgrade has ended.

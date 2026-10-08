@@ -261,7 +261,11 @@ func (s *Service) agentStatus(ctx context.Context, cfg *types.Config) *upgrade.A
 		a.RunningImage = running
 		a.InSync = running == a.ConfiguredImage
 		if !a.InSync {
-			a.Detail = "the configured image is applied when KubeSolo restarts; an image Portainer set on the Deployment itself is left alone"
+			// Either the configured image changed and KubeSolo has not
+			// restarted since, or Portainer set the Deployment's image, which
+			// a restart deliberately leaves alone. Which one is not visible
+			// from here, so neither is promised.
+			a.Detail = "the agent runs a different image from the configured one: a change to portainer.image is applied when KubeSolo restarts, but an image Portainer set on the Deployment is kept until portainer.image changes again"
 		}
 	}
 	return a

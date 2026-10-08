@@ -102,6 +102,11 @@ func (l Layout) BackupConfigFile() string { return filepath.Join(l.BackupDir(), 
 // as install.sh.
 func (l Layout) RunLog(id string) string { return filepath.Join(l.Dir(), "run-"+id+".log") }
 
+// BackupServiceDefinition is the service definition as it was before the upgrade.
+func (l Layout) BackupServiceDefinition() string {
+	return filepath.Join(l.BackupDir(), "service-definition")
+}
+
 // GuardScript is the boot guard every init system runs before KubeSolo.
 func (l Layout) GuardScript() string { return filepath.Join(l.Dir(), "guard.sh") }
 

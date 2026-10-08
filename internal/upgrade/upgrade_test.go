@@ -430,3 +430,39 @@ func TestFirstUpgradeRolledBackLeavesNoTarget(t *testing.T) {
 		t.Error("kept a backup of the version that is running again")
 	}
 }
+
+// A commit that fails leaves the previous backup where it was.
+func TestCommitBackupFailureKeepsThePreviousBackup(t *testing.T) {
+	l := testLayout(t)
+	writeBackup(t, l, Manifest{From: "v1", To: "v2"})
+	if err := CommitBackup(l, filepath.Join(l.Dir(), "does-not-exist")); err == nil {
+		t.Fatal("commit of a missing backup succeeded")
+	}
+	if m, err := RollbackTarget(l, "v2"); err != nil || m.From != "v1" {
+		t.Errorf("rollback target after a failed commit: %+v, %v", m, err)
+	}
+	if _, err := os.Stat(l.PreviousBackupDir()); !os.IsNotExist(err) {
+		t.Error("previous backup left aside")
+	}
+}
+
+func TestVersionFromArchiveName(t *testing.T) {
+	for name, want := range map[string]string{
+		"/tmp/kubesolo-v1.2.2-linux-amd64.tar.gz":              "v1.2.2",
+		"kubesolo-v1.2.2-linux-arm64-musl.tar.gz":              "v1.2.2",
+		"kubesolo-v1.2.2-linux-amd64-offline.tar.gz":           "v1.2.2",
+		"kubesolo-v1.2.2-linux-arm-musl-offline.tar.gz":        "v1.2.2",
+		"kubesolo-v1.3.0-rc.1-linux-riscv64-offline.tar.gz":    "v1.3.0-rc.1",
+		"kubesolo-v1.3.0-test.9crash-linux-amd64.tgz":          "v1.3.0-test.9crash",
+		"kubesolo-v1.3.0-rc.1-linux-amd64-musl-offline.tar.gz": "v1.3.0-rc.1",
+	} {
+		if got, ok := VersionFromArchiveName(name); !ok || got != want {
+			t.Errorf("%s: %q, %v; want %s", name, got, ok, want)
+		}
+	}
+	for _, name := range []string{"kubesolo", "kubesolo-latest-linux-amd64.tar.gz", "other-v1.2.2-linux-amd64.tar.gz"} {
+		if got, ok := VersionFromArchiveName(name); ok {
+			t.Errorf("%s: matched %q", name, got)
+		}
+	}
+}

@@ -1064,7 +1064,7 @@ verify_checksum() {
     local got
     got=$(sha256_of "$1")
     if [ "$got" != "$2" ]; then
-        handle_error "Checksum mismatch for $(basename "$1"): expected $2 ($3), got $got. Nothing was changed."
+        handle_error "Checksum mismatch for $(basename "$1" | sed 's/^source-//'): expected $2 ($3), got $got. Nothing was changed."
     fi
     echo "🔐 Checksum verified against $3"
 }
@@ -1086,17 +1086,23 @@ stage_release() {
 
     if [ -n "$KUBESOLO_OFFLINE_INSTALL" ]; then
         [ -f "$KUBESOLO_OFFLINE_INSTALL" ] || handle_error "Specified offline-install path does not exist: $KUBESOLO_OFFLINE_INSTALL"
-        fetched="$KUBESOLO_OFFLINE_INSTALL"
+        # Copied into the staging directory, which only root can write, and
+        # verified and extracted from there: the original may be writable by
+        # someone who could replace it between the check and the extraction.
+        # Its own name: a bare binary is usually called kubesolo, which is
+        # where the staged binary goes.
+        fetched="$STAGE_DIR/source-$(basename "$KUBESOLO_OFFLINE_INSTALL")"
+        cp "$KUBESOLO_OFFLINE_INSTALL" "$fetched" || handle_error "Failed to copy $KUBESOLO_OFFLINE_INSTALL"
         local sums
-        sums="$(dirname "$fetched")/SHA256SUMS"
+        sums="$(dirname "$KUBESOLO_OFFLINE_INSTALL")/SHA256SUMS"
         if [ -n "$KUBESOLO_SHA256" ]; then
             verify_checksum "$fetched" "$KUBESOLO_SHA256" "KUBESOLO_SHA256"
         elif [ -f "$sums" ]; then
-            expected=$(sum_from_file "$sums" "$(basename "$fetched")")
-            [ -n "$expected" ] || handle_error "$sums has no entry for $(basename "$fetched"). Nothing was changed."
+            expected=$(sum_from_file "$sums" "$(basename "$KUBESOLO_OFFLINE_INSTALL")")
+            [ -n "$expected" ] || handle_error "$sums has no entry for $(basename "$KUBESOLO_OFFLINE_INSTALL"). Nothing was changed."
             verify_checksum "$fetched" "$expected" "$sums"
         else
-            echo "⚠️  $(basename "$fetched") has no SHA256SUMS beside it, so it cannot be verified"
+            echo "⚠️  $(basename "$KUBESOLO_OFFLINE_INSTALL") has no SHA256SUMS beside it, so it cannot be verified"
             echo "   (sh install.sh --download-only writes one)"
         fi
     else

@@ -195,3 +195,56 @@ func TestCheckBinary(t *testing.T) {
 		t.Errorf("other architecture: %v", err)
 	}
 }
+
+// A local source outside staging is copied in and used from there: changing
+// the original afterwards changes nothing that was staged.
+func TestStageCopiesLocalSources(t *testing.T) {
+	l := testLayout(t)
+	src := filepath.Join(t.TempDir(), "kubesolo")
+	if err := os.WriteFile(src, []byte("not an executable"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(src)
+	staging := l.RunStagingDir("c")
+	_, err := Stage(context.Background(), l, staging, Request{Version: "v1.2.2", Source: src, SHA256: sum(raw)}, hostInfo(), func(string, ...any) {})
+	if err == nil || !strings.Contains(err.Error(), "not a Linux executable") {
+		t.Fatalf("Stage: %v", err)
+	}
+	a, err1 := os.Stat(src)
+	b, err2 := os.Stat(filepath.Join(staging, "kubesolo"))
+	if err1 != nil || err2 != nil {
+		t.Fatalf("stat: %v %v", err1, err2)
+	}
+	if os.SameFile(a, b) {
+		t.Error("the staged binary is the source itself, which its owner could still change")
+	}
+	if got, _ := os.ReadFile(filepath.Join(staging, "kubesolo")); string(got) != string(raw) {
+		t.Errorf("staged binary holds %q, want the source's bytes %q", got, raw)
+	}
+}
+
+func TestIsWithin(t *testing.T) {
+	dir := t.TempDir()
+	inside := filepath.Join(dir, "staging", "x", "kubesolo")
+	if err := os.MkdirAll(filepath.Dir(inside), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inside, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(dir, "elsewhere")
+	if err := os.WriteFile(outside, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "staging", "link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	staging := filepath.Join(dir, "staging")
+	if !isWithin(inside, staging) {
+		t.Error("file in staging not within it")
+	}
+	if isWithin(outside, staging) || isWithin(link, staging) || isWithin(staging, staging) {
+		t.Error("a path outside staging, or a link out of it, counted as within")
+	}
+}

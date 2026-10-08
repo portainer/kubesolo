@@ -356,6 +356,20 @@ func (e *executor) backup(dir, to string) error {
 		return err
 	}
 
+	// The service definition, so a rollback can put back the one the older
+	// release runs under: kubesoloctl moves a flag-based install onto a
+	// configuration file after an upgrade, which rewrites the definition to a
+	// --config an older release does not understand.
+	definition := ""
+	if def := e.svc.DefinitionFile(); def != "" {
+		if fi, err := os.Stat(def); err == nil {
+			if err := CloneFile(def, filepath.Join(dir, filepath.Base(e.l.BackupServiceDefinition())), fi.Mode().Perm()); err != nil {
+				return fmt.Errorf("back up the service definition: %w", err)
+			}
+			definition = def
+		}
+	}
+
 	hasConfig := false
 	if _, err := os.Stat(e.l.ConfigFile); err == nil {
 		if err := CloneFile(e.l.ConfigFile, filepath.Join(dir, filepath.Base(e.l.BackupConfigFile())), 0o600); err != nil {
@@ -367,6 +381,7 @@ func (e *executor) backup(dir, to string) error {
 	m := upgrade.Manifest{
 		From: e.from, To: to, Created: time.Now().UTC(), RunID: e.run.ID,
 		DatastoreBytes: fi.Size(), BinarySHA256: binSum, HasConfigFile: hasConfig,
+		ServiceDefinition: definition,
 	}
 	raw, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -572,6 +587,30 @@ func (e *executor) restoreFiles(m *upgrade.Manifest) error {
 		}
 		if err := os.Rename(tmp, e.l.ConfigFile); err != nil {
 			return fmt.Errorf("restore the configuration file: %w", err)
+		}
+	} else if _, err := os.Stat(e.l.ConfigFile); err == nil {
+		// The restored release ran without one; it was created since, by the
+		// move off flags. Set aside rather than deleted.
+		if err := os.Rename(e.l.ConfigFile, e.l.ConfigFile+".rolled-back"); err != nil {
+			return fmt.Errorf("set aside the configuration file: %w", err)
+		}
+		e.logf("%s was created after the backup; moved to %s", e.l.ConfigFile, e.l.ConfigFile+".rolled-back")
+	}
+
+	if m.ServiceDefinition != "" {
+		fi, err := os.Stat(e.l.BackupServiceDefinition())
+		if err != nil {
+			return fmt.Errorf("restore the service definition: %w", err)
+		}
+		tmp := m.ServiceDefinition + ".restore"
+		if err := CloneFile(e.l.BackupServiceDefinition(), tmp, fi.Mode().Perm()); err != nil {
+			return fmt.Errorf("restore the service definition: %w", err)
+		}
+		if err := os.Rename(tmp, m.ServiceDefinition); err != nil {
+			return fmt.Errorf("restore the service definition: %w", err)
+		}
+		if err := e.svc.ReloadDefinitions(); err != nil {
+			return err
 		}
 	}
 	e.clearPending()
