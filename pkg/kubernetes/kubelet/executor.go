@@ -37,6 +37,9 @@ func (s *service) Run(apiServerReady chan struct{}) error {
 	}
 
 	command := app.NewKubeletCommand(s.ctx)
+	// The error is logged below; cobra would also print it to stderr, outside
+	// the kubesolo log format.
+	command.SilenceErrors = true
 	s.configureKubeletArgs(command)
 
 	time.Sleep(types.DefaultComponentSleep)

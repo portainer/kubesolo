@@ -24,6 +24,9 @@ func (s *service) Run(apiServerReadyCh chan struct{}) error {
 	}
 
 	command := app.NewControllerManagerCommand()
+	// The error is logged below; cobra would also print it to stderr, outside
+	// the kubesolo log format.
+	command.SilenceErrors = true
 	command.SetArgs([]string{})
 	s.configureControllerManagerFlags(command)
 

@@ -26,6 +26,9 @@ func (s *service) Run(kineReadyCh chan struct{}) error {
 	register(admission.NewPlugins(), s.nodeName)
 
 	command := app.NewAPIServerCommand(nil)
+	// The error is logged below; cobra would also print it to stderr, outside
+	// the kubesolo log format.
+	command.SilenceErrors = true
 	command.SetArgs([]string{})
 	if err := s.configureAPIServerFlags(command); err != nil {
 		log.Error().Str("component", "apiserver").Msgf("failed to configure API server flags: %v...", err)
