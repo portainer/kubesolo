@@ -64,6 +64,7 @@ func SetLoggingMode(mode string) {
 			Out:           os.Stderr,
 			TimeFormat:    "2006/01/02 03:04PM",
 			FormatMessage: formatMessage,
+			NoColor:       !isTerminal(os.Stderr),
 		}
 	case "NOCOLOR":
 		out = zerolog.ConsoleWriter{
@@ -80,6 +81,14 @@ func SetLoggingMode(mode string) {
 
 	log.Logger = log.Output(out)
 	setBridgeOutput(out)
+}
+
+// isTerminal reports whether f is a terminal. Under systemd, in a container or
+// behind a pipe it is not, and colour codes would only reach the journal or the
+// log file as escape sequences.
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 func setBridgeOutput(out io.Writer) {
