@@ -1399,13 +1399,27 @@ migrate_to_config_file() {
         return 0
     fi
     chmod 600 "$tmp"
-    cp "$definition" "$definition.bak" || { rm -f "$tmp"; return 0; }
-    mv "$tmp" "$CONFIG_FILE" || return 0
-    sed -i \
+
+    # Both files are staged before either is put in place, and the configuration
+    # is withdrawn if the definition cannot follow it: a file that nothing passes
+    # --config for would make every later run skip the migration above. The
+    # staged definition starts as a copy so it keeps the original's mode, which
+    # the init.d, s6 and runit scripts need to stay executable.
+    if ! cp -p "$definition" "$definition.new" || ! sed \
         -e "s|^ExecStart=$INSTALL_PATH .*\$|ExecStart=$INSTALL_PATH --config=$CONFIG_FILE|" \
         -e "s|^DAEMON_ARGS=\".*\"\$|DAEMON_ARGS=\"--config=$CONFIG_FILE\"|" \
         -e "s|^command_args=\".*\"\$|command_args=\"--config=$CONFIG_FILE\"|" \
-        -e "s|^exec $INSTALL_PATH .*\$|exec $INSTALL_PATH --config=$CONFIG_FILE|" "$definition" || return 0
+        -e "s|^exec $INSTALL_PATH .*\$|exec $INSTALL_PATH --config=$CONFIG_FILE|" "$definition" > "$definition.new" \
+        || ! cp "$definition" "$definition.bak" || ! mv "$tmp" "$CONFIG_FILE"; then
+        rm -f "$tmp" "$definition.new"
+        echo "⚠️  Could not move the service onto $CONFIG_FILE; leaving its flags in place"
+        return 0
+    fi
+    if ! mv "$definition.new" "$definition"; then
+        rm -f "$CONFIG_FILE" "$definition.new"
+        echo "⚠️  Could not move the service onto $CONFIG_FILE; leaving its flags in place"
+        return 0
+    fi
     [ "$INIT_SYSTEM" = "systemd" ] && systemctl daemon-reload
     echo "✅ Settings moved to $CONFIG_FILE (previous service definition kept at $definition.bak)"
 }
