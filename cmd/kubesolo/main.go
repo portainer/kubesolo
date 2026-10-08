@@ -816,6 +816,7 @@ func (s *kubesolo) bootstrap() {
 	logging.SetLoggingMode("PRETTY")
 	logging.SetLoggingLevel("INFO")
 	logging.ConfigureK8sDefaultLogging()
+	logging.ConfigureLogrusLogging()
 
 	// Load required kernel modules before any networking setup
 	system.LoadRequiredModules()

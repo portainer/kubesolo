@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"github.com/portainer/kubesolo/internal/logging"
 	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
 )
@@ -45,6 +46,9 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	// shutdown - close the listener once in-flight requests drain instead of
 	// waiting up to --request-timeout (60s) for open watches to go away
 	_ = flags.Set("shutdown-send-retry-after", "true")
+
+	// logging - write through the kubesolo logger
+	_ = flags.Set("logging-format", logging.K8sLogFormat)
 
 	return nil
 }
