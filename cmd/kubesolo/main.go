@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/portainer/kubesolo/internal/config"
@@ -215,14 +216,44 @@ func (s *kubesolo) run() {
 	startService := func(svc service) {
 		svcCtx, svcCancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
-		s.wg.Go(func() {
+		// Not tracked by s.wg: stopServices waits on done with a deadline, and a
+		// service that misses it must not block the s.wg.Wait() below.
+		go func() {
 			defer close(done)
 			svc.start(svcCtx, func() {
 				svcCancel()
 				cancel()
 			})
-		})
+		}()
 		started = append(started, startedService{name: svc.name, stop: svcCancel, done: done})
+	}
+
+	// stopServices stops the started services in reverse start order, so each one
+	// goes down while the services it depends on are still running. A service that
+	// has not returned within serviceStopTimeout is left to process exit: the
+	// embedded containerd only returns from its own SIGTERM handler, so it never
+	// stops when shutdown was not triggered by a signal.
+	stopServices := func() {
+		for i := len(started) - 1; i >= 0; i-- {
+			log.Info().Str("component", "kubesolo").Msgf("stopping %s...", started[i].name)
+			started[i].stop()
+			select {
+			case <-started[i].done:
+			case <-time.After(serviceStopTimeout):
+				log.Warn().Str("component", "kubesolo").Msgf("%s did not stop within %s, leaving it to process exit", started[i].name, serviceStopTimeout)
+			}
+		}
+	}
+
+	// stopStarted handles shutdown before every service is ready. The service that
+	// never became ready is left to process exit, as before: upstream components
+	// cannot always be cancelled mid-startup (the apiserver exits 255 when a
+	// post-start hook sees its context cancelled). Nothing depends on it, since
+	// the services after it were never started, so only the ones before it are
+	// stopped in order.
+	stopStarted := func() {
+		started = started[:len(started)-1]
+		stopServices()
 	}
 
 	// infraServices must be fully ready before pod masquerade is set up.
@@ -285,6 +316,7 @@ func (s *kubesolo) run() {
 		log.Info().Str("component", "kubesolo").Msgf("starting %s...", svc.name)
 		startService(svc)
 		if !waitForService(ctx, svc.name, svc.readyCh) {
+			stopStarted()
 			return
 		}
 
@@ -315,6 +347,7 @@ func (s *kubesolo) run() {
 		log.Info().Str("component", "kubesolo").Msgf("starting %s...", svc.name)
 		startService(svc)
 		if !waitForService(ctx, svc.name, svc.readyCh) {
+			stopStarted()
 			return
 		}
 	}
@@ -359,13 +392,7 @@ func (s *kubesolo) run() {
 	<-ctx.Done()
 	log.Info().Str("component", "kubesolo").Msg("shutting down...")
 
-	// Stop services in reverse start order, so each one goes down while the
-	// services it depends on are still running.
-	for i := len(started) - 1; i >= 0; i-- {
-		log.Info().Str("component", "kubesolo").Msgf("stopping %s...", started[i].name)
-		started[i].stop()
-		<-started[i].done
-	}
+	stopServices()
 
 	// Wait for all service goroutines to complete gracefully
 	log.Info().Str("component", "kubesolo").Msg("waiting for all services to shutdown...")
@@ -448,6 +475,10 @@ func cleanStaleState(basePath string, runtimeExternal, containerMode bool) {
 		}
 	}
 }
+
+// serviceStopTimeout bounds how long shutdown waits for each service to return,
+// so stopping all of them stays well inside systemd's default 90s TimeoutStopSec.
+const serviceStopTimeout = 10 * time.Second
 
 const (
 	bootIDPath       = "/proc/sys/kernel/random/boot_id"
