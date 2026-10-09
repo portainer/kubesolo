@@ -219,6 +219,14 @@ func (s *Service) Start() error {
 	if s.Daemon {
 		return s.startDaemon()
 	}
+	// OpenRC keeps a service marked started until a stop of it succeeds. Its
+	// stop gives up after a few seconds, which releases up to v1.2.1 always
+	// outlast, and the mark also survives a crash; "start" then does nothing and
+	// reports success. With no KubeSolo running the mark is stale, so it is
+	// cleared first.
+	if s.Init == detect.InitOpenRC && len(MainPIDs(s.binary)) == 0 {
+		_ = exec.Command("rc-service", "kubesolo", "zap").Run()
+	}
 	return s.control("start")
 }
 

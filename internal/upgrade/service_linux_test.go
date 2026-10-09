@@ -5,8 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/portainer/kubesolo/internal/cli/detect"
 )
 
 // startFake runs a shell copied to binary, so that MainPIDs finds it by its
@@ -71,5 +75,55 @@ func TestStopOfAPromptProcessIsQuick(t *testing.T) {
 	}
 	if took := time.Since(start); took > 3*time.Second {
 		t.Errorf("stop of a process that exits on the first TERM took %s", took)
+	}
+}
+
+// stubRCService puts an rc-service on PATH that records its arguments, one call
+// per line, and returns a function reading them back.
+func stubRCService(t *testing.T) func() []string {
+	t.Helper()
+	dir := t.TempDir()
+	calls := filepath.Join(dir, "calls")
+	script := "#!/bin/sh\necho \"$*\" >> " + calls + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "rc-service"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return func() []string {
+		raw, _ := os.ReadFile(calls)
+		var out []string
+		for _, l := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+			if l != "" {
+				out = append(out, l)
+			}
+		}
+		return out
+	}
+}
+
+// OpenRC keeps a service marked started after a stop that gave up, or after the
+// process crashed, and then "start" does nothing. With no KubeSolo running the
+// mark is stale, so Start clears it first.
+func TestOpenRCStartClearsAStaleStartedState(t *testing.T) {
+	calls := stubRCService(t)
+	svc := &Service{Init: detect.InitOpenRC, binary: filepath.Join(t.TempDir(), "kubesolo")}
+	if err := svc.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := calls(), []string{"kubesolo zap", "kubesolo start"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("rc-service calls = %q, want %q", got, want)
+	}
+}
+
+func TestOpenRCStartLeavesARunningServiceAlone(t *testing.T) {
+	calls := stubRCService(t)
+	binary := filepath.Join(t.TempDir(), "kubesolo")
+	startFake(t, binary, `trap 'exit 0' TERM; while :; do sleep 0.1; done`)
+	svc := &Service{Init: detect.InitOpenRC, binary: binary}
+	if err := svc.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := calls(), []string{"kubesolo start"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("rc-service calls = %q, want %q", got, want)
 	}
 }
