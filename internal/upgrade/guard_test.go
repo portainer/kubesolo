@@ -169,6 +169,16 @@ func TestPatchServiceDefinitions(t *testing.T) {
 	if _, err := PatchOpenRC(got, l); err == nil {
 		t.Error("openrc: patched a script that already has start_pre")
 	}
+	// A script without a logger (install.sh and kubesoloctl up to v1.2.1) gets
+	// one; a script that already sends its output somewhere keeps that.
+	if !strings.Contains(got, "\noutput_logger=\"logger -t kubesolo -p daemon.info\"\nerror_logger=\"logger -t kubesolo -p daemon.info\"\n") {
+		t.Errorf("openrc: no logger added\n%s", got)
+	}
+	logged := strings.Replace(openrc, "name=", "output_log=\"/var/log/ks.log\"\nname=", 1)
+	got, err = PatchOpenRC(logged, l)
+	if err != nil || strings.Contains(got, "output_logger") {
+		t.Errorf("openrc with output_log: %v\n%s", err, got)
+	}
 
 	sysv := "#!/bin/sh\ncase \"$1\" in\n    start)\n        log_daemon_msg \"Starting\"\n        ;;\n    stop)\n        ;;\nesac\n"
 	got, err = PatchSysV(sysv, l)
