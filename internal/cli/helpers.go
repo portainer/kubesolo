@@ -26,6 +26,8 @@ func configureLogging(debug bool) {
 	color := ui.ColorEnabled()
 
 	if debug {
+		// Milliseconds, so the time the writer prints has them to show.
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
 		log.Logger = log.Output(zerolog.ConsoleWriter{
 			Out:        os.Stderr,
 			NoColor:    !color,
