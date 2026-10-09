@@ -83,6 +83,8 @@ func TestRenderTemplate_OpenRC_NoProxy(t *testing.T) {
 	assertContains(t, out, "#!/sbin/openrc-run")
 	assertContains(t, out, `command="/usr/local/bin/kubesolo"`)
 	assertContains(t, out, "need net")
+	// OpenRC gives up on a stop after a few seconds by default.
+	assertContains(t, out, `retry="SIGTERM/90/SIGKILL/5"`)
 }
 
 func TestRenderTemplate_OpenRC_WithProxy(t *testing.T) {
