@@ -1,6 +1,7 @@
 package logging_test
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"strings"
@@ -56,4 +57,18 @@ func TestConsoleTimeHasMilliseconds(t *testing.T) {
 	out, err := io.ReadAll(r)
 	require.NoError(t, err)
 	assert.Regexp(t, `^2026/10/08 23:42:13\.789 INF .*timed`, string(out))
+}
+
+// SetOutput sends the console format to another writer, such as syslog for the
+// upgrade executor where there is no journal. Nothing there reads colour codes.
+func TestSetOutputWritesTheConsoleFormatWithoutColour(t *testing.T) {
+	logger := log.Logger
+	t.Cleanup(func() { log.Logger = logger })
+
+	var buf bytes.Buffer
+	logging.SetOutput(&buf)
+	log.Info().Str("component", "upgrade").Msg("preflight")
+
+	assert.Regexp(t, `^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3} INF .*preflight \| component=upgrade`, buf.String())
+	assert.NotContains(t, buf.String(), "\x1b[")
 }

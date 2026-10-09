@@ -89,6 +89,19 @@ func SetLoggingMode(mode string) {
 	setBridgeOutput(out)
 }
 
+// SetOutput writes the console format, without colour, to w rather than to
+// stderr.
+func SetOutput(w io.Writer) {
+	out := zerolog.ConsoleWriter{
+		Out:           w,
+		TimeFormat:    consoleTimeFormat,
+		FormatMessage: formatMessage,
+		NoColor:       true,
+	}
+	log.Logger = log.Output(out)
+	setBridgeOutput(out)
+}
+
 // isTerminal reports whether f is a terminal. Under systemd, in a container or
 // behind a pipe it is not, and colour codes would only reach the journal or the
 // log file as escape sequences.
