@@ -217,6 +217,11 @@ func appendKeysAndValues(e *zerolog.Event, keysAndValues []any) *zerolog.Event {
 		if !ok {
 			key = fmt.Sprint(keysAndValues[i])
 		}
+		// The bridge sets component itself; Kubernetes' own value, such as the
+		// garbage collector's GraphBuilder, names a part within it.
+		if key == "component" {
+			key = "subcomponent"
+		}
 		if i+1 == len(keysAndValues) {
 			e = e.Str(key, "(MISSING)")
 			break
