@@ -817,6 +817,16 @@ EOF
     echo "✅ $APP_NAME service created and started with SysV init"
 }
 
+# openrc_start starts KubeSolo under OpenRC. A stop that timed out, or a crash,
+# leaves the service marked started, and "start" then does nothing; with no
+# KubeSolo running that mark is stale, so it is cleared first.
+openrc_start() {
+    if [ -z "$(find_kubesolo_binary_pids)" ]; then
+        rc-service "$APP_NAME" zap >/dev/null 2>&1 || true
+    fi
+    rc-service "$APP_NAME" start
+}
+
 # Function to create OpenRC service
 create_openrc_service() {
     SERVICE_PATH="/etc/init.d/$APP_NAME"
@@ -832,6 +842,9 @@ command_args="$CMD_ARGS"
 command_background=true
 pidfile="/var/run/\${RC_SVCNAME}.pid"
 command_user="root"
+# OpenRC gives up on a stop after a few seconds and leaves the service marked
+# started; allow as long as systemd's default TimeoutStopSec.
+retry="SIGTERM/90/SIGKILL/5"
 
 depend() {
     need net
@@ -841,7 +854,7 @@ EOF
 
     chmod +x "$SERVICE_PATH" || handle_error "Failed to make OpenRC service script executable"
     rc-update add "$APP_NAME" default || handle_error "Failed to enable $APP_NAME service"
-    rc-service "$APP_NAME" start || handle_error "Failed to start $APP_NAME service"
+    openrc_start || handle_error "Failed to start $APP_NAME service"
     echo "✅ $APP_NAME service created and started with OpenRC"
 }
 
@@ -1452,7 +1465,7 @@ ensure_process_killmode() {
 restart_service() {
     case "$INIT_SYSTEM" in
         systemd) systemctl start "$APP_NAME" ;;
-        openrc) rc-service "$APP_NAME" start ;;
+        openrc) openrc_start ;;
         sysvinit) "/etc/init.d/$APP_NAME" start ;;
         upstart) initctl start "$APP_NAME" ;;
         s6) s6-svc -u "/etc/s6/sv/$APP_NAME" ;;
