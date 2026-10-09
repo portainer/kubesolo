@@ -125,6 +125,48 @@ func TestKlogContextualLogger(t *testing.T) {
 	assertCallerIsThisFile(t, lines[0])
 }
 
+// Kubernetes code adds its own "component" value (the garbage collector's is
+// GraphBuilder). It must not replace the kubesolo component, which the bridge
+// sets, so it is kept as subcomponent.
+func TestKlogComponentValueIsKeptAsSubcomponent(t *testing.T) {
+	read := capture(t, zerolog.InfoLevel)
+
+	klog.Background().WithValues("component", "GraphBuilder").Info("Running")
+	klog.InfoS("synced", "component", "quota")
+
+	lines := read()
+	require.Len(t, lines, 2)
+	assert.Equal(t, "kubernetes", lines[0]["component"])
+	assert.Equal(t, "GraphBuilder", lines[0]["subcomponent"])
+	assert.Equal(t, "kubernetes", lines[1]["component"])
+	assert.Equal(t, "quota", lines[1]["subcomponent"])
+}
+
+// Callers in kubesolo's own code are named by import path, as callers in
+// libraries are, not by the directory the binary was built in.
+func TestCallerIsNamedByImportPath(t *testing.T) {
+	read := capture(t, zerolog.InfoLevel)
+
+	klog.InfoS("from kubesolo code")
+
+	lines := read()
+	require.Len(t, lines, 1)
+	caller, _ := lines[0][zerolog.CallerFieldName].(string)
+	assert.Regexp(t, `^github\.com/portainer/kubesolo/internal/logging/bridge_test\.go:\d+$`, caller)
+}
+
+func TestCallerName(t *testing.T) {
+	root := logging.ModuleRoot()
+	cases := []struct{ function, file, want string }{
+		{"main.main", root + "cmd/kubesolo/main.go", "github.com/portainer/kubesolo/cmd/kubesolo/main.go:7"},
+		{"k8s.io/client-go/tools/cache.(*sharedIndexInformer).Run", "/home/runner/go/pkg/mod/k8s.io/client-go@v0.35.7/tools/cache/shared_informer.go", "k8s.io/client-go/tools/cache/shared_informer.go:7"},
+		{"runtime.goexit", "/usr/local/go/src/runtime/asm_amd64.s", "/usr/local/go/src/runtime/asm_amd64.s:7"},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, logging.CallerName(c.function, c.file, 7))
+	}
+}
+
 func TestKlogFollowsGlobalLevel(t *testing.T) {
 	read := capture(t, zerolog.WarnLevel)
 

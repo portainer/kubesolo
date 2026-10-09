@@ -5,8 +5,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-
-	"github.com/rs/zerolog"
 )
 
 // maxCallerDepth bounds the stack walk for a bridged log line. It is deep
@@ -51,14 +49,43 @@ func externalCaller(component componentFunc, libraries ...string) (caller, owner
 	}
 }
 
-// formatCaller formats a frame as zerolog does, except for code built from the
-// module cache, which is named by import path rather than by where the module
-// cache happened to be on the build machine.
+// formatCaller formats a frame as a caller, by import path.
 func formatCaller(frame runtime.Frame) string {
-	if strings.Contains(frame.File, "/pkg/mod/") {
-		return packagePath(frame.Function) + "/" + filepath.Base(frame.File) + ":" + strconv.Itoa(frame.Line)
+	return callerName(frame.Function, frame.File, frame.Line)
+}
+
+// modulePath is the import path of this module.
+const modulePath = "github.com/portainer/kubesolo"
+
+// moduleRoot is the directory this module was built from, as the compiler
+// recorded it in file names, so it can be replaced by modulePath.
+var moduleRoot = func() string {
+	_, file, _, _ := runtime.Caller(0)
+	return strings.TrimSuffix(file, "internal/logging/caller.go")
+}()
+
+// callerName names a source position by import path, so the same line reads the
+// same whichever machine and directory the binary was built in: kubesolo's own
+// files under modulePath, and code from the module cache by its package's import
+// path. Anything else, such as the standard library, keeps its file name.
+func callerName(function, file string, line int) string {
+	pos := ":" + strconv.Itoa(line)
+	switch {
+	case strings.HasPrefix(file, moduleRoot):
+		return modulePath + "/" + strings.TrimPrefix(file, moduleRoot) + pos
+	case strings.Contains(file, "/pkg/mod/") && function != "":
+		return packagePath(function) + "/" + filepath.Base(file) + pos
 	}
-	return zerolog.CallerMarshalFunc(frame.PC, frame.File, frame.Line)
+	return file + pos
+}
+
+// callerMarshal is zerolog's CallerMarshalFunc for the kubesolo logger.
+func callerMarshal(pc uintptr, file string, line int) string {
+	function := ""
+	if f := runtime.FuncForPC(pc); f != nil {
+		function = f.Name()
+	}
+	return callerName(function, file, line)
 }
 
 // isFrameOf reports whether a function, as named by runtime.Frame.Function,

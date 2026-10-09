@@ -131,6 +131,10 @@ func main() {
 	// The upgrade runs the binary as its own helpers. Neither is KubeSolo, so
 	// they are dispatched before any configuration is loaded or validated.
 	if *flags.UpgradeExecutor != "" {
+		// The executor is not KubeSolo, but it logs in the same format.
+		logging.ConfigureLogger()
+		logging.SetLoggingMode("PRETTY")
+		logging.SetLoggingLevel("INFO")
 		os.Exit(executor.Main(*flags.UpgradeExecutor))
 	}
 	if *flags.UpgradeCheckDatastore != "" {
@@ -189,11 +193,12 @@ func (s *kubesolo) run() {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		log.Info().Msg("the main process received interrupt signal, shutting down...")
+		log.Info().Str("component", "kubesolo").Msg("the main process received interrupt signal, shutting down...")
 		cancel()
 	}()
 
 	log.Info().
+		Str("component", "kubesolo").
 		Str("version", Version).
 		Str("build-date", BuildDate).
 		Str("commit", Commit).

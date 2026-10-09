@@ -11,4 +11,8 @@ func SetBridgeOutput(w io.Writer) {
 var (
 	KlogComponent   = klogComponent
 	LogrusComponent = logrusComponent
+	CallerName      = callerName
 )
+
+// ModuleRoot is the build directory prefix callerName replaces.
+func ModuleRoot() string { return moduleRoot }

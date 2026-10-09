@@ -23,5 +23,5 @@ func (s *service) checkControllerManagerHealth() error {
 				InsecureSkipVerify: true,
 			},
 		},
-	}, req, "controller-manager")
+	}, req, "controller")
 }

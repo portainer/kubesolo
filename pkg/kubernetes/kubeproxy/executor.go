@@ -21,6 +21,9 @@ func (s *service) Run(kubeletReadyCh chan struct{}) error {
 	log.Info().Str("component", "kubeproxy").Msg("starting kubeproxy...")
 
 	command := proxy.NewProxyCommand()
+	// The error is logged below; cobra would also print it to stderr, outside
+	// the kubesolo log format.
+	command.SilenceErrors = true
 	command.SetArgs([]string{})
 	s.configureKubeProxyFlags(command)
 
