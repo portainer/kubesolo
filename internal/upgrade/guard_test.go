@@ -176,8 +176,13 @@ func TestPatchServiceDefinitions(t *testing.T) {
 	}
 	logged := strings.Replace(openrc, "name=", "output_log=\"/var/log/ks.log\"\nname=", 1)
 	got, err = PatchOpenRC(logged, l)
-	if err != nil || strings.Contains(got, "output_logger") {
-		t.Errorf("openrc with output_log: %v\n%s", err, got)
+	if err != nil || strings.Contains(got, "output_logger") || !strings.Contains(got, "\nerror_logger=") {
+		t.Errorf("openrc with output_log: want only error_logger added: %v\n%s", err, got)
+	}
+	logged = strings.Replace(logged, "name=", "error_log=\"/var/log/ks.err\"\nname=", 1)
+	got, err = PatchOpenRC(logged, l)
+	if err != nil || strings.Contains(got, "_logger=") {
+		t.Errorf("openrc with output_log and error_log: want no logger added: %v\n%s", err, got)
 	}
 
 	sysv := "#!/bin/sh\ncase \"$1\" in\n    start)\n        log_daemon_msg \"Starting\"\n        ;;\n    stop)\n        ;;\nesac\n"

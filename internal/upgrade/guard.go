@@ -228,15 +228,22 @@ func patchDefinition(path string, patch func(string) (string, error)) error {
 // wrote, and is left for a human.
 //
 // Scripts written before KubeSolo sent its output to syslog also get the
-// loggers, unless they already send the output somewhere: without them OpenRC
-// discards everything KubeSolo logs.
+// loggers: without them OpenRC discards everything KubeSolo logs. Each stream
+// is checked on its own, and one the script already sends somewhere is left
+// alone.
 func PatchOpenRC(def string, l Layout) (string, error) {
 	if regexp.MustCompile(`(?m)^\s*start_pre\s*\(\)`).MatchString(def) {
 		return "", fmt.Errorf("the script already defines start_pre")
 	}
 	out := strings.TrimRight(def, "\n") + "\n"
-	if !regexp.MustCompile(`(?m)^\s*(output_log|output_logger)=`).MatchString(def) {
-		out += "\noutput_logger=\"logger -t kubesolo -p daemon.info\"\nerror_logger=\"logger -t kubesolo -p daemon.info\"\n"
+	var loggers string
+	for _, stream := range []string{"output", "error"} {
+		if !regexp.MustCompile(`(?m)^\s*` + stream + `_log(ger)?=`).MatchString(def) {
+			loggers += stream + "_logger=\"logger -t kubesolo -p daemon.info\"\n"
+		}
+	}
+	if loggers != "" {
+		out += "\n" + loggers
 	}
 	return out + "\nstart_pre() {\n    " + guardLine(l) + "\n}\n", nil
 }
