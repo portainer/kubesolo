@@ -96,6 +96,9 @@ func (e *executor) execute() error {
 		result, err = upgrade.ResultAborted, fmt.Errorf("unknown operation %q", e.job.Operation)
 	}
 	if errors.Is(err, errLeftPending) {
+		// The run stays open, but the staged release is in place by now and
+		// nothing that settles the run later removes staging.
+		_ = os.RemoveAll(e.l.StagingDir())
 		return nil
 	}
 	e.finish(result, err)
