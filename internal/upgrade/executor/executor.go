@@ -95,6 +95,12 @@ func (e *executor) execute() error {
 	default:
 		result, err = upgrade.ResultAborted, fmt.Errorf("unknown operation %q", e.job.Operation)
 	}
+	if errors.Is(err, errLeftPending) {
+		// The run stays open, but the staged release is in place by now and
+		// nothing that settles the run later removes staging.
+		_ = os.RemoveAll(e.l.StagingDir())
+		return nil
+	}
 	e.finish(result, err)
 	return err
 }
@@ -272,10 +278,22 @@ func (e *executor) upgrade() (upgrade.Result, error) {
 			return upgrade.ResultFailed, fmt.Errorf("%s, and %s did not become healthy: %s", outcome.reason, e.from, back.reason)
 		}
 		return upgrade.ResultRolledBack, errors.New(outcome.reason)
+	case gateInterrupted:
+		// Most often the host shutting down. That says nothing about the new
+		// version, and restoring the old one now would decide the upgrade
+		// mid-shutdown. It stays pending instead, as after a power cut: once
+		// back, KubeSolo closes the run when the new version is healthy, or the
+		// boot guard puts the previous one back.
+		e.logf("interrupted while verifying %s; it stays pending until KubeSolo or the boot guard settles it", req.Version)
+		return "", errLeftPending
 	default:
 		return e.restore(fmt.Errorf("%s did not become healthy: %s", req.Version, outcome.reason))
 	}
 }
+
+// errLeftPending ends an upgrade without finishing its run, which stays open for
+// KubeSolo to close once the pending version has been verified or restored.
+var errLeftPending = errors.New("left pending")
 
 func (e *executor) preflight(req upgrade.Request) error {
 	if err := req.Validate(); err != nil {
@@ -626,6 +644,8 @@ const (
 	gateHealthy gateKind = iota
 	gateUnhealthy
 	gateGuardRestored
+	// gateInterrupted: the executor was signalled, so it cannot tell.
+	gateInterrupted
 )
 
 type gateOutcome struct {
@@ -697,7 +717,7 @@ func (e *executor) gate(want string, timeout time.Duration, watchGuard bool) gat
 		}
 		select {
 		case <-e.ctx.Done():
-			return gateOutcome{gateUnhealthy, "interrupted: " + e.ctx.Err().Error()}
+			return gateOutcome{gateInterrupted, "interrupted: " + e.ctx.Err().Error()}
 		case <-time.After(gateInterval):
 		}
 	}

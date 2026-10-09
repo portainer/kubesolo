@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/syslog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -135,6 +136,13 @@ func main() {
 		logging.ConfigureLogger()
 		logging.SetLoggingMode("PRETTY")
 		logging.SetLoggingLevel("INFO")
+		// Outside systemd it is started with its output on /dev/null, so it logs
+		// to syslog, under the tag KubeSolo's own output has there.
+		if !upgrade.UnderSystemdUnit() {
+			if w, err := syslog.New(syslog.LOG_INFO|syslog.LOG_DAEMON, "kubesolo"); err == nil {
+				logging.SetOutput(w)
+			}
+		}
 		os.Exit(executor.Main(*flags.UpgradeExecutor))
 	}
 	if *flags.UpgradeCheckDatastore != "" {

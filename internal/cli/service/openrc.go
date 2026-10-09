@@ -28,6 +28,14 @@ command_args="{{.CmdArgs}}"
 command_background=true
 pidfile="/var/run/${RC_SVCNAME}.pid"
 command_user="root"
+# OpenRC gives up on a stop after a few seconds and leaves the service marked
+# started; allow as long as systemd's default TimeoutStopSec.
+retry="SIGTERM/90/SIGKILL/5"
+# OpenRC discards a background service's output unless it is told where to send
+# it. KubeSolo logs everything to stderr with the level in each line, so both
+# streams go to syslog at one priority.
+output_logger="logger -t kubesolo -p daemon.info"
+error_logger="logger -t kubesolo -p daemon.info"
 
 depend() {
     need net

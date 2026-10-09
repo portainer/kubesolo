@@ -226,11 +226,26 @@ func patchDefinition(path string, patch func(string) (string, error)) error {
 // the whole script, so a function appended at the end is defined like any
 // other. A script that already has its own start_pre is not one KubeSolo
 // wrote, and is left for a human.
+//
+// Scripts written before KubeSolo sent its output to syslog also get the
+// loggers: without them OpenRC discards everything KubeSolo logs. Each stream
+// is checked on its own, and one the script already sends somewhere is left
+// alone.
 func PatchOpenRC(def string, l Layout) (string, error) {
 	if regexp.MustCompile(`(?m)^\s*start_pre\s*\(\)`).MatchString(def) {
 		return "", fmt.Errorf("the script already defines start_pre")
 	}
-	return strings.TrimRight(def, "\n") + "\n\nstart_pre() {\n    " + guardLine(l) + "\n}\n", nil
+	out := strings.TrimRight(def, "\n") + "\n"
+	var loggers string
+	for _, stream := range []string{"output", "error"} {
+		if !regexp.MustCompile(`(?m)^\s*` + stream + `_log(ger)?=`).MatchString(def) {
+			loggers += stream + "_logger=\"logger -t kubesolo -p daemon.info\"\n"
+		}
+	}
+	if loggers != "" {
+		out += "\n" + loggers
+	}
+	return out + "\nstart_pre() {\n    " + guardLine(l) + "\n}\n", nil
 }
 
 // PatchSysV runs the guard at the start of the start) branch.
