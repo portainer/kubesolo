@@ -196,6 +196,7 @@ func (s *Service) Stop(ctx context.Context) error {
 
 	if waitForExit(ctx, s.binary, stopTimeout) {
 		<-done
+		waitGone(ctx, pids, reapTimeout)
 		if s.Daemon {
 			_ = os.Remove(daemonPIDFile)
 		}
@@ -206,6 +207,7 @@ func (s *Service) Stop(ctx context.Context) error {
 	}
 	if waitForExit(ctx, s.binary, 10*time.Second) {
 		<-done
+		waitGone(ctx, pids, reapTimeout)
 		return nil
 	}
 	return fmt.Errorf("KubeSolo did not stop (pids %v)", MainPIDs(s.binary))
@@ -329,6 +331,39 @@ func isUpgradeHelper(argv []string) bool {
 		}
 	}
 	return false
+}
+
+// reapTimeout bounds how long Stop waits for an exited KubeSolo's PID to go.
+const reapTimeout = 10 * time.Second
+
+// waitGone waits up to timeout until none of pids exists. MainPIDs stops listing
+// a process once its executable link is gone, which happens while the process
+// is still exiting and before it is reaped. Until then its PID is still in use,
+// and OpenRC's start-stop-daemon, which falls back to the process name when the
+// link cannot be read, reports KubeSolo already running and refuses to start it.
+// It reports whether they all went.
+func waitGone(ctx context.Context, pids []int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		alive := false
+		for _, pid := range pids {
+			if processAlive(pid) {
+				alive = true
+				break
+			}
+		}
+		if !alive {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 func waitForExit(ctx context.Context, binary string, timeout time.Duration) bool {

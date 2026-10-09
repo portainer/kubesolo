@@ -127,3 +127,24 @@ func TestOpenRCStartLeavesARunningServiceAlone(t *testing.T) {
 		t.Errorf("rc-service calls = %q, want %q", got, want)
 	}
 }
+
+// A process that has exited but not been reaped still holds its PID, and
+// OpenRC's start-stop-daemon still counts it as running by its name. Stop has
+// to wait for the PID itself to go, not only for the executable link MainPIDs
+// reads, which disappears first.
+func TestWaitGoneWaitsForTheProcessToBeReaped(t *testing.T) {
+	cmd := exec.Command("sh", "-c", "exit 0")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := cmd.Process.Pid
+	time.Sleep(200 * time.Millisecond) // exited, not reaped: a zombie
+
+	if waitGone(context.Background(), []int{pid}, 300*time.Millisecond) {
+		t.Fatal("waitGone reported an unreaped process gone")
+	}
+	_ = cmd.Wait()
+	if !waitGone(context.Background(), []int{pid}, 2*time.Second) {
+		t.Fatal("waitGone did not see the reaped process go")
+	}
+}
