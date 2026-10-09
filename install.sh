@@ -1517,6 +1517,7 @@ PORTAINER_EDGE_KEY="${KUBESOLO_PORTAINER_EDGE_KEY:-}"
 PORTAINER_EDGE_ASYNC="${KUBESOLO_PORTAINER_EDGE_ASYNC:-false}"
 PORTAINER_EDGE_IMAGE="${KUBESOLO_PORTAINER_EDGE_IMAGE:-}"
 LOAD_BALANCER="${KUBESOLO_LOAD_BALANCER:-true}"
+LOAD_BALANCER_IP="${KUBESOLO_LOAD_BALANCER_IP:-}"
 LOCAL_STORAGE="${KUBESOLO_LOCAL_STORAGE:-true}"
 LOCAL_STORAGE_SHARED_PATH="${KUBESOLO_LOCAL_STORAGE_SHARED_PATH:-}"
 DB_WAL_REPAIR="${KUBESOLO_DB_WAL_REPAIR:-false}"
@@ -1564,6 +1565,12 @@ for arg in "$@"; do
       ;;
     --portainer-edge-image=*)
       PORTAINER_EDGE_IMAGE="${arg#*=}"
+      ;;
+    --load-balancer)
+      LOAD_BALANCER="${arg#*=}"
+      ;;
+    --load-balancer-ip=*)
+      LOAD_BALANCER_IP="${arg#*=}"
       ;;
     --local-storage=*)
       LOCAL_STORAGE="${arg#*=}"
@@ -1623,6 +1630,8 @@ for arg in "$@"; do
       echo "  --portainer-edge-key=KEY     Set Portainer Edge Key"
       echo "  --portainer-edge-async=true|false  Enable Portainer Edge Async (default: $PORTAINER_EDGE_ASYNC)"
       echo "  --portainer-edge-image=IMAGE        Set the Portainer Edge Agent image (default: docker.io/portainer/agent:lts)"
+      echo "  --load-balancer=true|false   Enable load balancer (default: $LOAD_BALANCER)"
+      echo "  --load-balancer-ip=IP        Override the IP published as the LoadBalancer EXTERNAL-IP"
       echo "  --local-storage=true|false   Enable local storage (default: $LOCAL_STORAGE)"
       echo "  --d2k=true|false             Embed d2k Docker-to-Kubernetes API translator (default: $D2K)"
       echo "  --d2k-namespace=NAMESPACE    Namespace into which d2k is deployed (default: $D2K_NAMESPACE)"
@@ -1784,6 +1793,10 @@ fi
 
 if [ "$LOAD_BALANCER" = "false" ]; then
   CMD_ARGS="$CMD_ARGS --no-load-balancer"
+fi
+
+if [ "$LOAD_BALANCER" != "false" ] && [ -n "$LOAD_BALANCER_IP" ]; then
+  CMD_ARGS="$CMD_ARGS --load-balancer-ip=$LOAD_BALANCER_IP"
 fi
 
 if [ "$LOCAL_STORAGE" = "false" ]; then
