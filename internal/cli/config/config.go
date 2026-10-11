@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DefaultVersion     = "v1.2.1"
+	DefaultVersion     = "v1.2.2"
 	DefaultPath        = "/var/lib/kubesolo"
 	DefaultInstallPath = "/usr/local/bin/kubesolo"
 	DefaultRunMode     = RunModeService
@@ -54,7 +54,7 @@ type Config struct {
 	// and kubeconfig context name. Defaults to AppName ("kubesolo").
 	Name string
 
-	// Version of KubeSolo to install (e.g. "v1.2.1")
+	// Version of KubeSolo to install (e.g. "v1.2.2")
 	Version string
 
 	// Path is the base directory KubeSolo stores its data in

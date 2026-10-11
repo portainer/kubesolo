@@ -23,7 +23,7 @@ curl -sfL https://raw.githubusercontent.com/portainer/kubesolo/develop/install.s
 
 # With options
 curl -sfL https://get.kubesolo.io | sudo sh -s -- \
-  --version=v1.2.1 \
+  --version=v1.2.2 \
   --path=/opt/kubesolo \
   --run-mode=service
 
@@ -82,7 +82,7 @@ This script provides basic installation with minimal dependencies for the most c
 wget -O - https://raw.githubusercontent.com/portainer/kubesolo/develop/install-minimal.sh | sh
 
 # Or with environment variables
-KUBESOLO_VERSION=v1.2.1 KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
+KUBESOLO_VERSION=v1.2.2 KUBESOLO_PATH=/opt/kubesolo sh install-minimal.sh
 
 # Alpine / musl systems: the minimal installer does not detect libc
 sh install-minimal.sh --musl
@@ -122,7 +122,7 @@ chmod +x kubesolo-service.sh
 The universal installer (`install.sh`) reads these environment variables. The values shown are the defaults:
 
 ```bash
-export KUBESOLO_VERSION="v1.2.1"                # Version to install
+export KUBESOLO_VERSION="v1.2.2"                # Version to install
 export KUBESOLO_PATH="/var/lib/kubesolo"        # Data directory
 export KUBESOLO_APISERVER_EXTRA_SANS=""         # Extra API server certificate SANs
 export KUBESOLO_PORTAINER_EDGE_ID=""            # Portainer Edge ID
@@ -205,7 +205,7 @@ sudo sh install.sh --offline-install=<downloaded archive>
 
 Copy the `SHA256SUMS` file `--download-only` writes along with the archive: the install checks the archive against it. An archive with no `SHA256SUMS` beside it still installs, with a warning that it could not be verified.
 
-Pass the archive that `--download-only` saved. Its name is `kubesolo-<version>-linux-<arch>[-musl]-offline.tar.gz`, for example `kubesolo-v1.2.1-linux-amd64-offline.tar.gz`. The bundle is built for the OS, architecture and libc of the machine that downloads it, so download on Linux (not macOS), and on a glibc machine for a glibc target or a musl machine (such as Alpine) for a musl target. If you can't, download the matching archive from the [releases page](https://github.com/portainer/kubesolo/releases) instead.
+Pass the archive that `--download-only` saved. Its name is `kubesolo-<version>-linux-<arch>[-musl]-offline.tar.gz`, for example `kubesolo-v1.2.2-linux-amd64-offline.tar.gz`. The bundle is built for the OS, architecture and libc of the machine that downloads it, so download on Linux (not macOS), and on a glibc machine for a glibc target or a musl machine (such as Alpine) for a musl target. If you can't, download the matching archive from the [releases page](https://github.com/portainer/kubesolo/releases) instead.
 
 `--download-only` does not need root and does not run the pre-flight checks. See [--download-only](docs/installation/flags.md#--download-only) for details. The archives are also on the [releases page](https://github.com/portainer/kubesolo/releases) (`kubesolo-<version>-linux-<arch>[-musl]-offline.tar.gz`).
 
@@ -224,7 +224,7 @@ curl -sfL https://get.kubesolo.io | KUBESOLO_PROXY="http://proxy.company.com:808
 # Combined with other options
 curl -sfL https://get.kubesolo.io | sudo sh -s -- \
   --proxy=http://proxy.company.com:8080 \
-  --version=v1.2.1 \
+  --version=v1.2.2 \
   --path=/opt/kubesolo
 ```
 

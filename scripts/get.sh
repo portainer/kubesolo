@@ -7,7 +7,7 @@
 #   curl -sfL https://get.kubesolo.io | sudo sh
 #
 # Pin a specific version:
-#   curl -sfL https://get.kubesolo.io | KUBESOLO_VERSION=v1.2.1 sudo sh
+#   curl -sfL https://get.kubesolo.io | sudo KUBESOLO_VERSION=v1.2.2 sh
 #
 # Pass flags to kubesoloctl (note the -s -- separator):
 #   curl -sfL https://get.kubesolo.io | sudo sh -s -- --install-prereqs
@@ -15,15 +15,15 @@
 #       --portainer-edge-id=ID --portainer-edge-key=KEY
 #
 # Override the base URL (internal mirror, staging server, air-gap host):
-#   KUBESOLO_INSTALLER_BASE_URL=https://files.example.com/kubesolo \
-#   KUBESOLO_FLAT_URLS=1 curl -sfL ... | sudo sh -s -- --install-prereqs
+#   curl -sfL ... | sudo KUBESOLO_INSTALLER_BASE_URL=https://files.example.com/kubesolo \
+#       KUBESOLO_FLAT_URLS=1 sh -s -- --install-prereqs
 #
 # URL layouts:
 #   versioned (default): <base>/<version>/kubesoloctl-linux-<arch>
 #   flat (KUBESOLO_FLAT_URLS=1): <base>/kubesoloctl-linux-<arch>
 set -e
 
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.2.1}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.2.2}"
 DEFAULT_BASE_URL="https://github.com/portainer/kubesolo/releases/download"
 BASE_URL="${KUBESOLO_INSTALLER_BASE_URL:-$DEFAULT_BASE_URL}"
 FLAT_URLS="${KUBESOLO_FLAT_URLS:-0}"

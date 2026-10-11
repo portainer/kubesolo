@@ -44,10 +44,10 @@ Examples:
   sudo kubesoloctl install
 
   # Specify version and Portainer edge credentials:
-  sudo kubesoloctl install --version=v1.2.1 --portainer-edge-id=ID --portainer-edge-key=KEY
+  sudo kubesoloctl install --version=v1.2.2 --portainer-edge-id=ID --portainer-edge-key=KEY
 
   # Air-gap install from a local archive:
-  sudo kubesoloctl install --offline-install=/tmp/kubesolo-v1.2.1-linux-amd64.tar.gz
+  sudo kubesoloctl install --offline-install=/tmp/kubesolo-v1.2.2-linux-amd64.tar.gz
 
   # Upgrade to a newer version, rolling back automatically if it fails:
   sudo kubesoloctl upgrade --version=v1.2.2

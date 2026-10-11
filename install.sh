@@ -1500,12 +1500,12 @@ fi
 # Whether this run was given any settings, as opposed to only a version or a
 # source. On an existing install they are not applied, and the user is told.
 SETTINGS_GIVEN=false
-if env | grep -qE '^KUBESOLO_(PATH|APISERVER_EXTRA_SANS|PORTAINER_[A-Z_]+|LOAD_BALANCER|LOCAL_STORAGE[A-Z_]*|DB_WAL_REPAIR|DISABLE_IPV6|CPU_MANAGER_[A-Z_]+|RESERVED_CPUS|SYSTEM_RESERVED|STARTUP_TIMEOUT|D2K[A-Z_]*|DEBUG|PPROF_SERVER|RUN_MODE|PROXY)=.'; then
+if env | grep -qE '^KUBESOLO_(PATH|APISERVER_EXTRA_SANS|PORTAINER_[A-Z_]+|LOAD_BALANCER(_IP)?|LOCAL_STORAGE[A-Z_]*|DB_WAL_REPAIR|DISABLE_IPV6|CPU_MANAGER_[A-Z_]+|RESERVED_CPUS|SYSTEM_RESERVED|STARTUP_TIMEOUT|D2K[A-Z_]*|DEBUG|PPROF_SERVER|RUN_MODE|PROXY)=.'; then
     SETTINGS_GIVEN=true
 fi
 
 # Default configuration from environment variables
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.2.1}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.2.2}"
 KUBESOLO_SHA256="${KUBESOLO_SHA256:-}"      # expected checksum of the archive or binary
 KUBESOLO_FORCE="${KUBESOLO_FORCE:-false}"     # allow installing an older version over a newer one
 KUBESOLO_HEALTH_TIMEOUT="${KUBESOLO_HEALTH_TIMEOUT:-0}"  # seconds an upgrade has to become healthy; 0 = 600
@@ -1566,7 +1566,7 @@ for arg in "$@"; do
     --portainer-edge-image=*)
       PORTAINER_EDGE_IMAGE="${arg#*=}"
       ;;
-    --load-balancer)
+    --load-balancer=*)
       LOAD_BALANCER="${arg#*=}"
       ;;
     --load-balancer-ip=*)

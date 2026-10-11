@@ -47,7 +47,7 @@ Flags are passed identically to both URLs. When piping the script, use `sh -s --
 
 ```bash
 # Stable
-curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.1 --debug=true
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.2 --debug=true
 
 # Development
 curl -sfL https://get-dev.kubesolo.io | sudo sh -s -- --debug=true
@@ -56,7 +56,7 @@ curl -sfL https://get-dev.kubesolo.io | sudo sh -s -- --debug=true
 When running a downloaded copy of the script directly, flags are passed normally:
 
 ```bash
-sudo sh install.sh --version=v1.2.1 --debug=true
+sudo sh install.sh --version=v1.2.2 --debug=true
 ```
 
 ---
@@ -69,10 +69,10 @@ Set the KubeSolo version to install. Defaults to the version the script was rele
 
 | Flag | Env var | Default |
 |---|---|---|
-| `--version=VERSION` | `KUBESOLO_VERSION` | `v1.2.1` |
+| `--version=VERSION` | `KUBESOLO_VERSION` | `v1.2.2` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.1
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.2
 ```
 
 ---
@@ -216,6 +216,21 @@ To keep provisioned volumes on a shared file system, set `KUBESOLO_LOCAL_STORAGE
 
 ---
 
+### --load-balancer and --load-balancer-ip
+
+KubeSolo's built-in load balancer gives `LoadBalancer` Services an external IP: the node IP, or the address set with `--load-balancer-ip`. Set an address on hosts with more than one network interface, where Services should be published on an address other than the node IP. `--load-balancer-ip` is ignored when the load balancer is turned off.
+
+| Flag | Env var | Default |
+|---|---|---|
+| `--load-balancer=true\|false` | `KUBESOLO_LOAD_BALANCER` | `true` |
+| `--load-balancer-ip=IP` | `KUBESOLO_LOAD_BALANCER_IP` | _(node IP)_ |
+
+```bash
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --load-balancer-ip=192.168.1.50
+```
+
+---
+
 ### --d2k
 
 Embed [d2k](https://github.com/portainer/d2k), the Portainer Docker-to-Kubernetes API translator, into the KubeSolo node. With `--d2k` set, KubeSolo deploys d2k into the namespace given by [`--d2k-namespace`](#--d2k-namespace), generates mTLS material under `/var/lib/kubesolo/pki/d2k/`, and exposes a Docker-compatible API endpoint on port `2376` via a LoadBalancer Service so existing Docker tooling can target the node without a separate translator deployment.
@@ -232,7 +247,7 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true
 
 > **Architecture support:** The d2k container image is published only for `linux/amd64` and `linux/arm64`. On `arm` and `riscv64` builds, passing `--d2k` logs a warning at startup and the flag is silently cleared — no PKI material is generated, no image is imported, and no Kubernetes resources are created.
 
-> **Load-balancer requirement:** d2k requires the built-in load balancer (`network.loadBalancer.enabled`, on by default). KubeSolo exits at startup if d2k is enabled with the load balancer turned off. The installer has no flag for the load balancer; it can only be turned off with `KUBESOLO_LOAD_BALANCER=false`.
+> **Load-balancer requirement:** d2k requires the built-in load balancer (`network.loadBalancer.enabled`, on by default). KubeSolo exits at startup if d2k is enabled with the load balancer turned off, by `--load-balancer=false` or `KUBESOLO_LOAD_BALANCER=false`.
 
 > **Namespace is fixed after first start:** the d2k server certificate SANs are generated for the namespace set at first start. Changing `--d2k-namespace` on a later restart reuses the existing certificate with mismatched SANs. Delete `/var/lib/kubesolo/pki/d2k/server.crt` and `server.key` before restarting to regenerate the certificate for the new namespace.
 
@@ -325,7 +340,7 @@ Install from a local binary or archive instead of downloading from GitHub. Accep
 | `--offline-install=PATH` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ |
 
 ```bash
-sudo sh install.sh --offline-install=./kubesolo-v1.2.1-linux-amd64.tar.gz
+sudo sh install.sh --offline-install=./kubesolo-v1.2.2-linux-amd64.tar.gz
 ```
 
 See [--download-only](#--download-only) for how to prepare the required files on an internet-connected machine.
@@ -397,7 +412,7 @@ curl -sfL https://get.kubesolo.io | sh -s -- --offline --download-only=./kubesol
 **Install on the air-gapped machine:**
 
 ```bash
-sudo sh install.sh --offline-install=./kubesolo-v1.2.1-linux-amd64-offline.tar.gz
+sudo sh install.sh --offline-install=./kubesolo-v1.2.2-linux-amd64-offline.tar.gz
 ```
 
 > **Note:** The archive is chosen from the OS, architecture and libc of the machine running `--download-only`, and `--offline-install` uses it as-is. Run the download on a Linux machine with the same architecture and libc as the target (a musl host such as Alpine for a musl target). On macOS the script requests a `darwin` archive, which is not published. If you have no matching machine, download the correct `-offline` archive directly from the [GitHub releases page](https://github.com/portainer/kubesolo/releases).
@@ -423,6 +438,7 @@ A few of these the installer also reads itself, so they are applied even on the 
 | Env var | Setting | Installer default |
 |---|---|---|
 | `KUBESOLO_LOAD_BALANCER` | `network.loadBalancer.enabled` | `true` |
+| `KUBESOLO_LOAD_BALANCER_IP` | `network.loadBalancer.ip` | _(node IP)_ |
 | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | `storage.localPath.sharedPath` | _(none)_ |
 | `KUBESOLO_DB_WAL_REPAIR` | `storage.dbWALRepair` | `false` |
 | `KUBESOLO_DISABLE_IPV6` | `network.disableIPv6` | `false` |
