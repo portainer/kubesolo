@@ -216,6 +216,21 @@ To keep provisioned volumes on a shared file system, set `KUBESOLO_LOCAL_STORAGE
 
 ---
 
+### --load-balancer and --load-balancer-ip
+
+KubeSolo's built-in load balancer gives `LoadBalancer` Services an external IP: the node IP, or the address set with `--load-balancer-ip`. Set an address on hosts with more than one network interface, where Services should be published on an address other than the node IP. `--load-balancer-ip` is ignored when the load balancer is turned off.
+
+| Flag | Env var | Default |
+|---|---|---|
+| `--load-balancer=true\|false` | `KUBESOLO_LOAD_BALANCER` | `true` |
+| `--load-balancer-ip=IP` | `KUBESOLO_LOAD_BALANCER_IP` | _(node IP)_ |
+
+```bash
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --load-balancer-ip=192.168.1.50
+```
+
+---
+
 ### --d2k
 
 Embed [d2k](https://github.com/portainer/d2k), the Portainer Docker-to-Kubernetes API translator, into the KubeSolo node. With `--d2k` set, KubeSolo deploys d2k into the namespace given by [`--d2k-namespace`](#--d2k-namespace), generates mTLS material under `/var/lib/kubesolo/pki/d2k/`, and exposes a Docker-compatible API endpoint on port `2376` via a LoadBalancer Service so existing Docker tooling can target the node without a separate translator deployment.
@@ -232,7 +247,7 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --d2k=true
 
 > **Architecture support:** The d2k container image is published only for `linux/amd64` and `linux/arm64`. On `arm` and `riscv64` builds, passing `--d2k` logs a warning at startup and the flag is silently cleared — no PKI material is generated, no image is imported, and no Kubernetes resources are created.
 
-> **Load-balancer requirement:** d2k requires the built-in load balancer (`network.loadBalancer.enabled`, on by default). KubeSolo exits at startup if d2k is enabled with the load balancer turned off. The installer has no flag for the load balancer; it can only be turned off with `KUBESOLO_LOAD_BALANCER=false`.
+> **Load-balancer requirement:** d2k requires the built-in load balancer (`network.loadBalancer.enabled`, on by default). KubeSolo exits at startup if d2k is enabled with the load balancer turned off, by `--load-balancer=false` or `KUBESOLO_LOAD_BALANCER=false`.
 
 > **Namespace is fixed after first start:** the d2k server certificate SANs are generated for the namespace set at first start. Changing `--d2k-namespace` on a later restart reuses the existing certificate with mismatched SANs. Delete `/var/lib/kubesolo/pki/d2k/server.crt` and `server.key` before restarting to regenerate the certificate for the new namespace.
 
@@ -423,6 +438,7 @@ A few of these the installer also reads itself, so they are applied even on the 
 | Env var | Setting | Installer default |
 |---|---|---|
 | `KUBESOLO_LOAD_BALANCER` | `network.loadBalancer.enabled` | `true` |
+| `KUBESOLO_LOAD_BALANCER_IP` | `network.loadBalancer.ip` | _(node IP)_ |
 | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | `storage.localPath.sharedPath` | _(none)_ |
 | `KUBESOLO_DB_WAL_REPAIR` | `storage.dbWALRepair` | `false` |
 | `KUBESOLO_DISABLE_IPV6` | `network.disableIPv6` | `false` |

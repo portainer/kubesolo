@@ -1500,7 +1500,7 @@ fi
 # Whether this run was given any settings, as opposed to only a version or a
 # source. On an existing install they are not applied, and the user is told.
 SETTINGS_GIVEN=false
-if env | grep -qE '^KUBESOLO_(PATH|APISERVER_EXTRA_SANS|PORTAINER_[A-Z_]+|LOAD_BALANCER|LOCAL_STORAGE[A-Z_]*|DB_WAL_REPAIR|DISABLE_IPV6|CPU_MANAGER_[A-Z_]+|RESERVED_CPUS|SYSTEM_RESERVED|STARTUP_TIMEOUT|D2K[A-Z_]*|DEBUG|PPROF_SERVER|RUN_MODE|PROXY)=.'; then
+if env | grep -qE '^KUBESOLO_(PATH|APISERVER_EXTRA_SANS|PORTAINER_[A-Z_]+|LOAD_BALANCER(_IP)?|LOCAL_STORAGE[A-Z_]*|DB_WAL_REPAIR|DISABLE_IPV6|CPU_MANAGER_[A-Z_]+|RESERVED_CPUS|SYSTEM_RESERVED|STARTUP_TIMEOUT|D2K[A-Z_]*|DEBUG|PPROF_SERVER|RUN_MODE|PROXY)=.'; then
     SETTINGS_GIVEN=true
 fi
 
@@ -1566,7 +1566,7 @@ for arg in "$@"; do
     --portainer-edge-image=*)
       PORTAINER_EDGE_IMAGE="${arg#*=}"
       ;;
-    --load-balancer)
+    --load-balancer=*)
       LOAD_BALANCER="${arg#*=}"
       ;;
     --load-balancer-ip=*)
