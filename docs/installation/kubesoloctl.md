@@ -223,8 +223,8 @@ Use `--name` to run independent KubeSolo instances side by side in container mod
 
 ```bash
 # On a connected machine (specify --arch when the target differs):
-kubesoloctl download --version=v1.2.1 --path=./bundle --arch=arm64
+kubesoloctl download --version=v1.2.2 --path=./bundle --arch=arm64
 
 # On the target machine:
-sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.2.1-linux-arm64.tar.gz
+sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.2.2-linux-arm64.tar.gz
 ```

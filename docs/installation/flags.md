@@ -47,7 +47,7 @@ Flags are passed identically to both URLs. When piping the script, use `sh -s --
 
 ```bash
 # Stable
-curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.1 --debug=true
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.2 --debug=true
 
 # Development
 curl -sfL https://get-dev.kubesolo.io | sudo sh -s -- --debug=true
@@ -56,7 +56,7 @@ curl -sfL https://get-dev.kubesolo.io | sudo sh -s -- --debug=true
 When running a downloaded copy of the script directly, flags are passed normally:
 
 ```bash
-sudo sh install.sh --version=v1.2.1 --debug=true
+sudo sh install.sh --version=v1.2.2 --debug=true
 ```
 
 ---
@@ -69,10 +69,10 @@ Set the KubeSolo version to install. Defaults to the version the script was rele
 
 | Flag | Env var | Default |
 |---|---|---|
-| `--version=VERSION` | `KUBESOLO_VERSION` | `v1.2.1` |
+| `--version=VERSION` | `KUBESOLO_VERSION` | `v1.2.2` |
 
 ```bash
-curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.1
+curl -sfL https://get.kubesolo.io | sudo sh -s -- --version=v1.2.2
 ```
 
 ---
@@ -325,7 +325,7 @@ Install from a local binary or archive instead of downloading from GitHub. Accep
 | `--offline-install=PATH` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ |
 
 ```bash
-sudo sh install.sh --offline-install=./kubesolo-v1.2.1-linux-amd64.tar.gz
+sudo sh install.sh --offline-install=./kubesolo-v1.2.2-linux-amd64.tar.gz
 ```
 
 See [--download-only](#--download-only) for how to prepare the required files on an internet-connected machine.
@@ -397,7 +397,7 @@ curl -sfL https://get.kubesolo.io | sh -s -- --offline --download-only=./kubesol
 **Install on the air-gapped machine:**
 
 ```bash
-sudo sh install.sh --offline-install=./kubesolo-v1.2.1-linux-amd64-offline.tar.gz
+sudo sh install.sh --offline-install=./kubesolo-v1.2.2-linux-amd64-offline.tar.gz
 ```
 
 > **Note:** The archive is chosen from the OS, architecture and libc of the machine running `--download-only`, and `--offline-install` uses it as-is. Run the download on a Linux machine with the same architecture and libc as the target (a musl host such as Alpine for a musl target). On macOS the script requests a `darwin` archive, which is not published. If you have no matching machine, download the correct `-offline` archive directly from the [GitHub releases page](https://github.com/portainer/kubesolo/releases).

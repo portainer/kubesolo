@@ -42,7 +42,7 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 
 	f.StringVar(&cfg.Version, "version",
 		envOr("KUBESOLO_VERSION", config.DefaultVersion),
-		"KubeSolo version to install (e.g. v1.2.1)")
+		"KubeSolo version to install (e.g. v1.2.2)")
 
 	f.StringVar(&cfg.Path, "path",
 		envOr("KUBESOLO_PATH", config.DefaultPath),
