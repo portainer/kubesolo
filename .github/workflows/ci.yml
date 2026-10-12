@@ -318,7 +318,7 @@ jobs:
         run: make build-kubesoloctl GOOS=linux GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
       - name: "[preparation] install kubectl"
         run: |
-          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/amd64/kubectl
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.5/bin/linux/amd64/kubectl
           chmod +x /usr/local/bin/kubectl
       - name: "[execution] run e2e smoke suite"
         run: IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/e2e/run.sh
@@ -340,7 +340,7 @@ jobs:
         run: make build-kubesoloctl GOOS=linux GOARCH=arm64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
       - name: "[preparation] install kubectl"
         run: |
-          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/arm64/kubectl
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.5/bin/linux/arm64/kubectl
           chmod +x /usr/local/bin/kubectl
       - name: "[execution] run e2e smoke suite"
         run: IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/e2e/run.sh

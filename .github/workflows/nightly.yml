@@ -31,7 +31,7 @@ jobs:
         run: make build-kubesoloctl GOOS=linux GOARCH=${{ matrix.arch }} KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
       - name: "[preparation] install kubectl"
         run: |
-          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/${{ matrix.arch }}/kubectl
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.5/bin/linux/${{ matrix.arch }}/kubectl
           chmod +x /usr/local/bin/kubectl
       - name: "[preparation] log in to docker hub"
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
@@ -74,7 +74,7 @@ jobs:
         run: make build-kubesoloctl GOOS=linux GOARCH=${{ matrix.arch }} KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
       - name: "[preparation] install kubectl"
         run: |
-          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/${{ matrix.arch }}/kubectl
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.5/bin/linux/${{ matrix.arch }}/kubectl
           chmod +x /usr/local/bin/kubectl
       - name: "[preparation] log in to docker hub"
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
@@ -102,7 +102,7 @@ jobs:
         run: make build-kubesoloctl GOOS=linux GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
       - name: "[preparation] install kubectl"
         run: |
-          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.34.8/bin/linux/amd64/kubectl
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.5/bin/linux/amd64/kubectl
           chmod +x /usr/local/bin/kubectl
       - name: "[preparation] install sonobuoy"
         run: |

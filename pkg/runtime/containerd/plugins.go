@@ -15,6 +15,10 @@ import (
 	_ "github.com/containerd/containerd/v2/plugins/metadata"
 	_ "github.com/containerd/containerd/v2/plugins/mount"
 	_ "github.com/containerd/containerd/v2/plugins/sandbox"
+	// since containerd 2.3 the API listeners are server plugins: without these the
+	// server starts but never opens the CRI socket or the ttrpc socket shims publish to
+	_ "github.com/containerd/containerd/v2/plugins/server/grpc"
+	_ "github.com/containerd/containerd/v2/plugins/server/ttrpc"
 	_ "github.com/containerd/containerd/v2/plugins/services/containers"
 	_ "github.com/containerd/containerd/v2/plugins/services/content"
 	_ "github.com/containerd/containerd/v2/plugins/services/diff"

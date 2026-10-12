@@ -92,6 +92,13 @@ func (s *service) postSetup() error {
 	}
 
 	log.Debug().Str("component", "containerd").Msg("containerd health check passed... now creating containerd socket link")
+	// containerd 2.3 no longer creates its default state dir (/run/containerd) when a
+	// custom state dir is set, and /run is an empty tmpfs in container mode
+	if err := filesystem.EnsureDirectoryExists(filepath.Dir(types.DefaultSystemContainerdSock)); err != nil {
+		log.Error().Str("component", "containerd").Msgf("failed to create containerd socket link directory: %v...", err)
+		s.cancelShutdown()
+		return err
+	}
 	if err := filesystem.EnsureSymbolicLink(s.containerdSocketFile, types.DefaultSystemContainerdSock); err != nil {
 		log.Error().Str("component", "containerd").Msgf("failed to create containerd socket link: %v...", err)
 		s.cancelShutdown()
