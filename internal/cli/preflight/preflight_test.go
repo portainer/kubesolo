@@ -117,6 +117,49 @@ func TestCheckDockerConflict_FakeBinary(t *testing.T) {
 	}
 }
 
+// ── netfilter tools ───────────────────────────────────────────────────────────
+
+// fakeBinary writes an executable stub called name into dir.
+func fakeBinary(t *testing.T, dir, name string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBinaryPresent_OnPath(t *testing.T) {
+	tmp := t.TempDir()
+	fakeBinary(t, tmp, "kubesolo-test-tool")
+	t.Setenv("PATH", tmp)
+
+	if !binaryPresent("kubesolo-test-tool") {
+		t.Error("binaryPresent should find a binary on the PATH")
+	}
+	if binaryPresent("kubesolo-test-tool-missing") {
+		t.Error("binaryPresent should not find a binary that does not exist")
+	}
+}
+
+func TestPackageManager_PrefersDnfOverYum(t *testing.T) {
+	tmp := t.TempDir()
+	fakeBinary(t, tmp, "yum")
+	fakeBinary(t, tmp, "dnf")
+	t.Setenv("PATH", tmp)
+
+	name, args := packageManager()
+	if name != "dnf" || strings.Join(args, " ") != "install -y" {
+		t.Errorf("packageManager() = %q %v, want dnf [install -y]", name, args)
+	}
+}
+
+func TestPackageManager_None(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	if name, _ := packageManager(); name != "" {
+		t.Errorf("packageManager() = %q, want none", name)
+	}
+}
+
 // ── checkRequiredControllers ──────────────────────────────────────────────────
 
 func TestCheckRequiredControllers_AllPresent(t *testing.T) {

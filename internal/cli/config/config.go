@@ -104,7 +104,7 @@ type Config struct {
 	OfflineInstall string
 
 	// InstallPrereqs causes the installer to automatically install missing OS-level
-	// prerequisites (e.g. nftables on Alpine Linux) instead of hard-failing
+	// prerequisites (e.g. iptables or nftables) instead of hard-failing
 	InstallPrereqs bool
 
 	// D2K enables the d2k Docker-to-Kubernetes API translator

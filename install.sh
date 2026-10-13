@@ -2,6 +2,18 @@
 
 set -e
 
+# Put the standard system directories on PATH. iptables, nft, modprobe, semodule
+# and apparmor_parser live in the sbin ones, which a root shell started with su
+# rather than su - leaves off PATH; KubeSolo inherits this PATH when it is
+# started as a daemon or in the foreground.
+for _dir in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin; do
+    case ":$PATH:" in
+        *":$_dir:"*) ;;
+        *) PATH="${PATH:+$PATH:}$_dir" ;;
+    esac
+done
+export PATH
+
 # Function to handle errors
 handle_error() {
     echo "❌ Error: $1"
@@ -99,37 +111,119 @@ is_alpine() {
     [ -f /etc/alpine-release ]
 }
 
-# Function to check and optionally install nftables on Alpine.
-# kube-proxy uses nftables mode on Alpine because iptables-legacy kernel modules
-# are not available; the nft binary must be present for it to start.
-check_nftables() {
-    if ! is_alpine; then
+# Detect the host package manager and the command that installs packages
+# non-interactively. Prints nothing when none is recognised.
+package_install_command() {
+    if command -v apk >/dev/null 2>&1; then
+        echo "apk add --no-cache"
+    elif command -v dnf >/dev/null 2>&1; then
+        echo "dnf install -y"
+    elif command -v yum >/dev/null 2>&1; then
+        echo "yum install -y"
+    elif command -v apt-get >/dev/null 2>&1; then
+        echo "apt-get install -y"
+    elif command -v zypper >/dev/null 2>&1; then
+        echo "zypper --non-interactive install"
+    fi
+}
+
+# Whether the kernel provides the legacy ip_tables tables. Loads the module
+# first, as KubeSolo does on every start, so the answer matches the runtime's
+# choice even where the module ships but cannot load (blacklisted, hardened).
+# Without it KubeSolo runs kube-proxy in nftables mode.
+has_iptables_kernel_support() {
+    [ -e /proc/net/ip_tables_names ] && return 0
+    modprobe ip_tables >/dev/null 2>&1 || true
+    [ -e /proc/net/ip_tables_names ]
+}
+
+# Function to check and optionally install the netfilter tools KubeSolo needs.
+# iptables is required everywhere (pod masquerade, kube-proxy, CNI portmap).
+# nft is also required where kube-proxy runs in nftables mode: on Alpine, whose
+# kernels lack the legacy ip_tables module, and wherever ip_tables cannot load.
+# Minimal RHEL 10 / CentOS Stream 10 images ship neither tool.
+check_netfilter_tools() {
+    echo "🔍 Checking iptables and nftables tools..."
+
+    missing=""
+    command -v iptables >/dev/null 2>&1 || missing="iptables"
+    if is_alpine || ! has_iptables_kernel_support; then
+        command -v nft >/dev/null 2>&1 || missing="$missing nftables"
+    fi
+    missing=$(echo "$missing" | sed 's/^ *//')
+
+    if [ -z "$missing" ]; then
+        echo "✅ iptables and nftables tools are available"
         return
     fi
 
-    echo "🔍 Checking nftables (required on Alpine for kube-proxy)..."
-
-    if command -v nft >/dev/null 2>&1; then
-        echo "✅ nftables (nft) is available"
-        return
-    fi
-
-    if [ "$INSTALL_PREREQS" = "true" ]; then
-        echo "📦 Installing nftables..."
-        apk add --no-cache nftables || handle_error "Failed to install nftables. Please install it manually: apk add nftables"
-        echo "✅ nftables installed"
+    install_cmd=$(package_install_command)
+    if [ -n "$install_cmd" ]; then
+        manual_hint="run: $install_cmd $missing"
     else
-        handle_error "nftables (nft) is required on Alpine but was not found. Run with --install-prereqs to install automatically, or run: apk add nftables"
+        manual_hint="install them with your distribution's package manager"
     fi
+
+    if [ "$INSTALL_PREREQS" != "true" ]; then
+        handle_error "Required networking packages not found: $missing. Run with --install-prereqs to install them automatically, or $manual_hint"
+    fi
+    if [ -z "$install_cmd" ]; then
+        handle_error "Required networking packages not found: $missing, and no supported package manager (apk, dnf, yum, apt-get, zypper) was detected — $manual_hint"
+    fi
+
+    echo "📦 Installing $missing..."
+    case "$install_cmd" in
+        apt-get*) apt-get update >/dev/null 2>&1 || true ;;
+    esac
+    # shellcheck disable=SC2086 # word splitting of the command and package list is intended
+    $install_cmd $missing || handle_error "Failed to install $missing. Please $manual_hint"
+    echo "✅ $missing installed"
+}
+
+# Function to check for apparmor_parser where the kernel has AppArmor enabled.
+# containerd needs it to load its default profile: without it every container
+# runs unconfined, and pods that request an AppArmor profile fail with
+# "apparmor is not supported". A warning rather than an error, since everything
+# else works; --install-prereqs installs it.
+check_apparmor() {
+    if ! grep -q '^Y' /sys/module/apparmor/parameters/enabled 2>/dev/null || command -v apparmor_parser >/dev/null 2>&1; then
+        return
+    fi
+
+    install_cmd=$(package_install_command)
+    pkg="apparmor"
+    case "$install_cmd" in
+        zypper*) pkg="apparmor-parser" ;;
+    esac
+
+    if [ "$INSTALL_PREREQS" = "true" ] && [ -n "$install_cmd" ]; then
+        echo "📦 Installing $pkg (AppArmor is enabled but apparmor_parser is missing)..."
+        case "$install_cmd" in
+            apt-get*) apt-get update >/dev/null 2>&1 || true ;;
+        esac
+        # shellcheck disable=SC2086 # word splitting of the command is intended
+        if $install_cmd $pkg && command -v apparmor_parser >/dev/null 2>&1; then
+            echo "✅ $pkg installed"
+            return
+        fi
+        echo "⚠️  Could not install $pkg; continuing without it"
+    fi
+
+    if [ -n "$install_cmd" ]; then
+        hint="run: $install_cmd $pkg"
+    else
+        hint="install the package that provides apparmor_parser"
+    fi
+    echo "⚠️  AppArmor is enabled but apparmor_parser is missing: containers will run unconfined, and pods that request an AppArmor profile will fail to start. Re-run with --install-prereqs to install it, or $hint"
 }
 
 # Function to check iptables xt_comment module support
 check_iptables_comment_module() {
     echo "🔍 Checking iptables xt_comment module support..."
 
-    # Check if iptables command exists
+    # Check if iptables command exists (check_netfilter_tools installs it with --install-prereqs)
     if ! command -v iptables >/dev/null 2>&1; then
-        handle_error "iptables command not found. Please install iptables before proceeding."
+        handle_error "iptables command not found. Run with --install-prereqs to install it automatically, or install the iptables package."
     fi
 
     # Test iptables comment module by trying to create a test rule
@@ -1666,7 +1760,7 @@ for arg in "$@"; do
       echo "  --offline                    Download the offline build (all images embedded, for air-gapped environments)"
       echo "  --offline-install=PATH       Use a local binary or archive instead of downloading"
       echo "  --download-only[=DIR]        Download binary archive and install script for offline use (default dir: .)"
-      echo "  --install-prereqs            Automatically install missing prerequisites (e.g. nftables on Alpine)"
+      echo "  --install-prereqs            Automatically install missing prerequisites (e.g. iptables/nftables)"
       echo ""
       echo "On a host where KubeSolo is already installed, a different version is installed as an"
       echo "upgrade: verified, backed up, health-checked, and rolled back automatically if it fails."
@@ -1749,10 +1843,11 @@ BIN_URL="https://github.com/portainer/kubesolo/releases/download/$KUBESOLO_VERSI
 # Pre-flight checks
 check_docker_prerequisite
 check_hostname_compliance
-check_iptables_comment_module
 
-# Check and optionally install nftables on Alpine
-check_nftables
+# Check and optionally install iptables/nftables (before the xt_comment check, which needs iptables)
+check_netfilter_tools
+check_apparmor
+check_iptables_comment_module
 
 # Ensure Alpine cgroups service is enabled (required for cgroupv2 controllers)
 ensure_alpine_cgroups_service

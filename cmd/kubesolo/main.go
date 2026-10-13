@@ -23,6 +23,7 @@ import (
 	"github.com/portainer/kubesolo/internal/runtime/cri"
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/portainer/kubesolo/internal/runtime/network"
+	"github.com/portainer/kubesolo/internal/syspath"
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/internal/upgrade/executor"
@@ -122,6 +123,10 @@ func service() (*kubesolo, error) {
 // it also handles the shutdown of the application by listening for interrupt signals
 // and shutting down the application gracefully
 func main() {
+	// Before anything looks up a tool: iptables, nft, modprobe and semodule live
+	// in sbin directories a non-login root shell leaves off PATH.
+	syspath.Ensure()
+
 	kingpin.MustParse(flags.Application.Parse(os.Args[1:]))
 
 	if *flags.Version {

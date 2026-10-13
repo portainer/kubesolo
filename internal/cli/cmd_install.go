@@ -107,7 +107,7 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 
 	f.BoolVar(&cfg.InstallPrereqs, "install-prereqs",
 		envBool("KUBESOLO_INSTALL_PREREQS", false),
-		"Automatically install missing OS prerequisites (e.g. nftables on Alpine)")
+		"Automatically install missing OS prerequisites (e.g. iptables/nftables)")
 
 	f.BoolVar(&cfg.D2K, "d2k",
 		envBool("KUBESOLO_D2K", false),

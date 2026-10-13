@@ -2,7 +2,6 @@ package network
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -13,15 +12,21 @@ import (
 const masqueradeComment = "kubesolo: pod masquerade"
 
 // EnsurePodMasquerade programs a SNAT/masquerade rule for pod egress traffic so
-// pods can reach external IPs. It is idempotent and mode-aware: iptables on
-// systems that have the ip_tables kernel module, nftables otherwise.
+// pods can reach external IPs. It is idempotent and mode-aware: iptables when
+// UseIPTables says so, nftables otherwise.
 //
 // This must be called before kubelet starts (so no pod ever starts without SNAT
 // in place) and after flushNftablesNat (to restore the rule after the nat table
 // is flushed for kube-proxy compatibility).
 func EnsurePodMasquerade(podCIDR string) error {
-	if _, err := os.Stat("/proc/net/ip_tables_names"); err == nil {
+	if UseIPTables() {
 		return ensureIPTablesMasquerade(podCIDR)
+	}
+	if _, err := exec.LookPath("nft"); err != nil {
+		if _, err := exec.LookPath("iptables"); err == nil {
+			return fmt.Errorf("the kernel has no ip_tables support, so KubeSolo uses nftables, but nft is not on the PATH: install the nftables package")
+		}
+		return fmt.Errorf("neither iptables nor nft is on the PATH, install the iptables or nftables package")
 	}
 	return ensureNftablesMasquerade(podCIDR)
 }

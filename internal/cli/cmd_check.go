@@ -24,7 +24,7 @@ func checkCmd(cfg *config.Config) *cobra.Command {
 	f := cmd.Flags()
 	f.BoolVar(&cfg.InstallPrereqs, "install-prereqs",
 		envBool("KUBESOLO_INSTALL_PREREQS", false),
-		"Automatically install missing OS prerequisites (e.g. nftables on Alpine)")
+		"Automatically install missing OS prerequisites (e.g. iptables/nftables)")
 	f.BoolVar(&cfg.PprofServer, "pprof-server",
 		envBool("KUBESOLO_PPROF_SERVER", false),
 		"Include pprof port 6060 in port conflict checks")

@@ -76,6 +76,9 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 
 	if !installed {
 		p.Warn("KubeSolo is not installed as a host service — nothing to remove")
+		// An uninstall by an older kubesoloctl, or one that ran without sbin on
+		// PATH, can leave the SELinux policy module behind.
+		removeSELinuxPolicy()
 		if removeKubeconfig {
 			p.Step("Cleaning kubeconfig")
 			kubeconfig.RemoveFromUserConfig(name)
@@ -125,6 +128,9 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	// state — KubeSolo regenerates it from --mtu on every start — and a runtime
 	// managed by the host would keep loading it once KubeSolo is gone.
 	removeCNIConfig()
+	// Also regardless of --purge: KubeSolo reinstalls its SELinux policy module
+	// on start, and nothing else uses it.
+	removeSELinuxPolicy()
 
 	// ── Purge data directory ──────────────────────────────────────────────────
 	if purge {

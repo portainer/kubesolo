@@ -2,6 +2,17 @@
 
 set -e
 
+# Put the standard system directories on PATH. semodule, umount and the other
+# tools this script calls live in the sbin ones, which a root shell started
+# with su rather than su - leaves off PATH.
+for _dir in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin; do
+    case ":$PATH:" in
+        *":$_dir:"*) ;;
+        *) PATH="${PATH:+$PATH:}$_dir" ;;
+    esac
+done
+export PATH
+
 # Function to handle errors
 handle_error() {
     echo "❌ Error: $1"
@@ -542,6 +553,14 @@ CNI_CONFIG_FILE="/etc/cni/net.d/10-bridge.conflist"
 if [ -e "$CNI_CONFIG_FILE" ] || [ -L "$CNI_CONFIG_FILE" ]; then
     echo "🗑️  Removing CNI configuration..."
     rm -f "$CNI_CONFIG_FILE"
+fi
+
+# Remove the SELinux policy module KubeSolo installs on start where SELinux is
+# enabled. It only lets systemd run the container device filters KubeSolo's
+# crun creates, so it goes regardless of --remove-data.
+if command -v semodule >/dev/null 2>&1 && semodule -l 2>/dev/null | awk '{print $1}' | grep -qx kubesolo; then
+    echo "🗑️  Removing SELinux policy module kubesolo..."
+    semodule -r kubesolo || echo "⚠️  Could not remove the SELinux policy module kubesolo"
 fi
 
 # Remove the configuration file.

@@ -25,7 +25,7 @@ type Check struct {
 
 // Suite returns the ordered list of pre-flight checks to run before installation.
 // installPrereqs controls whether missing OS packages are installed automatically
-// (e.g. nftables on Alpine Linux). pprofServer mirrors the --pprof-server flag;
+// (e.g. iptables or nftables). pprofServer mirrors the --pprof-server flag;
 // when true, port 6060 is added to the port availability check. nodeIP mirrors
 // the --node-ip flag and is the address the firewall check connects to.
 func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
@@ -34,7 +34,8 @@ func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
 		{Name: "hostname RFC 1123 compliance", Run: CheckHostname},
 		{Name: "Docker conflict", Run: CheckDockerConflict},
 		{Name: "iptables xt_comment module", Run: CheckIptablesComment},
-		{Name: "nftables and iptables", Run: func() error { return CheckAlpineNetworking(installPrereqs) }},
+		{Name: "iptables and nftables tools", Run: func() error { return CheckNetfilterTools(installPrereqs) }},
+		{Name: "AppArmor parser", Run: func() error { return CheckAppArmor(installPrereqs) }},
 		{Name: "cgroups controllers", Run: func() error { return CheckCgroups(installPrereqs) }},
 		{Name: "required ports available", Run: func() error { return CheckPorts(pprofServer) }},
 		// After the port check: it listens on the API server port itself.
@@ -180,74 +181,121 @@ func CheckIptablesComment() error {
 	)
 }
 
-// CheckAlpineNetworking verifies that the networking tools required by
-// KubeSolo's kube-proxy are present on Alpine Linux.
+// CheckNetfilterTools verifies that the netfilter tools KubeSolo shells out to
+// are present, installing the missing ones when installPrereqs is set.
 //
-// On Alpine, iptables-legacy kernel modules are absent so kube-proxy uses
-// nftables mode. It still invokes the `iptables` binary (which Alpine's
-// iptables package provides as an iptables-nft wrapper) as well as `nft`
-// directly. Both packages must be installed. On all other distros this
-// check is a no-op.
-func CheckAlpineNetworking(installPrereqs bool) error {
-	if !isAlpine() {
-		return nil
-	}
-
-	nftPresent := false
-	for _, p := range []string{"/usr/sbin/nft", "/sbin/nft", "/usr/bin/nft"} {
-		if _, err := os.Stat(p); err == nil {
-			nftPresent = true
-			break
-		}
-	}
-
-	iptPresent := false
-	for _, p := range []string{"/sbin/iptables", "/usr/sbin/iptables", "/bin/iptables", "/usr/bin/iptables"} {
-		if _, err := os.Stat(p); err == nil {
-			iptPresent = true
-			break
-		}
-	}
-
-	if nftPresent && iptPresent {
-		return nil
-	}
-
-	if installPrereqs {
-		var toInstall []string
-		if !nftPresent {
-			toInstall = append(toInstall, "nftables")
-		}
-		if !iptPresent {
-			toInstall = append(toInstall, "iptables")
-		}
-		log.Info().Msgf("installing Alpine networking packages: %s", strings.Join(toInstall, " "))
-		args := append([]string{"add", "--no-cache"}, toInstall...)
-		if err := runCommand("apk", args...); err != nil {
-			return fmt.Errorf(
-				"failed to install %s: %w — please run: apk add %s",
-				strings.Join(toInstall, " "), err, strings.Join(toInstall, " "),
-			)
-		}
-		log.Info().Msg("Alpine networking packages installed successfully")
-		return nil
+// iptables is required everywhere: the pod masquerade rule, kube-proxy's
+// iptables mode and the CNI portmap plugin all invoke it. nft is required as
+// well where KubeSolo falls back to nftables mode, which is on Alpine (its
+// kernels lack the legacy ip_tables module) and on any kernel where ip_tables
+// cannot be loaded. Minimal images of RHEL 10 and its rebuilds ship neither tool, so
+// without this check KubeSolo installs cleanly and then crash-loops on its
+// first iptables call.
+func CheckNetfilterTools(installPrereqs bool) error {
+	required := []string{"iptables"}
+	if isAlpine() || !iptablesKernelSupport() {
+		required = append(required, "nftables")
 	}
 
 	var missing []string
-	if !nftPresent {
-		missing = append(missing, "nftables")
+	for _, pkg := range required {
+		if !binaryPresent(netfilterBinaries[pkg]) {
+			missing = append(missing, pkg)
+		}
 	}
-	if !iptPresent {
-		missing = append(missing, "iptables")
+	if len(missing) == 0 {
+		return nil
 	}
-	return fmt.Errorf(
-		"required Alpine networking packages not found: %s. "+
-			"kube-proxy needs both nftables (nft) and iptables (iptables-nft wrapper). "+
-			"Run the installer with --install-prereqs to install them automatically, "+
-			"or run: apk add %s",
-		strings.Join(missing, ", "),
-		strings.Join(missing, " "),
-	)
+
+	manager, installArgs := packageManager()
+	manualHint := "install them with your distribution's package manager"
+	if manager != "" {
+		manualHint = "run: " + strings.Join(append(append([]string{manager}, installArgs...), missing...), " ")
+	}
+
+	if !installPrereqs {
+		return fmt.Errorf(
+			"required networking packages not found: %s. "+
+				"Run the installer with --install-prereqs to install them automatically, or %s",
+			strings.Join(missing, ", "), manualHint,
+		)
+	}
+	if manager == "" {
+		return fmt.Errorf(
+			"required networking packages not found: %s, and no supported package manager (apk, dnf, yum, apt-get, zypper) was detected — %s",
+			strings.Join(missing, ", "), manualHint,
+		)
+	}
+
+	log.Info().Msgf("installing networking packages: %s", strings.Join(missing, " "))
+	if manager == "apt-get" {
+		// A fresh cloud image often has empty package lists; without them apt-get
+		// cannot find the package at all.
+		_ = runCommand("apt-get", "update")
+	}
+	if err := runCommand(manager, append(installArgs, missing...)...); err != nil {
+		return fmt.Errorf("failed to install %s: %w — please %s", strings.Join(missing, " "), err, manualHint)
+	}
+
+	for _, pkg := range missing {
+		if !binaryPresent(netfilterBinaries[pkg]) {
+			return fmt.Errorf("installed %s but the %s binary is still not on the PATH", pkg, netfilterBinaries[pkg])
+		}
+	}
+	log.Info().Msg("networking packages installed successfully")
+	return nil
+}
+
+// CheckAppArmor warns when the kernel has AppArmor enabled but apparmor_parser
+// is missing, installing it when installPrereqs is set. containerd needs the
+// parser to load its default profile: without it every container runs
+// unconfined, and a pod that asks for an AppArmor profile fails with "apparmor
+// is not supported" because the kubelet sees AppArmor enabled. That is a
+// warning rather than a failure, since everything else works.
+func CheckAppArmor(installPrereqs bool) error {
+	if !appArmorEnabled() || binaryPresent("apparmor_parser") {
+		return nil
+	}
+
+	manager, installArgs := packageManager()
+	pkg := "apparmor"
+	if manager == "zypper" {
+		pkg = "apparmor-parser"
+	}
+
+	if installPrereqs && manager != "" {
+		log.Info().Msgf("installing AppArmor parser: %s", pkg)
+		if manager == "apt-get" {
+			_ = runCommand("apt-get", "update")
+		}
+		if err := runCommand(manager, append(installArgs, pkg)...); err == nil && binaryPresent("apparmor_parser") {
+			log.Info().Msg("AppArmor parser installed successfully")
+			return nil
+		}
+		log.Warn().Msgf("could not install %s; continuing without it", pkg)
+	}
+
+	hint := "install the package that provides apparmor_parser"
+	if manager != "" {
+		hint = "run: " + strings.Join(append(append([]string{manager}, installArgs...), pkg), " ")
+	}
+	log.Warn().Msgf(
+		"AppArmor is enabled but apparmor_parser is missing: containers will run unconfined, "+
+			"and pods that request an AppArmor profile will fail to start. "+
+			"Re-run with --install-prereqs to install it, or %s", hint)
+	return nil
+}
+
+// appArmorEnabled reports whether the running kernel has AppArmor enabled.
+func appArmorEnabled() bool {
+	data, err := os.ReadFile("/sys/module/apparmor/parameters/enabled")
+	return err == nil && strings.HasPrefix(string(data), "Y")
+}
+
+// netfilterBinaries maps each networking package to the binary it provides.
+var netfilterBinaries = map[string]string{
+	"iptables": "iptables",
+	"nftables": "nft",
 }
 
 // requiredControllers is the set of cgroup controllers KubeSolo needs.
@@ -342,6 +390,50 @@ func CheckPorts(pprofServer bool) error {
 func isAlpine() bool {
 	_, err := os.Stat("/etc/alpine-release")
 	return err == nil
+}
+
+// binaryPresent reports whether name is on the PATH. It deliberately looks
+// nowhere else: KubeSolo resolves tools on the PATH at runtime, so a binary
+// found only outside it would pass here and still be missing there.
+// kubesoloctl adds the standard sbin directories to PATH on start.
+func binaryPresent(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+// iptablesKernelSupport reports whether the kernel provides the legacy
+// ip_tables tables. It loads the module first, as KubeSolo does on every
+// start, and then asks the kernel, so the answer matches the runtime's choice
+// between iptables and nftables mode even where the module ships but cannot
+// load (blacklisted, or refused by a hardening profile).
+func iptablesKernelSupport() bool {
+	if _, err := os.Stat("/proc/net/ip_tables_names"); err == nil {
+		return true
+	}
+	_ = exec.Command("modprobe", "ip_tables").Run()
+	_, err := os.Stat("/proc/net/ip_tables_names")
+	return err == nil
+}
+
+// packageManager returns the host's package manager and the arguments that
+// install packages non-interactively, or "" when none is recognised.
+func packageManager() (string, []string) {
+	candidates := []struct {
+		name string
+		args []string
+	}{
+		{"apk", []string{"add", "--no-cache"}},
+		{"dnf", []string{"install", "-y"}},
+		{"yum", []string{"install", "-y"}},
+		{"apt-get", []string{"install", "-y"}},
+		{"zypper", []string{"--non-interactive", "install"}},
+	}
+	for _, c := range candidates {
+		if _, err := exec.LookPath(c.name); err == nil {
+			return c.name, c.args
+		}
+	}
+	return "", nil
 }
 
 // moduleLoaded reports whether the named kernel module appears in /proc/modules.
