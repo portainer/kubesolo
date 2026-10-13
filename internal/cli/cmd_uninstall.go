@@ -125,6 +125,9 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	// state — KubeSolo regenerates it from --mtu on every start — and a runtime
 	// managed by the host would keep loading it once KubeSolo is gone.
 	removeCNIConfig()
+	// Also regardless of --purge: KubeSolo reinstalls its SELinux policy module
+	// on start, and nothing else uses it.
+	removeSELinuxPolicy()
 
 	// ── Purge data directory ──────────────────────────────────────────────────
 	if purge {

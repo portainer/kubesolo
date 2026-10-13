@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
+	"strings"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
@@ -175,6 +177,29 @@ func removeCNIConfig() {
 	case !os.IsNotExist(err):
 		log.Warn().Msgf("could not remove CNI configuration %s: %v", config.CNIConfigFile, err)
 	}
+}
+
+// selinuxPolicyModule is the SELinux policy module KubeSolo installs on start
+// where SELinux is enabled; see internal/core/embedded/selinux.go.
+const selinuxPolicyModule = "kubesolo"
+
+// removeSELinuxPolicy removes the kubesolo SELinux policy module if it is
+// installed. It only allows systemd to run the container device filters
+// KubeSolo's crun creates, so nothing else depends on it.
+func removeSELinuxPolicy() {
+	semodule, err := exec.LookPath("semodule")
+	if err != nil {
+		return
+	}
+	out, err := exec.Command(semodule, "-l").Output()
+	if err != nil || !slices.Contains(strings.Fields(string(out)), selinuxPolicyModule) {
+		return
+	}
+	if out, err := exec.Command(semodule, "-r", selinuxPolicyModule).CombinedOutput(); err != nil {
+		log.Warn().Msgf("could not remove the SELinux policy module %s: %v (output: %s)", selinuxPolicyModule, err, strings.TrimSpace(string(out)))
+		return
+	}
+	log.Info().Msgf("removed SELinux policy module %s", selinuxPolicyModule)
 }
 
 // restoreSELinux restores SELinux file contexts for path if restorecon exists.

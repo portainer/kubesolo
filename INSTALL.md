@@ -335,6 +335,10 @@ ufw route allow to 10.42.0.0/16
 
 Other firewalls need equivalent rules.
 
+### SELinux
+
+Where SELinux is enabled, KubeSolo installs a small SELinux policy module named `kubesolo` when it starts. It allows systemd to attach the device filter KubeSolo's container runtime creates for every container; without it, under enforcing mode, no pod can start and every sandbox fails with `systemd failed to install eBPF device filter on cgroup`. Uninstalling KubeSolo removes the module. `semodule -l | grep kubesolo` shows whether it is installed.
+
 ### Kubeconfig Issues
 
 ```bash

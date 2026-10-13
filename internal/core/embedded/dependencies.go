@@ -8,7 +8,8 @@ import (
 )
 
 // EnsureEmbeddedDependencies ensures all required components are available
-// it loads the containerd components, cni plugins, cni config, images, and kernel modules
+// it loads the containerd components, cni plugins, cni config, images, kernel modules
+// and, where SELinux is enabled, the kubesolo SELinux policy module
 // before the kubesolo application starts
 //
 // When kubesolo attaches to a container runtime the host manages there is nothing
@@ -38,6 +39,8 @@ func EnsureEmbeddedDependencies(embedded types.Embedded) error {
 	if err := loadKernelModules(); err != nil {
 		log.Warn().Str("component", "embedded").Msgf("failed to load kernel modules: %v", err)
 	}
+
+	ensureSELinuxPolicy(embedded.ContainerMode)
 
 	return nil
 }

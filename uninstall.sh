@@ -544,6 +544,14 @@ if [ -e "$CNI_CONFIG_FILE" ] || [ -L "$CNI_CONFIG_FILE" ]; then
     rm -f "$CNI_CONFIG_FILE"
 fi
 
+# Remove the SELinux policy module KubeSolo installs on start where SELinux is
+# enabled. It only lets systemd run the container device filters KubeSolo's
+# crun creates, so it goes regardless of --remove-data.
+if command -v semodule >/dev/null 2>&1 && semodule -l 2>/dev/null | awk '{print $1}' | grep -qx kubesolo; then
+    echo "🗑️  Removing SELinux policy module kubesolo..."
+    semodule -r kubesolo || echo "⚠️  Could not remove the SELinux policy module kubesolo"
+fi
+
 # Remove the configuration file.
 #
 # Removed by default, unlike the data directory: it holds settings rather than
