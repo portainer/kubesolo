@@ -36,7 +36,9 @@ case "$scenario" in
     ;;
   debian-nftables)
     image=debian:13
-    setup='apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables >/dev/null && nft -f - <<EOF
+    # iptables as well: KubeSolo needs it, and without it kubesoloctl check stops
+    # at the netfilter tools check before it reaches the firewall.
+    setup='apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables iptables >/dev/null && nft -f - <<EOF
 table inet filter {
   chain input { type filter hook input priority 0; policy drop; ct state established,related accept; iif lo accept; }
   chain forward { type filter hook forward priority 0; policy drop; }
