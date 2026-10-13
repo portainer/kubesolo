@@ -339,6 +339,10 @@ Other firewalls need equivalent rules.
 
 Where SELinux is enabled, KubeSolo installs a small SELinux policy module named `kubesolo` when it starts. It allows systemd to attach the device filter KubeSolo's container runtime creates for every container; without it, under enforcing mode, no pod can start and every sandbox fails with `systemd failed to install eBPF device filter on cgroup`. Uninstalling KubeSolo removes the module. `semodule -l | grep kubesolo` shows whether it is installed.
 
+### AppArmor
+
+Where the kernel has AppArmor enabled, containers run under containerd's default AppArmor profile, which needs `apparmor_parser` (the `apparmor` package; `apparmor-parser` on openSUSE). Without it, containers run unconfined, and a pod that requests an AppArmor profile fails with `apparmor is not supported`. The installers warn about this and install the package with `--install-prereqs`; after installing it by hand, restart KubeSolo.
+
 ### Kubeconfig Issues
 
 ```bash

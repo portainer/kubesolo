@@ -35,6 +35,7 @@ func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
 		{Name: "Docker conflict", Run: CheckDockerConflict},
 		{Name: "iptables xt_comment module", Run: CheckIptablesComment},
 		{Name: "iptables and nftables tools", Run: func() error { return CheckNetfilterTools(installPrereqs) }},
+		{Name: "AppArmor parser", Run: func() error { return CheckAppArmor(installPrereqs) }},
 		{Name: "cgroups controllers", Run: func() error { return CheckCgroups(installPrereqs) }},
 		{Name: "required ports available", Run: func() error { return CheckPorts(pprofServer) }},
 		// After the port check: it listens on the API server port itself.
@@ -243,6 +244,52 @@ func CheckNetfilterTools(installPrereqs bool) error {
 	}
 	log.Info().Msg("networking packages installed successfully")
 	return nil
+}
+
+// CheckAppArmor warns when the kernel has AppArmor enabled but apparmor_parser
+// is missing, installing it when installPrereqs is set. containerd needs the
+// parser to load its default profile: without it every container runs
+// unconfined, and a pod that asks for an AppArmor profile fails with "apparmor
+// is not supported" because the kubelet sees AppArmor enabled. That is a
+// warning rather than a failure, since everything else works.
+func CheckAppArmor(installPrereqs bool) error {
+	if !appArmorEnabled() || binaryPresent("apparmor_parser") {
+		return nil
+	}
+
+	manager, installArgs := packageManager()
+	pkg := "apparmor"
+	if manager == "zypper" {
+		pkg = "apparmor-parser"
+	}
+
+	if installPrereqs && manager != "" {
+		log.Info().Msgf("installing AppArmor parser: %s", pkg)
+		if manager == "apt-get" {
+			_ = runCommand("apt-get", "update")
+		}
+		if err := runCommand(manager, append(installArgs, pkg)...); err == nil && binaryPresent("apparmor_parser") {
+			log.Info().Msg("AppArmor parser installed successfully")
+			return nil
+		}
+		log.Warn().Msgf("could not install %s; continuing without it", pkg)
+	}
+
+	hint := "install the package that provides apparmor_parser"
+	if manager != "" {
+		hint = "run: " + strings.Join(append(append([]string{manager}, installArgs...), pkg), " ")
+	}
+	log.Warn().Msgf(
+		"AppArmor is enabled but apparmor_parser is missing: containers will run unconfined, "+
+			"and pods that request an AppArmor profile will fail to start. "+
+			"Re-run with --install-prereqs to install it, or %s", hint)
+	return nil
+}
+
+// appArmorEnabled reports whether the running kernel has AppArmor enabled.
+func appArmorEnabled() bool {
+	data, err := os.ReadFile("/sys/module/apparmor/parameters/enabled")
+	return err == nil && strings.HasPrefix(string(data), "Y")
 }
 
 // netfilterBinaries maps each networking package to the binary it provides.

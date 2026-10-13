@@ -41,6 +41,7 @@ func EnsureEmbeddedDependencies(embedded types.Embedded) error {
 	}
 
 	ensureSELinuxPolicy(embedded.ContainerMode)
+	warnMissingAppArmorParser(embedded.ContainerMode)
 
 	return nil
 }

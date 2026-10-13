@@ -168,6 +168,43 @@ check_netfilter_tools() {
     echo "✅ $missing installed"
 }
 
+# Function to check for apparmor_parser where the kernel has AppArmor enabled.
+# containerd needs it to load its default profile: without it every container
+# runs unconfined, and pods that request an AppArmor profile fail with
+# "apparmor is not supported". A warning rather than an error, since everything
+# else works; --install-prereqs installs it.
+check_apparmor() {
+    if ! grep -q '^Y' /sys/module/apparmor/parameters/enabled 2>/dev/null || command -v apparmor_parser >/dev/null 2>&1; then
+        return
+    fi
+
+    install_cmd=$(package_install_command)
+    pkg="apparmor"
+    case "$install_cmd" in
+        zypper*) pkg="apparmor-parser" ;;
+    esac
+
+    if [ "$INSTALL_PREREQS" = "true" ] && [ -n "$install_cmd" ]; then
+        echo "📦 Installing $pkg (AppArmor is enabled but apparmor_parser is missing)..."
+        case "$install_cmd" in
+            apt-get*) apt-get update >/dev/null 2>&1 || true ;;
+        esac
+        # shellcheck disable=SC2086 # word splitting of the command is intended
+        if $install_cmd $pkg && command -v apparmor_parser >/dev/null 2>&1; then
+            echo "✅ $pkg installed"
+            return
+        fi
+        echo "⚠️  Could not install $pkg; continuing without it"
+    fi
+
+    if [ -n "$install_cmd" ]; then
+        hint="run: $install_cmd $pkg"
+    else
+        hint="install the package that provides apparmor_parser"
+    fi
+    echo "⚠️  AppArmor is enabled but apparmor_parser is missing: containers will run unconfined, and pods that request an AppArmor profile will fail to start. Re-run with --install-prereqs to install it, or $hint"
+}
+
 # Function to check iptables xt_comment module support
 check_iptables_comment_module() {
     echo "🔍 Checking iptables xt_comment module support..."
@@ -1797,6 +1834,7 @@ check_hostname_compliance
 
 # Check and optionally install iptables/nftables (before the xt_comment check, which needs iptables)
 check_netfilter_tools
+check_apparmor
 check_iptables_comment_module
 
 # Ensure Alpine cgroups service is enabled (required for cgroupv2 controllers)
