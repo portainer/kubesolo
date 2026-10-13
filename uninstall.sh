@@ -2,6 +2,17 @@
 
 set -e
 
+# Put the standard system directories on PATH. semodule, umount and the other
+# tools this script calls live in the sbin ones, which a root shell started
+# with su rather than su - leaves off PATH.
+for _dir in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin; do
+    case ":$PATH:" in
+        *":$_dir:"*) ;;
+        *) PATH="${PATH:+$PATH:}$_dir" ;;
+    esac
+done
+export PATH
+
 # Function to handle errors
 handle_error() {
     echo "❌ Error: $1"

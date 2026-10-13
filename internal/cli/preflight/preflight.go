@@ -392,18 +392,13 @@ func isAlpine() bool {
 	return err == nil
 }
 
-// binaryPresent reports whether name is on the PATH or in one of the sbin
-// directories, which a non-login root shell may leave off its PATH.
+// binaryPresent reports whether name is on the PATH. It deliberately looks
+// nowhere else: KubeSolo resolves tools on the PATH at runtime, so a binary
+// found only outside it would pass here and still be missing there.
+// kubesoloctl adds the standard sbin directories to PATH on start.
 func binaryPresent(name string) bool {
-	if _, err := exec.LookPath(name); err == nil {
-		return true
-	}
-	for _, dir := range []string{"/usr/sbin", "/sbin", "/usr/bin", "/bin"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return true
-		}
-	}
-	return false
+	_, err := exec.LookPath(name)
+	return err == nil
 }
 
 // iptablesKernelSupport reports whether the kernel provides the legacy

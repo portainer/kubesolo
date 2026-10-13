@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/portainer/kubesolo/internal/cli"
+	"github.com/portainer/kubesolo/internal/syspath"
 )
 
 var (
@@ -19,6 +20,10 @@ var (
 )
 
 func main() {
+	// Pre-flight looks tools up on PATH, and KubeSolo inherits it when started as
+	// a daemon or in the foreground; a non-login root shell leaves sbin off it.
+	syspath.Ensure()
+
 	cli.SetVersionInfo(Version, Commit, BuildDate)
 	if err := cli.Execute(); err != nil {
 		// ui.Printer.Fail returns an error with an empty message (already
