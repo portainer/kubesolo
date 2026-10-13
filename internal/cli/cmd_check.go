@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
@@ -27,6 +28,9 @@ func checkCmd(cfg *config.Config) *cobra.Command {
 	f.BoolVar(&cfg.PprofServer, "pprof-server",
 		envBool("KUBESOLO_PPROF_SERVER", false),
 		"Include pprof port 6060 in port conflict checks")
+	f.StringVar(&cfg.NodeIP, "node-ip",
+		os.Getenv("KUBESOLO_NODE_IP"),
+		"Node IP the install will use, for the host firewall check. Defaults to auto-detection")
 	return cmd
 }
 
@@ -46,7 +50,7 @@ func runCheck(cfg *config.Config) error {
 		checks = preflight.ContainerSuite()
 	} else {
 		p.OK("System detected", fmt.Sprintf("%s · %s · %s", info.Arch, info.LibC, info.InitSystem))
-		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer)
+		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
 	}
 
 	p.Step("Pre-flight checks")
