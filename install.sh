@@ -191,6 +191,23 @@ ensure_alpine_cgroups_service() {
     fi
 }
 
+# check_firewall runs the staged release's check that the host firewall lets
+# pods reach the API server and each other. Releases from before the check do
+# not have the flag, and are installed without it.
+check_firewall() {
+    echo "🔍 Checking that the host firewall lets pod traffic through..."
+    if _out=$("$STAGED_BIN" --check-firewall 2>&1); then
+        echo "✅ Host firewall lets pod traffic through"
+        return
+    fi
+    if echo "$_out" | grep -q "unknown long flag"; then
+        echo "⚠️  KubeSolo $STAGED_VERSION cannot check the host firewall; skipping"
+        return
+    fi
+    echo "$_out"
+    handle_error "The host firewall blocks pod traffic. Add the rules above and run the installer again."
+}
+
 # Function to check for required cgroups controllers
 check_cgroups() {
     echo "🔍 Checking for required cgroups controllers..."
@@ -1745,6 +1762,8 @@ INSTALL_PATH="/usr/local/bin/$APP_NAME"
 
 # Fetch and verify the release before anything that is running is touched.
 stage_release
+
+check_firewall
 
 # An existing install at a different version is upgraded, not reinstalled.
 INSTALLED_VERSION=""

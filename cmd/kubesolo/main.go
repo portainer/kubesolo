@@ -172,6 +172,16 @@ func main() {
 		os.Exit(0)
 	}
 
+	// --check-firewall is likewise answered before anything is touched, with
+	// the node IP the configuration names.
+	if *flags.CheckFirewall {
+		if err := network.CheckFirewall(service.cfg.Network.NodeIP); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	if service.cfg.Kubernetes.APIServer.StartupTimeoutSeconds > 0 {
 		types.DefaultRetryCount = service.cfg.Kubernetes.APIServer.StartupTimeoutSeconds / int(types.DefaultComponentSleep.Seconds())
 	}

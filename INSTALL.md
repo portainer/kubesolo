@@ -54,7 +54,7 @@ The existing `/etc/kubesolo/config.yaml` is kept as it is. Settings passed to an
 
 See the [upgrade API](docs/configuration/upgrade-api.md) for how the upgrade works and what is backed up.
 
-The pre-flight checks stop the install if Docker is installed or running, if the hostname is not RFC 1123 compliant (lowercase only), if `iptables` or its comment module is missing, or if required cgroup controllers are not available.
+The pre-flight checks stop the install if Docker is installed or running, if the hostname is not RFC 1123 compliant (lowercase only), if `iptables` or its comment module is missing, if required cgroup controllers are not available, or if the host firewall blocks pod traffic (see [Host Firewall Blocks Pod Traffic](#host-firewall-blocks-pod-traffic)).
 
 **Automatic Detection:**
 - **Init System**: systemd, SysV init, OpenRC, s6, runit, upstart

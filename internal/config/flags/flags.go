@@ -55,6 +55,9 @@ var (
 	// upgrade starts them, nobody else should.
 	UpgradeExecutor       = Application.Flag("upgrade-executor", "Run as the upgrade executor for the given job file.").Hidden().String()
 	UpgradeCheckDatastore = Application.Flag("upgrade-check-datastore", "Migrate and check a copy of the datastore, then exit.").Hidden().String()
+	// CheckFirewall is the install script's pre-flight check of the host
+	// firewall, run with the release about to be installed.
+	CheckFirewall = Application.Flag("check-firewall", "Check that the host firewall lets pods reach the API server and each other, then exit.").Hidden().Bool()
 )
 
 // setByUser records, per flag name, whether the value came from the command line.
