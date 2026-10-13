@@ -205,7 +205,10 @@ check_firewall() {
         return
     fi
     echo "$_out"
-    handle_error "The host firewall blocks pod traffic. Add the rules above and run the installer again."
+    if echo "$_out" | grep -q "pods cannot reach"; then
+        handle_error "The host firewall blocks pod traffic. Add the rules above and run the installer again."
+    fi
+    handle_error "The host firewall check could not run; see the error above."
 }
 
 # Function to check for required cgroups controllers
