@@ -178,7 +178,7 @@ func TestCheckPorts_PprofIncluded(t *testing.T) {
 // ── Suite ─────────────────────────────────────────────────────────────────────
 
 func TestSuite_ReturnsChecks(t *testing.T) {
-	checks := Suite(false, false)
+	checks := Suite(false, false, "")
 	if len(checks) == 0 {
 		t.Fatal("Suite should return at least one check")
 	}
@@ -194,11 +194,26 @@ func TestSuite_ReturnsChecks(t *testing.T) {
 
 func TestSuite_NamesAreUnique(t *testing.T) {
 	seen := map[string]bool{}
-	for _, c := range Suite(false, false) {
+	for _, c := range Suite(false, false, "") {
 		if seen[c.Name] {
 			t.Errorf("duplicate check name: %q", c.Name)
 		}
 		seen[c.Name] = true
+	}
+}
+
+func TestSuite_FirewallAfterPorts(t *testing.T) {
+	index := map[string]int{}
+	for i, c := range Suite(false, false, "") {
+		index[c.Name] = i
+	}
+	ports, okPorts := index["required ports available"]
+	firewall, okFirewall := index["host firewall"]
+	if !okPorts || !okFirewall {
+		t.Fatalf("suite is missing the port or firewall check: %v", index)
+	}
+	if firewall < ports {
+		t.Error("the firewall check listens on the API server port, so it must run after the port check")
 	}
 }
 

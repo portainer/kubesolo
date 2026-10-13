@@ -46,7 +46,7 @@ func runCheck(cfg *config.Config) error {
 		checks = preflight.ContainerSuite()
 	} else {
 		p.OK("System detected", fmt.Sprintf("%s · %s · %s", info.Arch, info.LibC, info.InitSystem))
-		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer)
+		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
 	}
 
 	p.Step("Pre-flight checks")

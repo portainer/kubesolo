@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/rs/zerolog/log"
 )
 
@@ -25,8 +26,9 @@ type Check struct {
 // Suite returns the ordered list of pre-flight checks to run before installation.
 // installPrereqs controls whether missing OS packages are installed automatically
 // (e.g. nftables on Alpine Linux). pprofServer mirrors the --pprof-server flag;
-// when true, port 6060 is added to the port availability check.
-func Suite(installPrereqs, pprofServer bool) []Check {
+// when true, port 6060 is added to the port availability check. nodeIP mirrors
+// the --node-ip flag and is the address the firewall check connects to.
+func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
 	return []Check{
 		{Name: "root privileges", Run: CheckRoot},
 		{Name: "hostname RFC 1123 compliance", Run: CheckHostname},
@@ -35,6 +37,8 @@ func Suite(installPrereqs, pprofServer bool) []Check {
 		{Name: "nftables and iptables", Run: func() error { return CheckAlpineNetworking(installPrereqs) }},
 		{Name: "cgroups controllers", Run: func() error { return CheckCgroups(installPrereqs) }},
 		{Name: "required ports available", Run: func() error { return CheckPorts(pprofServer) }},
+		// After the port check: it listens on the API server port itself.
+		{Name: "host firewall", Run: func() error { return network.CheckFirewall(nodeIP) }},
 	}
 }
 

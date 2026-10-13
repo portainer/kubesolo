@@ -305,6 +305,36 @@ ls -la /usr/local/bin/kubesolo
 ls -la /var/lib/kubesolo
 ```
 
+### Host Firewall Blocks Pod Traffic
+
+Before installing, both installers check that pods will be able to reach the API server on the node IP and reach each other. A host firewall that rejects this traffic, such as the default `iptables-services` rules on RHEL, stops the install with `pods cannot reach the API server` or `pods cannot reach each other`. Left in place, it would keep CoreDNS from ever becoming ready (`dial tcp 10.43.0.1:443: connect: no route to host`).
+
+Allow the pod network `10.42.0.0/16` to this host and through forwarding, make the rules persistent, then run the installer again:
+
+```bash
+# firewalld
+firewall-cmd --permanent --zone=trusted --add-source=10.42.0.0/16
+firewall-cmd --reload
+
+# iptables, then save them (service iptables save, or netfilter-persistent save)
+iptables -I INPUT -s 10.42.0.0/16 -j ACCEPT
+iptables -I FORWARD -s 10.42.0.0/16 -j ACCEPT
+iptables -I FORWARD -d 10.42.0.0/16 -j ACCEPT
+
+# nftables: in /etc/nftables.conf, add to the input chain
+#   ip saddr 10.42.0.0/16 accept
+# and to the forward chain
+#   ip saddr 10.42.0.0/16 accept
+#   ip daddr 10.42.0.0/16 accept
+
+# ufw
+ufw allow from 10.42.0.0/16
+ufw route allow from 10.42.0.0/16
+ufw route allow to 10.42.0.0/16
+```
+
+Other firewalls need equivalent rules.
+
 ### Kubeconfig Issues
 
 ```bash

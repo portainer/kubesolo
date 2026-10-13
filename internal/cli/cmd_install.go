@@ -267,7 +267,7 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	if containerMode {
 		checks = preflight.ContainerSuite()
 	} else {
-		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer)
+		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
 	}
 	if err := preflight.RunSuite(checks); err != nil {
 		if wasRunning {
