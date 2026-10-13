@@ -1,12 +1,14 @@
 package network
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/portainer/kubesolo/types"
@@ -88,24 +90,40 @@ func CheckFirewall(nodeIPOverride string) error {
 
 	// INPUT: pods reach the API server through the kubernetes service, which
 	// kube-proxy translates to the node IP. When KubeSolo is already running it
-	// owns the port, and the connection reaches it instead.
-	apiAddr := net.JoinHostPort(nodeIP, "6443")
-	if l, err := net.Listen("tcp", apiAddr); err == nil {
-		defer func() { _ = l.Close() }()
-	}
-	if err := podA.dial(apiAddr); err != nil {
-		return fmt.Errorf("pods cannot reach the API server at %s: %w\n\n%s", apiAddr, err, firewallHelp)
+	// owns the port, and the connection reaches it instead. A node IP that is
+	// not on this host, such as a VIP held elsewhere, is not delivered to INPUT
+	// here, so there is nothing to check.
+	if isLocalIP(nodeIP) {
+		apiAddr := net.JoinHostPort(nodeIP, "6443")
+		l, err := net.Listen("tcp", apiAddr)
+		switch {
+		case err == nil:
+			defer func() { _ = l.Close() }()
+		case !errors.Is(err, syscall.EADDRINUSE):
+			return fmt.Errorf("could not set up the firewall check: %w", err)
+		}
+		if err := podA.dial(apiAddr); err != nil {
+			return fmt.Errorf("pods cannot reach the API server at %s: %w\n\n%s", apiAddr, err, firewallHelp)
+		}
 	}
 
-	// FORWARD: pod to pod, on the DNS port CoreDNS serves.
+	// FORWARD: pod to pod, on the DNS port CoreDNS serves, over TCP and UDP.
 	dnsAddr := net.JoinHostPort(ips[1].String(), "53")
 	l, err := podB.listen(dnsAddr)
 	if err != nil {
 		return fmt.Errorf("could not set up the firewall check: %w", err)
 	}
 	defer func() { _ = l.Close() }()
+	pc, err := podB.echoUDP(dnsAddr)
+	if err != nil {
+		return fmt.Errorf("could not set up the firewall check: %w", err)
+	}
+	defer func() { _ = pc.Close() }()
 	if err := podA.dial(dnsAddr); err != nil {
-		return fmt.Errorf("pods cannot reach each other (%s to %s): %w\n\n%s", ips[0], dnsAddr, err, firewallHelp)
+		return fmt.Errorf("pods cannot reach each other (%s to %s over TCP): %w\n\n%s", ips[0], dnsAddr, err, firewallHelp)
+	}
+	if err := podA.exchangeUDP(dnsAddr); err != nil {
+		return fmt.Errorf("pods cannot reach each other (%s to %s over UDP): %w\n\n%s", ips[0], dnsAddr, err, firewallHelp)
 	}
 	return nil
 }
@@ -224,6 +242,49 @@ func (p *probePod) listen(addr string) (l net.Listener, err error) {
 		return err
 	})
 	return l, err
+}
+
+// echoUDP answers every datagram sent to addr inside the pod with itself, until
+// the returned connection is closed.
+func (p *probePod) echoUDP(addr string) (pc net.PacketConn, err error) {
+	err = inNS(p.ns, func() error {
+		pc, err = net.ListenPacket("udp", addr)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		buf := make([]byte, 64)
+		for {
+			n, from, err := pc.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			_, _ = pc.WriteTo(buf[:n], from)
+		}
+	}()
+	return pc, nil
+}
+
+// exchangeUDP sends a datagram to addr from inside the pod and waits for the
+// reply.
+func (p *probePod) exchangeUDP(addr string) error {
+	return inNS(p.ns, func() error {
+		c, err := net.Dial("udp", addr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = c.Close() }()
+		if err := c.SetDeadline(time.Now().Add(firewallDialTimeout)); err != nil {
+			return err
+		}
+		if _, err := c.Write([]byte("kubesolo")); err != nil {
+			return err
+		}
+		_, err = c.Read(make([]byte, 64))
+		return err
+	})
 }
 
 // newNS creates a network namespace without leaving the calling thread in it.
