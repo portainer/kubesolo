@@ -1,20 +1,19 @@
 package kubeproxy
 
 import (
-	"os"
-
 	"github.com/portainer/kubesolo/internal/logging"
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
-// detectProxyMode returns "nftables" if the iptables kernel modules are
-// unavailable (e.g., ip_tables or xt_REJECT not compiled), otherwise "iptables".
-// kube-proxy nftables mode is stable since Kubernetes 1.31.
+// detectProxyMode returns "iptables" when the masquerade rule is programmed
+// through iptables, otherwise "nftables", so kube-proxy and the masquerade rule
+// always agree. kube-proxy nftables mode is stable since Kubernetes 1.31.
 func detectProxyMode() string {
-	if _, err := os.Stat("/proc/net/ip_tables_names"); err != nil {
-		log.Info().Str("component", "kubeproxy").Msg("iptables kernel modules not available, using nftables proxy mode")
+	if !network.UseIPTables() {
+		log.Info().Str("component", "kubeproxy").Msg("iptables not usable on this host, using nftables proxy mode")
 		return "nftables"
 	}
 	return "iptables"

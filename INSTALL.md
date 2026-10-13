@@ -54,7 +54,7 @@ The existing `/etc/kubesolo/config.yaml` is kept as it is. Settings passed to an
 
 See the [upgrade API](docs/configuration/upgrade-api.md) for how the upgrade works and what is backed up.
 
-The pre-flight checks stop the install if Docker is installed or running, if the hostname is not RFC 1123 compliant (lowercase only), if `iptables` or its comment module is missing, if required cgroup controllers are not available, or if the host firewall blocks pod traffic (see [Host Firewall Blocks Pod Traffic](#host-firewall-blocks-pod-traffic)).
+The pre-flight checks stop the install if Docker is installed or running, if the hostname is not RFC 1123 compliant (lowercase only), if `iptables` (or `nft`, where the kernel has no `ip_tables` support) is missing and `--install-prereqs` was not given, if the iptables comment module is missing, if required cgroup controllers are not available, or if the host firewall blocks pod traffic (see [Host Firewall Blocks Pod Traffic](#host-firewall-blocks-pod-traffic)).
 
 **Automatic Detection:**
 - **Init System**: systemd, SysV init, OpenRC, s6, runit, upstart
@@ -148,7 +148,7 @@ export KUBESOLO_PROXY=""                        # Corporate proxy for HTTP/HTTPS
 export KUBESOLO_OFFLINE="false"                 # Download the offline build
 export KUBESOLO_OFFLINE_INSTALL=""              # Install from a local archive or binary
 export KUBESOLO_DOWNLOAD_DIR=""                 # Same as --download-only=DIR
-export KUBESOLO_INSTALL_PREREQS="false"         # Install missing prerequisites (nftables on Alpine)
+export KUBESOLO_INSTALL_PREREQS="false"         # Install missing prerequisites (iptables/nftables)
 export KUBESOLO_SHA256=""                       # Expected archive checksum (default: the published one)
 export KUBESOLO_FORCE="false"                   # Allow installing an older version over a newer one
 export KUBESOLO_HEALTH_TIMEOUT="600"            # Seconds an upgrade has to become healthy
