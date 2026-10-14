@@ -420,6 +420,12 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { c.Assistant.Model = v; return nil },
 		},
 		{
+			ConfigPath: "assistant.knowledge",
+			Envar:      "KUBESOLO_ASSISTANT_KNOWLEDGE",
+			Get:        func(c *types.Config) any { return c.Assistant.Knowledge },
+			Set:        func(c *types.Config, v string) error { c.Assistant.Knowledge = v; return nil },
+		},
+		{
 			ConfigPath: "assistant.contextSize",
 			Envar:      "KUBESOLO_ASSISTANT_CONTEXT_SIZE",
 			Get:        func(c *types.Config) any { return c.Assistant.ContextSize },

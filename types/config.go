@@ -240,6 +240,11 @@ type AssistantConfig struct {
 	// Model is an absolute path to a GGUF model file. It is only ever read.
 	Model string `json:"model"`
 
+	// Knowledge is what the model is told about KubeSolo's failures when it
+	// triages an incident: "" for the default artifact, an absolute path to a
+	// Markdown file, or an artifact reference. It is only ever read.
+	Knowledge string `json:"knowledge"`
+
 	// ContextSize is the context window in tokens. It sizes the memory held
 	// while answering.
 	ContextSize int `json:"contextSize"`

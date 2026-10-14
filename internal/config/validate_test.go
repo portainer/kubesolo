@@ -531,6 +531,7 @@ func assistantEnabled() *types.Config {
 	cfg := Defaults()
 	cfg.Assistant.Enabled = true
 	cfg.Assistant.Model = "/var/lib/models/assistant.gguf"
+	cfg.Assistant.Knowledge = "/var/lib/models/knowledge.md"
 	cfg.API.Enabled = true
 	return cfg
 }
@@ -631,6 +632,48 @@ func TestAssistantModelRejected(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := assistantEnabled()
 			cfg.Assistant.Model = ""
+			tc.mutate(cfg)
+			if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("expected an error mentioning %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestAssistantKnowledge(t *testing.T) {
+	for _, tc := range []struct {
+		knowledge, want string
+	}{
+		{"", ""}, // the default knowledge artifact
+		{"/etc/kubesolo/knowledge.md", "/etc/kubesolo/knowledge.md"},
+		{"portainerci/kubesolo-assistant-knowledge:v1", "docker.io/portainerci/kubesolo-assistant-knowledge:v1"},
+	} {
+		cfg := assistantEnabled()
+		cfg.Assistant.Knowledge = tc.knowledge
+		if _, err := Validate(cfg, testHost()); err != nil {
+			t.Errorf("knowledge %q: %v", tc.knowledge, err)
+		}
+		if cfg.Assistant.Knowledge != tc.want {
+			t.Errorf("knowledge %q normalised to %q, want %q", tc.knowledge, cfg.Assistant.Knowledge, tc.want)
+		}
+	}
+}
+
+func TestAssistantKnowledgeRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*types.Config)
+		want   string
+	}{
+		{"relative path", func(c *types.Config) { c.Assistant.Knowledge = "knowledge.md" }, "absolute path"},
+		{"invalid reference", func(c *types.Config) { c.Assistant.Knowledge = "NOT A REF" }, "assistant.knowledge"},
+		{"reference with an external runtime", func(c *types.Config) {
+			c.Assistant.Knowledge = ""
+			c.Runtime.Endpoint = "/run/crio/crio.sock"
+		}, "assistant.knowledge"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := assistantEnabled()
 			tc.mutate(cfg)
 			if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("expected an error mentioning %q, got %v", tc.want, err)

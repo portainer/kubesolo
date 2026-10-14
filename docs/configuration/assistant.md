@@ -2,7 +2,7 @@
 
 KubeSolo can run its own small language model to answer questions about the node. The model is served by [llama.cpp](https://github.com/ggml-org/llama.cpp)'s `llama-server`, which KubeSolo starts as a child process — not as a pod — so the assistant still works when containerd, the database or the API server is broken.
 
-It is **off by default**. When on, nothing runs until a question is asked: KubeSolo starts `llama-server`, waits for the model to load, asks, and stops it again, so the model holds no memory between questions.
+It is **off by default**. When on, the model runs only to answer a question or to [triage an incident](#incidents): KubeSolo starts `llama-server`, waits for the model to load, asks, and stops it again, so the model holds no memory in between.
 
 ---
 
@@ -35,6 +35,7 @@ assistant:
 |---|---|---|
 | `assistant.enabled` | `KUBESOLO_ASSISTANT_ENABLED` | `false` |
 | `assistant.model` | `KUBESOLO_ASSISTANT_MODEL` | `""` |
+| `assistant.knowledge` | `KUBESOLO_ASSISTANT_KNOWLEDGE` | `""` |
 | `assistant.contextSize` | `KUBESOLO_ASSISTANT_CONTEXT_SIZE` | `8192` |
 
 Changes take effect when KubeSolo restarts. `contextSize` is the context window in tokens: raising it lets longer questions through and raises the memory held while answering.
@@ -69,13 +70,31 @@ oras push registry.example.com/models/mine:v1 mine.gguf:application/vnd.docker.a
 
 An ordinary container image will not do — a `COPY mine.gguf` in a Dockerfile puts the model inside a tar archive, which would have to be unpacked into a second copy. KubeSolo refuses such an image, and a multi-platform one, and says why.
 
+## The knowledge
+
+To triage an incident, the model is given a **knowledge file**: a Markdown description of KubeSolo's known failures, their signs in the logs and events, and the action that fixes each. Improving the triage means improving this file, not KubeSolo, so it is published apart from KubeSolo releases. `assistant.knowledge` takes the same three forms as the model:
+
+| Value | Knowledge |
+|---|---|
+| `""` (default) | [`build/assistant/knowledge.md`](../../build/assistant/knowledge.md), fetched from `docker.io/portainerci/kubesolo-assistant-knowledge` |
+| `/etc/kubesolo/knowledge.md` | A Markdown file on the host |
+| `registry.example.com/kubesolo/knowledge:v2` | A knowledge artifact in a registry |
+
+Its `## Harmless lines` section lists, in quotes, text that healthy nodes log routinely — startup noise a small model would otherwise take for the cause. KubeSolo removes any log line or event containing one of those texts before the model reads an incident, so quote only exact text that never shows a fault. The incident itself keeps every line.
+
+It is fetched and kept the same way as the model. The file can be at most 12 KB — its share of the model's prompt, alongside the incident — and KubeSolo refuses a larger one. Publish one with ORAS, the file itself as the single layer:
+
+```bash
+oras push registry.example.com/kubesolo/knowledge:v2 knowledge.md:text/markdown
+```
+
 ## Asking a question
 
 ```bash
 sudo kubesoloctl assistant ask "why would containerd keep restarting?"
 ```
 
-Expect a wait: on two CPUs the model loads in seconds, then reads the question at roughly 50 tokens a second and writes the answer at roughly 10. Only one question is answered at a time; a second one while the first is in progress is refused.
+Expect a wait: on two CPUs the model loads in seconds, then reads the question at roughly 50 tokens a second and writes the answer at roughly 10. Only one question is answered at a time; a question while another is answered, or an incident triaged, is refused.
 
 The same request over the configuration API:
 
@@ -95,7 +114,7 @@ sudo curl -s --unix-socket /var/lib/kubesolo/config.sock \
 | `200` | The answer |
 | `400` | The question is missing or empty |
 | `404` | The assistant is not enabled |
-| `409` | Another question is being answered |
+| `409` | Another question is being answered, or an incident triaged |
 | `500` | The model could not be read or loaded; the error says why |
 
 ---
@@ -111,6 +130,31 @@ With the assistant enabled, KubeSolo records an **incident** when something goes
 
 Each incident carries a snapshot of the node at the time: each component's health, KubeSolo's latest error log lines, recent Kubernetes warning events, and disk and memory use. A snapshot is a few KB, and at most 12 KB. The 100 most recent incidents are kept, under `/var/lib/kubesolo/assistant/incidents/`.
 
+### Triage
+
+Every incident is triaged as soon as it is recorded: the model reads the [knowledge](#the-knowledge) and the snapshot, and answers with a diagnosis. Incidents are triaged one at a time, oldest first, and an incident is served only once it has been — so it never appears without its diagnosis.
+
+```json
+"triage": {
+  "status": "triaged",
+  "time": "2026-10-14T03:12:40Z",
+  "summary": "The kubelet stopped answering its health check for 5 minutes.",
+  "cause": "The kubelet is stuck or has stopped.",
+  "action": "restart_component",
+  "confidence": "medium"
+}
+```
+
+| `status` | Meaning |
+|---|---|
+| `triaged` | The model diagnosed it |
+| `failed` | The model ran but gave no usable diagnosis; `reason` says why |
+| `skipped` | The model was not run; `reason` says why: less than 2.5 GiB of memory was available, or the model or knowledge could not be used, or was still not fetched after an hour |
+
+`action` is one of `restart_component`, `repair_database`, `prune_images`, `clean_orphaned_containers`, `free_disk_space` and `report_only`. It is only a suggestion: KubeSolo takes no action. On two CPUs a triage takes a few minutes, mostly reading the prompt.
+
+An incident from a crash is triaged once KubeSolo has started. In a crash loop, KubeSolo does not stay up long enough for that, so the incident is triaged on the first run that does.
+
 ```bash
 sudo kubesoloctl assistant incidents          # list, oldest first
 sudo kubesoloctl assistant incidents <id>     # one incident, as JSON
@@ -120,10 +164,10 @@ They are served by the configuration API, including on the Portainer agent's soc
 
 | Request | Returns |
 |---|---|
-| `GET /api/v1/assistant/incidents?since=<id>` | Each incident after `<id>` (all without it), oldest first: `id`, `time`, `kind`, `trigger` |
-| `GET /api/v1/assistant/incidents/<id>` | The incident with its snapshot, or `404` |
+| `GET /api/v1/assistant/incidents?since=<id>` | Each triaged incident after `<id>` (all without it), oldest first: `id`, `time`, `kind`, `trigger`, `triage` |
+| `GET /api/v1/assistant/incidents/<id>` | The incident with its snapshot and triage, or `404` |
 
-IDs sort in time order, so a poller asks for everything after the newest ID it has seen, and nothing needs acknowledging.
+IDs sort in time order, and incidents are served in that order, so a poller asks for everything after the newest ID it has seen, and nothing needs acknowledging.
 
 ---
 

@@ -47,9 +47,10 @@ func newWatcher(t *testing.T) (*Watcher, *health, *time.Time) {
 	return w, h, &now
 }
 
-func listed(t *testing.T, s *Store) []Summary {
+// listed returns the recorded incidents, which wait for triage.
+func listed(t *testing.T, s *Store) []Incident {
 	t.Helper()
-	all, err := s.List("")
+	all, err := s.Pending()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +83,7 @@ func TestAnOutageIsRecordedOnceItLastsTheThreshold(t *testing.T) {
 	if !strings.Contains(all[0].Trigger, "kine") || !strings.Contains(all[0].Trigger, "apiserver") {
 		t.Errorf("trigger %q should name both failing components", all[0].Trigger)
 	}
-	inc, _ := w.Store.Get(all[0].ID)
+	inc := all[0]
 	if inc.Kind != KindKubeSolo || !strings.Contains(inc.Snapshot.Components["kine"], "connection refused") || inc.Snapshot.Components["apiserver"] == "ok" {
 		t.Errorf("snapshot = %+v", inc.Snapshot)
 	}

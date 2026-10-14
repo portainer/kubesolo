@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/v2/plugins/content/local"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/portainer/kubesolo/pkg/assistant"
 )
 
 // store is a containerd content store on disk, as KubeSolo's containerd keeps it.
@@ -106,5 +107,39 @@ func TestModelIndexIsRejected(t *testing.T) {
 
 	if _, err := modelFile(context.Background(), cs, target, dir); !errors.Is(err, ErrNotAModel) || !strings.Contains(err.Error(), "multi-platform") {
 		t.Errorf("expected ErrNotAModel about a multi-platform image, got %v", err)
+	}
+}
+
+func TestKnowledgeFileIsTheStoredLayer(t *testing.T) {
+	cs, dir := store(t)
+	knowledge := []byte("## kine\nA locked database means another process holds it.")
+	target := manifest(t, cs, knowledge)
+
+	path, err := knowledgeFile(context.Background(), cs, target, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "blobs", "sha256", digest.FromBytes(knowledge).Encoded()); path != want {
+		t.Errorf("path = %s, want %s", path, want)
+	}
+}
+
+func TestKnowledgeArtifactsThatCannotBeUsed(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		layers [][]byte
+		want   string
+	}{
+		{"two layers", [][]byte{[]byte("a"), []byte("b")}, "one layer"},
+		{"too large", [][]byte{bytes.Repeat([]byte("x"), assistant.MaxKnowledgeBytes+1)}, "at most"},
+		{"a model", [][]byte{gguf}, "not text"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cs, dir := store(t)
+			_, err := knowledgeFile(context.Background(), cs, manifest(t, cs, tc.layers...), dir)
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !errors.Is(err, ErrNotKnowledge) {
+				t.Errorf("expected ErrNotKnowledge mentioning %q, got %v", tc.want, err)
+			}
+		})
 	}
 }

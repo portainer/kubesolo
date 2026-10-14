@@ -131,7 +131,8 @@ func incidentsAPI(t *testing.T) (*Client, *assistant.Store, []string) {
 	var ids []string
 	for i, trigger := range []string{"unhealthy for 5m0s: kine", "KubeSolo did not shut down cleanly"} {
 		at := base.Add(time.Duration(i) * time.Hour)
-		inc := assistant.Incident{ID: at.Format("20060102T150405.000000000Z"), Time: at, Kind: assistant.KindKubeSolo, Trigger: trigger}
+		inc := assistant.Incident{ID: at.Format("20060102T150405.000000000Z"), Time: at, Kind: assistant.KindKubeSolo, Trigger: trigger,
+			Triage: &assistant.Triage{Status: assistant.TriageSkipped, Reason: "test"}}
 		inc.Snapshot.Components = map[string]string{"kine": "connection refused"}
 		if err := store.Save(inc); err != nil {
 			t.Fatal(err)

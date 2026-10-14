@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -84,6 +85,10 @@ type kubesolo struct {
 	// the assistant is disabled.
 	incidents *assistant.Store
 	errorLog  *assistant.ErrorLog
+
+	// assistant triages the incidents; nil when the assistant is disabled or
+	// cannot run.
+	assistant *assistant.Assistant
 }
 
 // the channels for the kubesolo application
@@ -496,6 +501,9 @@ func (s *kubesolo) run() {
 
 	if s.incidents != nil {
 		s.wg.Go(func() { s.watchComponents(ctx) })
+		if s.assistant != nil {
+			s.wg.Go(func() { (&assistant.Triager{Assistant: s.assistant, Store: s.incidents}).Run(ctx) })
+		}
 	}
 
 	s.wg.Go(func() { s.verifyPendingUpgrade(ctx) })
@@ -918,8 +926,9 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 
 // newAssistant prepares the assistant's llama-server, or returns nil when the
 // assistant is disabled or cannot run. Nothing is started until a question is
-// asked; a failure here costs the assistant, never KubeSolo. A model given as
-// an artifact is fetched in the background.
+// asked or an incident triaged; a failure here costs the assistant, never
+// KubeSolo. A model or knowledge given as an artifact is fetched in the
+// background.
 func (s *kubesolo) newAssistant(ctx context.Context) configapi.Asker {
 	if !s.cfg.Assistant.Enabled {
 		return nil
@@ -929,10 +938,8 @@ func (s *kubesolo) newAssistant(ctx context.Context) configapi.Asker {
 		log.Error().Str("component", "assistant").Err(err).Msg("cannot prepare llama-server, continuing without the assistant")
 		return nil
 	}
-	model := s.cfg.Assistant.Model
-	if model == "" {
-		model = types.DefaultAssistantModel
-	}
+	model := cmp.Or(s.cfg.Assistant.Model, types.DefaultAssistantModel)
+	knowledge := cmp.Or(s.cfg.Assistant.Knowledge, types.DefaultAssistantKnowledge)
 	cfg := assistant.Config{
 		Binary:       binary,
 		ContextSize:  s.cfg.Assistant.ContextSize,
@@ -941,16 +948,28 @@ func (s *kubesolo) newAssistant(ctx context.Context) configapi.Asker {
 	if filepath.IsAbs(model) {
 		cfg.Model = model
 	}
+	if filepath.IsAbs(knowledge) {
+		cfg.Knowledge = knowledge
+	}
 	a := assistant.New(cfg)
 	if cfg.Model == "" {
-		s.wg.Go(func() { s.fetchAssistantModel(ctx, a, model) })
+		s.wg.Go(func() { s.fetchAssistantArtifact(ctx, "model", model, node.FetchModel, a.SetModel, node.ErrNotAModel) })
 	}
+	if cfg.Knowledge == "" {
+		s.wg.Go(func() {
+			s.fetchAssistantArtifact(ctx, "knowledge", knowledge, node.FetchKnowledge, a.SetKnowledge, node.ErrNotKnowledge)
+		})
+	}
+	s.assistant = a
 	return a
 }
 
-// fetchAssistantModel fetches the model artifact once containerd is up,
-// retrying until it succeeds: at boot the network is often not ready yet.
-func (s *kubesolo) fetchAssistantModel(ctx context.Context, a *assistant.Assistant, ref string) {
+// fetchAssistantArtifact fetches the model or knowledge artifact once
+// containerd is up, retrying until it succeeds: at boot the network is often
+// not ready yet. An artifact that is notUsable is not retried.
+func (s *kubesolo) fetchAssistantArtifact(ctx context.Context, what, ref string,
+	fetch func(context.Context, *containerdclient.Client, string, string, string) (string, error),
+	set func(string, error), notUsable error) {
 	select {
 	case <-runtimeReadyCh:
 	case <-ctx.Done():
@@ -958,24 +977,26 @@ func (s *kubesolo) fetchAssistantModel(ctx context.Context, a *assistant.Assista
 	}
 	c, err := containerdclient.New(s.embedded.ContainerdSocketFile)
 	if err != nil {
-		a.SetModel("", err)
+		set("", err)
 		return
 	}
 	defer func() { _ = c.Close() }()
 
 	for {
-		log.Info().Str("component", "assistant").Str("model", ref).Msg("fetching the model...")
-		path, err := node.FetchModel(ctx, c, ref, s.embedded.ContainerdRegistryConfigDir, s.embedded.ContainerdRootDir)
-		a.SetModel(path, err)
+		log.Info().Str("component", "assistant").Str(what, ref).Msgf("fetching the %s...", what)
+		path, err := fetch(ctx, c, ref, s.embedded.ContainerdRegistryConfigDir, s.embedded.ContainerdRootDir)
+		if err == nil || errors.Is(err, notUsable) {
+			set(path, err)
+		}
 		if err == nil {
-			log.Info().Str("component", "assistant").Str("model", ref).Msg("model is ready")
+			log.Info().Str("component", "assistant").Str(what, ref).Msgf("%s is ready", what)
 			return
 		}
-		if errors.Is(err, node.ErrNotAModel) {
-			log.Error().Str("component", "assistant").Str("model", ref).Err(err).Msg("cannot use the model")
+		if errors.Is(err, notUsable) {
+			log.Error().Str("component", "assistant").Str(what, ref).Err(err).Msgf("cannot use the %s", what)
 			return
 		}
-		log.Error().Str("component", "assistant").Str("model", ref).Err(err).Msg("cannot fetch the model, retrying in a minute")
+		log.Error().Str("component", "assistant").Str(what, ref).Err(err).Msgf("cannot fetch the %s, retrying in a minute", what)
 		select {
 		case <-time.After(time.Minute):
 		case <-ctx.Done():

@@ -5,6 +5,7 @@ apiVersion: kubesolo.io/v1alpha1
 assistant:
   contextSize: 8192
   enabled: false
+  knowledge: ""
   model: ""
 d2k:
   enabled: false

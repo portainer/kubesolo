@@ -93,6 +93,7 @@ func Defaults() *types.Config {
 		Assistant: types.AssistantConfig{
 			Enabled:     false,
 			Model:       "",
+			Knowledge:   "",
 			ContextSize: types.DefaultAssistantContextSize,
 		},
 

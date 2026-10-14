@@ -26,9 +26,17 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// ErrBusy is returned while another question is being answered. Answering two
-// at once would hold two copies of the model in memory.
-var ErrBusy = errors.New("the assistant is already answering a question")
+// ErrBusy is returned while another question is being answered or an
+// incident triaged. Running two at once would hold two copies of the model in
+// memory.
+var ErrBusy = errors.New("the assistant is busy answering a question or triaging an incident, try again shortly")
+
+// ErrNotReady means the model or the knowledge is still being fetched;
+// ErrUnavailable that it cannot be used.
+var (
+	ErrNotReady    = errors.New("still being downloaded, try again shortly")
+	ErrUnavailable = errors.New("not available")
+)
 
 // systemPrompt tells the model what it is talking about.
 const systemPrompt = "You are the KubeSolo assistant. KubeSolo is a single-node Kubernetes distribution for edge devices. Answer briefly and plainly."
@@ -49,6 +57,11 @@ type Config struct {
 	// still being fetched; SetModel supplies it.
 	Model string
 
+	// Knowledge is the Markdown file the model is given to triage incidents.
+	// It is only ever read. Empty means it is still being fetched;
+	// SetKnowledge supplies it.
+	Knowledge string
+
 	// ContextSize is the context window in tokens.
 	ContextSize int
 
@@ -62,21 +75,55 @@ type Assistant struct {
 	cfg Config
 	mu  sync.Mutex
 
-	modelMu  sync.Mutex
-	model    string
-	modelErr error
+	filesMu   sync.Mutex
+	model     file
+	knowledge file
+}
+
+// file is a file the assistant reads, which may still be being fetched.
+type file struct {
+	path string
+	err  error
+}
+
+// get returns the file's path, or why it cannot be read yet.
+func (f file) get(what string) (string, error) {
+	switch {
+	case f.err != nil:
+		return "", fmt.Errorf("the %s is %w: %w", what, ErrUnavailable, f.err)
+	case f.path == "":
+		return "", fmt.Errorf("the %s is %w", what, ErrNotReady)
+	}
+	if _, err := os.Stat(f.path); err != nil {
+		return "", fmt.Errorf("the %s is %w: %w", what, ErrUnavailable, err)
+	}
+	return f.path, nil
 }
 
 // New returns an assistant. It starts nothing until asked.
 func New(cfg Config) *Assistant {
-	return &Assistant{cfg: cfg, model: cfg.Model}
+	return &Assistant{cfg: cfg, model: file{path: cfg.Model}, knowledge: file{path: cfg.Knowledge}}
 }
 
 // SetModel supplies the model once it has been fetched, or why it could not be.
 func (a *Assistant) SetModel(path string, err error) {
-	a.modelMu.Lock()
-	defer a.modelMu.Unlock()
-	a.model, a.modelErr = path, err
+	a.filesMu.Lock()
+	defer a.filesMu.Unlock()
+	a.model = file{path, err}
+}
+
+// SetKnowledge supplies the knowledge once it has been fetched, or why it
+// could not be.
+func (a *Assistant) SetKnowledge(path string, err error) {
+	a.filesMu.Lock()
+	defer a.filesMu.Unlock()
+	a.knowledge = file{path, err}
+}
+
+func (a *Assistant) files() (model, knowledge file) {
+	a.filesMu.Lock()
+	defer a.filesMu.Unlock()
+	return a.model, a.knowledge
 }
 
 // Ask starts llama-server, asks it the question, and stops it again, whether
@@ -87,19 +134,20 @@ func (a *Assistant) Ask(ctx context.Context, question string) (string, error) {
 	}
 	defer a.mu.Unlock()
 
-	a.modelMu.Lock()
-	model, modelErr := a.model, a.modelErr
-	a.modelMu.Unlock()
-	switch {
-	case modelErr != nil:
-		return "", fmt.Errorf("the model is not available: %w", modelErr)
-	case model == "":
-		return "", errors.New("the model is still being downloaded, try again shortly")
+	m, _ := a.files()
+	model, err := m.get("model")
+	if err != nil {
+		return "", err
 	}
-	if _, err := os.Stat(model); err != nil {
-		return "", fmt.Errorf("model %s cannot be read: %w", model, err)
-	}
+	return a.run(ctx, model, chatRequest{Messages: []message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: question},
+	}})
+}
 
+// run starts llama-server with the model, sends it the request, and stops it
+// again, whether or not it answered. The caller holds a.mu.
+func (a *Assistant) run(ctx context.Context, model string, req chatRequest) (string, error) {
 	port, err := freePort()
 	if err != nil {
 		return "", fmt.Errorf("find a port for llama-server: %w", err)
@@ -135,7 +183,7 @@ func (a *Assistant) Ask(ctx context.Context, question string) (string, error) {
 	if err := waitReady(ctx, base, proc, a.cfg.StartTimeout); err != nil {
 		return "", err
 	}
-	return complete(ctx, base, question)
+	return complete(ctx, base, req)
 }
 
 // freePort asks the kernel for an unused loopback port. Another process could
@@ -182,23 +230,31 @@ type message struct {
 	Content string `json:"content"`
 }
 
-func complete(ctx context.Context, base, question string) (string, error) {
-	body, err := json.Marshal(map[string]any{
-		"messages": []message{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: question},
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
+type chatRequest struct {
+	Messages []message `json:"messages"`
 
-	resp, err := http.DefaultClient.Do(req)
+	// ResponseFormat, when set, constrains the answer to a JSON schema.
+	ResponseFormat any `json:"response_format,omitempty"`
+
+	// MaxTokens bounds the answer; 0 leaves it to the context size.
+	MaxTokens int `json:"max_tokens,omitempty"`
+
+	// Temperature, when set, replaces llama-server's sampling temperature.
+	Temperature *float64 `json:"temperature,omitempty"`
+}
+
+func complete(ctx context.Context, base string, req chatRequest) (string, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		return "", fmt.Errorf("ask llama-server: %w", err)
 	}

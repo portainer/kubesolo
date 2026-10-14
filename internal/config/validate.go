@@ -98,13 +98,21 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	}
 
 	if cfg.Assistant.Enabled {
-		model, err := normaliseAssistantModel(cfg.Assistant.Model)
+		model, err := normaliseAssistantSource(cfg.Assistant.Model, ".gguf")
 		if err != nil {
 			return warnings, fmt.Errorf("assistant.model: %w", err)
 		}
 		cfg.Assistant.Model = model
 		if !filepath.IsAbs(model) && cfg.Runtime.Endpoint != "" {
 			return warnings, fmt.Errorf("assistant.model: a model artifact is fetched through KubeSolo's own containerd, which runtime.endpoint replaces; use an absolute path to a GGUF file instead")
+		}
+		knowledge, err := normaliseAssistantSource(cfg.Assistant.Knowledge, ".md")
+		if err != nil {
+			return warnings, fmt.Errorf("assistant.knowledge: %w", err)
+		}
+		cfg.Assistant.Knowledge = knowledge
+		if !filepath.IsAbs(knowledge) && cfg.Runtime.Endpoint != "" {
+			return warnings, fmt.Errorf("assistant.knowledge: a knowledge artifact is fetched through KubeSolo's own containerd, which runtime.endpoint replaces; use an absolute path to a knowledge file instead")
 		}
 		if cfg.Assistant.ContextSize <= 0 {
 			return warnings, fmt.Errorf("assistant.contextSize must be greater than 0, got %d", cfg.Assistant.ContextSize)
@@ -328,14 +336,15 @@ func assistantUnsupported(host Host) string {
 	return ""
 }
 
-// normaliseAssistantModel accepts "" (the default model artifact), an absolute
-// path to a GGUF file, or an artifact reference, which it fully qualifies.
-func normaliseAssistantModel(model string) (string, error) {
+// normaliseAssistantSource accepts "" (the default artifact), an absolute path
+// to a file, or an artifact reference, which it fully qualifies. A relative
+// path, recognised by the file's extension, is refused.
+func normaliseAssistantSource(source, ext string) (string, error) {
 	switch {
-	case model == "" || filepath.IsAbs(model):
-		return model, nil
-	case strings.HasSuffix(model, ".gguf"):
-		return "", fmt.Errorf("%q must be an absolute path", model)
+	case source == "" || filepath.IsAbs(source):
+		return source, nil
+	case strings.HasSuffix(source, ext):
+		return "", fmt.Errorf("%q must be an absolute path", source)
 	}
-	return NormaliseImageRef(model)
+	return NormaliseImageRef(source)
 }

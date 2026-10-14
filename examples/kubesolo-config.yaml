@@ -200,6 +200,13 @@ assistant:
   # Verify: journalctl -u kubesolo | grep "model is ready"
   model: ""
 
+  # What the model is told about KubeSolo's failures when it triages an
+  # incident, only ever read. Empty = the default knowledge, fetched as an OCI
+  # artifact like the model. Or an absolute path to a Markdown file of at most
+  # 12 KB, or another artifact reference whose single layer is that file.
+  # Verify: journalctl -u kubesolo | grep "knowledge is ready"
+  knowledge: ""
+
   # Context window in tokens; sizes the memory held while answering.
   contextSize: 8192
 

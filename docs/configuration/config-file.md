@@ -261,6 +261,7 @@ d2k:
 assistant:
   enabled: false
   model: ""               # "" = the default model; or a GGUF path, or a model artifact
+  knowledge: ""           # "" = the default knowledge; or a Markdown path, or an artifact
   contextSize: 8192
 ```
 
@@ -283,6 +284,7 @@ of KubeSolo's own on the same port are refused before anything starts.
 | `api.socketPath` | `string` | `""` |
 | `assistant.contextSize` | `integer` | `8192` |
 | `assistant.enabled` | `boolean` | `false` |
+| `assistant.knowledge` | `string` | `""` |
 | `assistant.model` | `string` | `""` |
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |

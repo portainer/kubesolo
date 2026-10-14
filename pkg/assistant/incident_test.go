@@ -8,8 +8,10 @@ import (
 	"time"
 )
 
+// incidentAt is an incident that has been triaged, and so is served.
 func incidentAt(t time.Time, trigger string) Incident {
-	return Incident{ID: newIncidentID(t), Time: t, Kind: KindKubeSolo, Trigger: trigger}
+	return Incident{ID: newIncidentID(t), Time: t, Kind: KindKubeSolo, Trigger: trigger,
+		Triage: &Triage{Status: TriageSkipped, Reason: "test", Time: t}}
 }
 
 func TestIncidentsAreListedOldestFirstAfterACursor(t *testing.T) {
@@ -97,5 +99,63 @@ func TestUnknownIncidents(t *testing.T) {
 	}
 	if all, err := s.List(""); err != nil || len(all) != 0 {
 		t.Errorf("an empty or missing store should list nothing, got %v, %v", all, err)
+	}
+}
+
+// An incident is served only once it has been triaged, so a poller never sees
+// one without its diagnosis. Until then it waits, oldest first.
+func TestUntriagedIncidentsAreNotServed(t *testing.T) {
+	s := NewStore(t.TempDir())
+	base := time.Date(2026, 10, 14, 3, 0, 0, 0, time.UTC)
+	older := Incident{ID: newIncidentID(base), Time: base, Kind: KindKubeSolo, Trigger: "older"}
+	newer := Incident{ID: newIncidentID(base.Add(time.Minute)), Time: base.Add(time.Minute), Kind: KindKubeSolo, Trigger: "newer"}
+	for _, inc := range []Incident{newer, older} {
+		if err := s.Save(inc); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if all, _ := s.List(""); len(all) != 0 {
+		t.Errorf("untriaged incidents were listed: %+v", all)
+	}
+	if _, err := s.Get(older.ID); !errors.Is(err, ErrNoIncident) {
+		t.Errorf("an untriaged incident should not be served, got %v", err)
+	}
+	pending, err := s.Pending()
+	if err != nil || len(pending) != 2 || pending[0].Trigger != "older" {
+		t.Fatalf("pending = %+v, %v", pending, err)
+	}
+
+	older.Triage = &Triage{Status: TriageDone, Diagnosis: Diagnosis{Summary: "kine was down", Action: "report_only", Confidence: "high"}}
+	if err := s.Save(older); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := s.List("")
+	if len(all) != 1 || all[0].Triage == nil || all[0].Triage.Summary != "kine was down" {
+		t.Errorf("a triaged incident should be listed with its triage, got %+v", all)
+	}
+	if pending, _ := s.Pending(); len(pending) != 1 || pending[0].Trigger != "newer" {
+		t.Errorf("pending = %+v", pending)
+	}
+}
+
+func TestSavingAnUntriagedIncidentSignals(t *testing.T) {
+	s := NewStore(t.TempDir())
+	now := time.Now().UTC()
+	if err := s.Save(incidentAt(now, "triaged")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-s.Added():
+		t.Fatal("saving a triaged incident should not signal")
+	default:
+	}
+	if err := s.Save(Incident{ID: newIncidentID(now.Add(time.Second)), Time: now, Kind: KindKubeSolo, Trigger: "new"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-s.Added():
+	default:
+		t.Fatal("saving a new incident should signal")
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -57,16 +58,29 @@ func fakeLlamaServer(mode string) {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("POST /v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if f := os.Getenv("FAKE_LLAMA_REQUESTS"); f != "" {
+			out, _ := os.OpenFile(f, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			_, _ = out.Write(append(body, '\n'))
+			_ = out.Close()
+		}
 		var req struct {
 			Messages []struct{ Role, Content string }
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		_ = json.Unmarshal(body, &req)
 		if mode == "slow" {
 			time.Sleep(time.Second)
 		}
 		last := req.Messages[len(req.Messages)-1]
+		content := "you asked: " + last.Content
+		switch mode {
+		case "diagnose":
+			content = `{"summary":"kine is down","cause":"the database is locked","action":"repair_database","confidence":"medium"}`
+		case "off-schema":
+			content = `{"summary":"kine is down","cause":"unknown","action":"reboot_the_node","confidence":"medium"}`
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": "you asked: " + last.Content}}},
+			"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": content}}},
 		})
 	})
 	_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", *port), mux)

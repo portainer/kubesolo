@@ -87,6 +87,12 @@ const (
 	// layer is the GGUF file; it is published by the assistant-model workflow.
 	DefaultAssistantModel = "docker.io/portainerci/kubesolo-assistant-model:qwen3.5-2b-q4_k_m@sha256:77ff513db5cb970f52fabf6ea56e63bb649b409c303f8f06662da4b4c7aa0a83"
 
+	// DefaultAssistantKnowledge is the knowledge artifact used when
+	// assistant.knowledge is empty, pinned by digest. Its single layer is the
+	// Markdown file build/assistant/knowledge.md; it is published by the
+	// assistant-knowledge workflow.
+	DefaultAssistantKnowledge = "docker.io/portainerci/kubesolo-assistant-knowledge:v1@sha256:e1fddec3f782da531bd09d203f48c1c5af58868d699d48330b6900385e3fd30d"
+
 	// DefaultAssistantStartTimeout bounds loading the model, which on slow
 	// storage such as an SD card takes minutes.
 	DefaultAssistantStartTimeout = 5 * time.Minute

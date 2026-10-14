@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,7 +38,8 @@ api.enabled must be true.`,
 		Use:   "incidents [ID]",
 		Short: "List the incidents the assistant has recorded, or show one",
 		Long: `List the incidents the assistant has recorded, oldest first, or show one
-whole as JSON. The last 100 are kept.`,
+whole as JSON. Each is listed once triaged, with the action the model
+suggests; none is taken. The last 100 are kept.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
@@ -67,7 +69,11 @@ func runIncidents() error {
 		return nil
 	}
 	for _, inc := range list {
-		fmt.Printf("%s  %s  %s\n", inc.ID, inc.Kind, inc.Trigger)
+		status, action := "-", "-"
+		if inc.Triage != nil {
+			status, action = inc.Triage.Status, cmp.Or(inc.Triage.Action, "-")
+		}
+		fmt.Printf("%s  %s  %s  %s  %s\n", inc.ID, inc.Kind, status, action, inc.Trigger)
 	}
 	return nil
 }
