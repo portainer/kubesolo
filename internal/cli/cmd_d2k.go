@@ -15,7 +15,7 @@ func d2kCmd() *cobra.Command {
 		Use:   "d2k",
 		Short: "Manage the D2K Docker-to-Kubernetes API translator",
 		Long: `Commands for managing the D2K Docker-to-Kubernetes translator running inside
-a KubeSolo container. D2K exposes a Docker-compatible API on a random host port
+a KubeSolo container. D2K exposes a Docker-compatible API on a localhost port
 backed by mTLS — use 'fetch' to set up the Docker context.
 
 Requires the KubeSolo instance to have been installed with --d2k.`,
@@ -35,8 +35,8 @@ container, writes them to ~/.docker/d2k/<container>/, and creates (or updates)
 a Docker context named after the container (kubesolo, or kubesolo-<name> for a
 named instance) pointing to the container's D2K port.
 
-The host port is random (assigned by Docker at install time), so re-run this
-command after each upgrade or reset to keep the Docker context up to date.
+The host port is chosen at install time and kept across restarts, upgrades and
+resets. A reset issues new certificates, so re-run this command after one.
 
 Examples:
   # Set up Docker context for the default KubeSolo instance:
@@ -70,7 +70,7 @@ Examples:
 			p.Info(fmt.Sprintf("docker --context %s ps", cname))
 			p.Info(fmt.Sprintf("docker context use %s   # set as default", cname))
 			p.Info("")
-			p.Info("Re-run after upgrade or reset — the host port changes")
+			p.Info("Re-run after a reset — it issues new certificates")
 			return nil
 		},
 	}

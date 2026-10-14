@@ -62,13 +62,13 @@ Requires a running container engine (Docker Engine / Docker Desktop).
 kubesoloctl install --run-mode=container
 ```
 
-KubeSolo starts in a container, the API server is published on a random localhost port, and your kubeconfig is merged and pointed at it automatically. Container mode also adjusts cgroups, mounts, DNS, and eviction thresholds so the node comes up cleanly inside a container.
+KubeSolo starts in a container, the API server is published on a free localhost port, which is kept across restarts, upgrades and resets, and your kubeconfig is merged and pointed at it automatically. Container mode also adjusts cgroups, mounts, DNS, and eviction thresholds so the node comes up cleanly inside a container.
 
 ```bash
 kubectl get nodes --watch
 ```
 
-If the host port ever changes (after an upgrade or reset), refresh your kubeconfig:
+If your kubeconfig entry is ever lost or out of date, fetch it again:
 
 ```bash
 kubesoloctl kubeconfig fetch
@@ -209,7 +209,7 @@ kubesoloctl d2k fetch --name prod     # a named instance (context: kubesolo-prod
 docker --context kubesolo ps          # use it
 ```
 
-`d2k fetch` copies the CA + client certificate out of the container into `~/.docker/d2k/<container>/` and creates (or updates) a Docker context, named after the container, pointing at the container's published d2k port. The host port is random, so re-run `d2k fetch` after each upgrade or reset. See [d2k.md](../configuration/d2k.md) for the full integration.
+`d2k fetch` copies the CA + client certificate out of the container into `~/.docker/d2k/<container>/` and creates (or updates) a Docker context, named after the container, pointing at the container's published d2k port. The host port is kept across restarts, upgrades and resets; a reset issues new certificates, so re-run `d2k fetch` after one. See [d2k.md](../configuration/d2k.md) for the full integration.
 
 ---
 

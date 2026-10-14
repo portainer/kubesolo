@@ -314,7 +314,7 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		return p.Fail("service setup", err)
 	}
 
-	// In container mode, discover the random host port the engine assigned, wait
+	// In container mode, discover the host port the API server is published on, wait
 	// for the kubeconfig, and keep progress under the "Starting container" step.
 	var containerKubeconfig []byte
 	var apiAddr string

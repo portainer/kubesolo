@@ -1,8 +1,11 @@
 package service
 
 import (
+	"strconv"
 	"testing"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"github.com/portainer/kubesolo/internal/cli/config"
 )
 
@@ -26,5 +29,44 @@ func TestPublishD2K(t *testing.T) {
 				t.Errorf("publishD2K = %v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestHostPortFor(t *testing.T) {
+	const api = nat.Port("6443/tcp")
+
+	// A container created by an older kubesoloctl asked for any port; the one
+	// Docker chose is what the kubeconfig points at.
+	running := &container.InspectResponse{
+		ContainerJSONBase: &container.ContainerJSONBase{
+			HostConfig: &container.HostConfig{PortBindings: nat.PortMap{api: {{HostIP: "127.0.0.1"}}}},
+		},
+		NetworkSettings: &container.NetworkSettings{},
+	}
+	running.NetworkSettings.Ports = nat.PortMap{api: {{HostIP: "127.0.0.1", HostPort: "32790"}}}
+	if got, err := hostPortFor(running, api); err != nil || got != "32790" {
+		t.Errorf("running container: %q, %v", got, err)
+	}
+
+	// A stopped container has no live bindings, but a pinned one recorded its port.
+	stopped := &container.InspectResponse{
+		ContainerJSONBase: &container.ContainerJSONBase{
+			HostConfig: &container.HostConfig{PortBindings: nat.PortMap{api: {{HostIP: "127.0.0.1", HostPort: "41000"}}}},
+		},
+		NetworkSettings: &container.NetworkSettings{},
+	}
+	if got, err := hostPortFor(stopped, api); err != nil || got != "41000" {
+		t.Errorf("stopped container: %q, %v", got, err)
+	}
+
+	// Nothing to keep: a free port, which must be a concrete number.
+	for _, prev := range []*container.InspectResponse{nil, stopped} {
+		got, err := hostPortFor(prev, "2376/tcp")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n, err := strconv.Atoi(got); err != nil || n <= 0 {
+			t.Errorf("free port = %q", got)
+		}
 	}
 }

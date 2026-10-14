@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"slices"
 	"strconv"
 	"strings"
@@ -136,7 +137,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	// Capture any workload ports the existing container published before we
 	// remove it, so an upgrade (which re-runs Install) preserves them when the
 	// caller did not pass --container-ports. 6443/2376 are excluded — those are
-	// re-bound fresh below with new random host ports.
+	// re-bound below on the host ports they had; see hostPortFor.
 	prevWorkloadPorts := nat.PortMap{}
 
 	// The hostname is the node name, and the kubelet's client certificate and
@@ -146,7 +147,9 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	// Ready. A replacement keeps its predecessor's hostname, whatever it was; a
 	// first install uses the container name, which survives replacement.
 	hostname := m.cname()
+	var prev *container.InspectResponse
 	if insp, err := cli.ContainerInspect(ctx, m.cname()); err == nil {
+		prev = &insp
 		for p, b := range insp.HostConfig.PortBindings {
 			if p == "6443/tcp" || p == "2376/tcp" {
 				continue
@@ -178,14 +181,22 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 		return err
 	}
 
-	// Bind to 127.0.0.1 with an empty HostPort so Docker picks a random
-	// ephemeral port. This allows multiple named clusters to run concurrently.
+	// Bind to 127.0.0.1 on a port of our choosing, so multiple named clusters
+	// can run concurrently; see hostPortFor.
+	apiPort, err := hostPortFor(prev, "6443/tcp")
+	if err != nil {
+		return err
+	}
 	portBindings := nat.PortMap{
-		"6443/tcp": []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}},
+		"6443/tcp": []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: apiPort}},
 	}
 	exposedPorts := nat.PortSet{"6443/tcp": struct{}{}}
 	if publishD2K(cfg, cmdArgs) {
-		portBindings["2376/tcp"] = []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
+		d2kPort, err := hostPortFor(prev, "2376/tcp")
+		if err != nil {
+			return err
+		}
+		portBindings["2376/tcp"] = []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: d2kPort}}
 		exposedPorts["2376/tcp"] = struct{}{}
 	}
 
@@ -236,6 +247,33 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 
 	log.Info().Msgf("container %q started (id: %.12s)", m.cname(), resp.ID)
 	return nil
+}
+
+// hostPortFor returns the host port to publish the container port p on. A
+// port left for Docker to choose is chosen again on every start of the
+// container, so a restart of the engine or the machine would leave the
+// kubeconfig and the d2k context pointing at a dead port. Like kind, the port is
+// therefore chosen here and pinned: the one the previous container is bound to,
+// so its replacement keeps it, or else a free one.
+func hostPortFor(prev *container.InspectResponse, p nat.Port) (string, error) {
+	if prev != nil {
+		if prev.NetworkSettings != nil {
+			if b := prev.NetworkSettings.Ports[p]; len(b) > 0 && b[0].HostPort != "" {
+				return b[0].HostPort, nil
+			}
+		}
+		if prev.HostConfig != nil {
+			if b := prev.HostConfig.PortBindings[p]; len(b) > 0 && b[0].HostPort != "" {
+				return b[0].HostPort, nil
+			}
+		}
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", fmt.Errorf("failed to find a free port for %s: %w", p, err)
+	}
+	defer func() { _ = l.Close() }()
+	return strconv.Itoa(l.Addr().(*net.TCPAddr).Port), nil
 }
 
 // publishD2K reports whether the container needs the d2k port published. An
@@ -326,6 +364,15 @@ func ResetContainer(name string) error {
 	cmdArgs := resp.Config.Cmd
 	portBindings := resp.HostConfig.PortBindings
 	exposedPorts := resp.Config.ExposedPorts
+	for _, p := range []nat.Port{"6443/tcp", "2376/tcp"} {
+		if b := portBindings[p]; len(b) > 0 {
+			hp, err := hostPortFor(&resp, p)
+			if err != nil {
+				return err
+			}
+			portBindings[p] = []nat.PortBinding{{HostIP: b[0].HostIP, HostPort: hp}}
+		}
+	}
 
 	// Stop and remove the container.
 	timeout := 30
@@ -378,7 +425,7 @@ func ResetContainer(name string) error {
 }
 
 // GetContainerAPIPort returns the host port Docker mapped to the container's
-// API server (6443/tcp). Call this after Install to discover the random port.
+// API server (6443/tcp). Call this after Install to discover the port.
 func GetContainerAPIPort(name string) (int, error) {
 	cli, err := newContainerClient()
 	if err != nil {
