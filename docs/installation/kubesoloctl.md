@@ -89,6 +89,8 @@ kubesoloctl kubeconfig fetch
 | `uninstall` | Stop and remove KubeSolo, service files, and (optionally) data |
 | `kubeconfig` | Print, write, fetch, or view the admin kubeconfig |
 | `load` | Load images from the container engine into a container instance |
+| `list` | List the container instances on the container engine |
+| `logs` | Print what KubeSolo logged in a container instance (`-f` to follow) |
 | `d2k fetch` | Set up a Docker context for the d2k endpoint (container mode) |
 | `download` | Build an offline install bundle for an air-gapped machine |
 | `version` | Print version information |

@@ -73,6 +73,8 @@ Examples:
 		statusCmd(),
 		kubeconfigCmd(),
 		loadCmd(),
+		listCmd(),
+		logsCmd(),
 		configCmd(),
 		d2kCmd(),
 		downloadCmd(&cfg),
