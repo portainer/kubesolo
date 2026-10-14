@@ -77,6 +77,6 @@ Examples:
 	cmd.Flags().StringVar(&name, "name", envOr("KUBESOLO_NAME", config.AppName),
 		"KubeSolo instance name (default: kubesolo)")
 	cmd.Flags().StringVar(&socketPath, "socket", "",
-		"Docker socket path (default: DOCKER_HOST env or /var/run/docker.sock)")
+		"Docker socket path (default: DOCKER_HOST or the active Docker context)")
 	return cmd
 }

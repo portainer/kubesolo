@@ -55,7 +55,7 @@ kubectl get pods -A
 
 ### Container mode (macOS, WSL2, or Linux dev)
 
-Requires a running container engine (Docker Engine / Docker Desktop).
+Requires a running container engine with the Docker API (Docker Engine, Docker Desktop, OrbStack, Colima, Rancher Desktop with moby, …). Like the `docker` CLI, kubesoloctl uses `DOCKER_HOST` when it is set and otherwise the active Docker context (`docker context use …`), so it reaches engines that do not provide `/var/run/docker.sock`.
 
 ```bash
 # On macOS this is implied; elsewhere request it explicitly:

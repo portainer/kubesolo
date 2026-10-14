@@ -88,7 +88,7 @@ Examples:
 	}
 	addInstanceFlags(cmd, &name, &containerName)
 	cmd.Flags().StringVar(&socketPath, "socket", "",
-		"Container engine socket path (default: DOCKER_HOST env or /var/run/docker.sock) (container mode)")
+		"Container engine socket path (default: DOCKER_HOST or the active Docker context) (container mode)")
 	cmd.Flags().StringVar(&dataPath, "path", config.DefaultPath,
 		"KubeSolo data directory (host install)")
 	return cmd
@@ -144,7 +144,7 @@ Examples:
 	}
 	addInstanceFlags(cmd, &name, &containerName)
 	cmd.Flags().StringVar(&socketPath, "socket", "",
-		"Container engine socket path (default: DOCKER_HOST env or /var/run/docker.sock) (container mode)")
+		"Container engine socket path (default: DOCKER_HOST or the active Docker context) (container mode)")
 	cmd.Flags().StringVar(&dataPath, "path", config.DefaultPath,
 		"KubeSolo data directory (host install)")
 	return cmd

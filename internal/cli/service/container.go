@@ -20,6 +20,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"github.com/portainer/kubesolo/internal/cli/config"
+	"github.com/portainer/kubesolo/internal/cli/dockerhost"
 	hostnetwork "github.com/portainer/kubesolo/internal/runtime/network"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
@@ -664,7 +665,7 @@ func RemoveContainerNetwork(name string) (bool, error) {
 }
 
 func newContainerClient() (*client.Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := dockerhost.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
 	}

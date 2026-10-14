@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/portainer/kubesolo/internal/cli/dockerhost"
 	"github.com/rs/zerolog/log"
 )
 
@@ -52,15 +53,13 @@ func FetchAndMergeFromContainer(containerName, socketPath string) error {
 }
 
 // newDockerClient creates a Docker client. If socketPath is non-empty it is
-// used as the daemon socket; otherwise DOCKER_HOST / platform defaults apply.
+// used as the daemon socket; otherwise DOCKER_HOST or the active Docker
+// context applies.
 func newDockerClient(socketPath string) (*client.Client, error) {
-	opts := []client.Opt{client.WithAPIVersionNegotiation()}
-	if socketPath != "" {
-		opts = append(opts, client.WithHost("unix://"+socketPath))
-	} else {
-		opts = append(opts, client.FromEnv)
+	if socketPath == "" {
+		return dockerhost.NewClient()
 	}
-	return client.NewClientWithOpts(opts...)
+	return client.NewClientWithOpts(client.WithAPIVersionNegotiation(), client.WithHost("unix://"+socketPath))
 }
 
 // containerAPIPort inspects the container and returns the host port mapped to
