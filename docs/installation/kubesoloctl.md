@@ -198,7 +198,8 @@ version's node is not Ready within `--health-timeout`, the datastore is restored
 and the previous container is put back. `kubesoloctl rollback --name <name>`
 undoes the last upgrade later, as on a host, losing whatever was changed in the
 cluster since. A reset removes the backup along with the rest of the cluster
-state.
+state. `kubesoloctl status --name <name>` shows the instance's version,
+image, container state, API server, node health and rollback target.
 
 ---
 

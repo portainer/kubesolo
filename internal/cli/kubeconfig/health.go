@@ -26,17 +26,35 @@ func WaitForNodeReady(kc []byte, addr string, timeout time.Duration) error {
 	log.Info().Msgf("waiting for the node to be Ready (up to %s)...", timeout.Round(time.Second))
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		resp, err := httpClient.Get("https://" + addr + "/api/v1/nodes")
-		if err == nil {
-			body, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK && nodesReady(body) {
-				return nil
-			}
+		if ready, _ := nodeReady(httpClient, addr); ready {
+			return nil
 		}
 		time.Sleep(3 * time.Second)
 	}
 	return fmt.Errorf("the node did not become Ready within %s", timeout.Round(time.Second))
+}
+
+// NodeReady asks the API server at addr (host:port), once, whether the node is
+// Ready, with the admin credentials in the kubeconfig kc.
+func NodeReady(kc []byte, addr string) (bool, error) {
+	httpClient, err := adminClient(kc)
+	if err != nil {
+		return false, err
+	}
+	return nodeReady(httpClient, addr)
+}
+
+func nodeReady(httpClient *http.Client, addr string) (bool, error) {
+	resp, err := httpClient.Get("https://" + addr + "/api/v1/nodes")
+	if err != nil {
+		return false, err
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("the API server answered %s", resp.Status)
+	}
+	return nodesReady(body), nil
 }
 
 // nodesReady reports whether a node list holds at least one node, and every

@@ -198,15 +198,104 @@ func confirm(question string) bool {
 
 func statusCmd() *cobra.Command {
 	var asJSON bool
+	var name string
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show the running version, health, and the last upgrade or rollback",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if containerModeActive(name) {
+				return runContainerStatus(name, asJSON)
+			}
 			return runStatus(asJSON)
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the status as JSON")
+	cmd.Flags().StringVar(&name, "name", envOr("KUBESOLO_NAME", config.AppName),
+		"Name of the KubeSolo instance (container mode)")
 	return cmd
+}
+
+// containerStatus is the status of a container instance.
+type containerStatus struct {
+	Container      string                  `json:"container"`
+	Image          string                  `json:"image"`
+	Version        string                  `json:"version,omitempty"`
+	State          string                  `json:"state"`
+	Restarts       int                     `json:"restarts"`
+	APIServer      string                  `json:"apiServer,omitempty"`
+	Healthy        bool                    `json:"healthy"`
+	Health         string                  `json:"health"`
+	RollbackTarget *service.RollbackTarget `json:"rollbackTarget,omitempty"`
+}
+
+func runContainerStatus(name string, asJSON bool) error {
+	p := ui.New()
+	cname := service.ContainerNameFor(name)
+	insp, err := service.InspectInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", cname, err))
+	}
+
+	st := containerStatus{Container: cname, Image: insp.Config.Image, State: insp.State.Status, Restarts: insp.RestartCount}
+	st.Health = "unknown — the container is not running"
+	if insp.State.Running {
+		if v, err := service.ContainerVersion(name); err == nil {
+			st.Version = v
+		}
+		port, err := service.GetContainerAPIPort(name)
+		var kc []byte
+		if err == nil {
+			st.APIServer = fmt.Sprintf("https://127.0.0.1:%d", port)
+			kc, err = kubeconfig.GetFromContainer(cname, "")
+		}
+		var ready bool
+		if err == nil {
+			ready, err = kubeconfig.NodeReady(kc, fmt.Sprintf("127.0.0.1:%d", port))
+		}
+		switch {
+		case err != nil:
+			st.Health = "unknown — " + err.Error()
+		case ready:
+			st.Healthy, st.Health = true, "healthy"
+		default:
+			st.Health = "unhealthy — the node is not Ready"
+		}
+	}
+	if st.RollbackTarget, err = service.ReadRollbackTarget(name); err != nil {
+		return p.Fail("rollback target", err)
+	}
+
+	if asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(st)
+	}
+
+	p.Header("status")
+	p.Label("Instance", cname)
+	if st.Version != "" {
+		p.Label("Version", st.Version)
+	}
+	p.Label("Image", st.Image)
+	state := st.State
+	if st.Restarts > 0 {
+		state = fmt.Sprintf("%s (%d restarts)", st.State, st.Restarts)
+	}
+	p.Label("Container", state)
+	if st.APIServer != "" {
+		p.Label("API server", st.APIServer)
+	}
+	p.Label("Health", st.Health)
+	if t := st.RollbackTarget; t != nil {
+		to := t.Image
+		if t.Version != "" {
+			to = t.Version + " (" + t.Image + ")"
+		}
+		p.Label("Rollback to", fmt.Sprintf("%s (backup of %s)", to, t.Created.Local().Format(time.RFC1123)))
+	} else {
+		p.Label("Rollback to", "none — no upgrade since the instance was installed or reset")
+	}
+	return nil
 }
 
 func runStatus(asJSON bool) error {
