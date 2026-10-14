@@ -45,7 +45,8 @@ type Config struct {
 	// Binary is the llama-server executable.
 	Binary string
 
-	// Model is the GGUF model file. It is only ever read.
+	// Model is the GGUF model file. It is only ever read. Empty means it is
+	// still being fetched; SetModel supplies it.
 	Model string
 
 	// ContextSize is the context window in tokens.
@@ -60,11 +61,22 @@ type Config struct {
 type Assistant struct {
 	cfg Config
 	mu  sync.Mutex
+
+	modelMu  sync.Mutex
+	model    string
+	modelErr error
 }
 
 // New returns an assistant. It starts nothing until asked.
 func New(cfg Config) *Assistant {
-	return &Assistant{cfg: cfg}
+	return &Assistant{cfg: cfg, model: cfg.Model}
+}
+
+// SetModel supplies the model once it has been fetched, or why it could not be.
+func (a *Assistant) SetModel(path string, err error) {
+	a.modelMu.Lock()
+	defer a.modelMu.Unlock()
+	a.model, a.modelErr = path, err
 }
 
 // Ask starts llama-server, asks it the question, and stops it again, whether
@@ -75,8 +87,17 @@ func (a *Assistant) Ask(ctx context.Context, question string) (string, error) {
 	}
 	defer a.mu.Unlock()
 
-	if _, err := os.Stat(a.cfg.Model); err != nil {
-		return "", fmt.Errorf("model %s cannot be read: %w", a.cfg.Model, err)
+	a.modelMu.Lock()
+	model, modelErr := a.model, a.modelErr
+	a.modelMu.Unlock()
+	switch {
+	case modelErr != nil:
+		return "", fmt.Errorf("the model is not available: %w", modelErr)
+	case model == "":
+		return "", errors.New("the model is still being downloaded, try again shortly")
+	}
+	if _, err := os.Stat(model); err != nil {
+		return "", fmt.Errorf("model %s cannot be read: %w", model, err)
 	}
 
 	port, err := freePort()
@@ -85,7 +106,7 @@ func (a *Assistant) Ask(ctx context.Context, question string) (string, error) {
 	}
 
 	cmd := exec.Command(a.cfg.Binary,
-		"--model", a.cfg.Model,
+		"--model", model,
 		"--ctx-size", strconv.Itoa(a.cfg.ContextSize),
 		"--host", "127.0.0.1",
 		"--port", strconv.Itoa(port),
@@ -99,7 +120,7 @@ func (a *Assistant) Ask(ctx context.Context, question string) (string, error) {
 	cmd.Stderr = output
 	setProcAttr(cmd)
 
-	log.Info().Str("component", "assistant").Str("model", a.cfg.Model).Msg("starting llama-server...")
+	log.Info().Str("component", "assistant").Str("model", model).Msg("starting llama-server...")
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start llama-server: %w", err)
 	}

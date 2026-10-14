@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/syslog"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
+	containerdclient "github.com/containerd/containerd/v2/client"
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/config/flags"
@@ -871,7 +873,7 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 			MemTotal:      system.MemTotal(),
 			ContainerMode: s.embedded.ContainerMode,
 		},
-		Assistant: s.newAssistant(),
+		Assistant: s.newAssistant(ctx),
 		Lifecycle: &configapi.Lifecycle{
 			Version:       Version,
 			Commit:        Commit,
@@ -899,8 +901,9 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 
 // newAssistant prepares the assistant's llama-server, or returns nil when the
 // assistant is disabled or cannot run. Nothing is started until a question is
-// asked; a failure here costs the assistant, never KubeSolo.
-func (s *kubesolo) newAssistant() configapi.Asker {
+// asked; a failure here costs the assistant, never KubeSolo. A model given as
+// an artifact is fetched in the background.
+func (s *kubesolo) newAssistant(ctx context.Context) configapi.Asker {
 	if !s.cfg.Assistant.Enabled {
 		return nil
 	}
@@ -909,12 +912,59 @@ func (s *kubesolo) newAssistant() configapi.Asker {
 		log.Error().Str("component", "assistant").Err(err).Msg("cannot prepare llama-server, continuing without the assistant")
 		return nil
 	}
-	return assistant.New(assistant.Config{
+	model := s.cfg.Assistant.Model
+	if model == "" {
+		model = types.DefaultAssistantModel
+	}
+	cfg := assistant.Config{
 		Binary:       binary,
-		Model:        s.cfg.Assistant.Model,
 		ContextSize:  s.cfg.Assistant.ContextSize,
 		StartTimeout: types.DefaultAssistantStartTimeout,
-	})
+	}
+	if filepath.IsAbs(model) {
+		cfg.Model = model
+	}
+	a := assistant.New(cfg)
+	if cfg.Model == "" {
+		s.wg.Go(func() { s.fetchAssistantModel(ctx, a, model) })
+	}
+	return a
+}
+
+// fetchAssistantModel fetches the model artifact once containerd is up,
+// retrying until it succeeds: at boot the network is often not ready yet.
+func (s *kubesolo) fetchAssistantModel(ctx context.Context, a *assistant.Assistant, ref string) {
+	select {
+	case <-runtimeReadyCh:
+	case <-ctx.Done():
+		return
+	}
+	c, err := containerdclient.New(s.embedded.ContainerdSocketFile)
+	if err != nil {
+		a.SetModel("", err)
+		return
+	}
+	defer func() { _ = c.Close() }()
+
+	for {
+		log.Info().Str("component", "assistant").Str("model", ref).Msg("fetching the model...")
+		path, err := assistant.FetchModel(ctx, c, ref, s.embedded.ContainerdRegistryConfigDir, s.embedded.ContainerdRootDir)
+		a.SetModel(path, err)
+		if err == nil {
+			log.Info().Str("component", "assistant").Str("model", ref).Msg("model is ready")
+			return
+		}
+		if errors.Is(err, assistant.ErrNotAModel) {
+			log.Error().Str("component", "assistant").Str("model", ref).Err(err).Msg("cannot use the model")
+			return
+		}
+		log.Error().Str("component", "assistant").Str("model", ref).Err(err).Msg("cannot fetch the model, retrying in a minute")
+		select {
+		case <-time.After(time.Minute):
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // agentSocketPath is the API socket mounted into the Portainer agent's pod, or

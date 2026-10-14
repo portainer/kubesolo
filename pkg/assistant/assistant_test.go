@@ -199,7 +199,7 @@ func TestAskAnswersOneQuestionAtATime(t *testing.T) {
 
 func TestAskWithoutTheModelStartsNothing(t *testing.T) {
 	a, record := newTestAssistant(t, "ok")
-	a.cfg.Model = "/nonexistent/model.gguf"
+	a.SetModel("/nonexistent/model.gguf", nil)
 
 	if _, err := a.Ask(context.Background(), "hello"); err == nil || !strings.Contains(err.Error(), "/nonexistent/model.gguf") {
 		t.Fatalf("expected an error naming the model, got %v", err)
@@ -247,5 +247,29 @@ func TestInstallReplacesAnOutdatedBinary(t *testing.T) {
 func TestInstallWithoutABinary(t *testing.T) {
 	if err := Install(nil, filepath.Join(t.TempDir(), "llama-server")); err == nil {
 		t.Error("expected an error when this build has no llama-server")
+	}
+}
+
+// A model fetched from a registry is not there until the download finishes.
+func TestAskBeforeTheModelIsReady(t *testing.T) {
+	a, record := newTestAssistant(t, "ok")
+	model := a.cfg.Model
+	a = New(Config{Binary: a.cfg.Binary, ContextSize: 8192, StartTimeout: 3 * time.Second})
+
+	if _, err := a.Ask(context.Background(), "hello"); err == nil || !strings.Contains(err.Error(), "still being downloaded") {
+		t.Fatalf("expected a not-ready error, got %v", err)
+	}
+
+	a.SetModel("", errors.New("registry unreachable"))
+	if _, err := a.Ask(context.Background(), "hello"); err == nil || !strings.Contains(err.Error(), "registry unreachable") {
+		t.Fatalf("expected the fetch error, got %v", err)
+	}
+	if _, err := os.Stat(record); err == nil {
+		t.Error("llama-server was started without a model")
+	}
+
+	a.SetModel(model, nil)
+	if _, err := a.Ask(context.Background(), "hello"); err != nil {
+		t.Fatal(err)
 	}
 }

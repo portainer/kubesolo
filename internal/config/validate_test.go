@@ -597,18 +597,45 @@ func TestAssistantUnknownMemoryIsNotChecked(t *testing.T) {
 
 func TestAssistantModel(t *testing.T) {
 	for _, tc := range []struct {
-		model string
-		want  string
+		model, want string
 	}{
-		{"", "assistant.model"},
-		{"models/assistant.gguf", "absolute path"},
-		{"registry.example.com/models/assistant:v1", "absolute path"},
+		{"", ""}, // the default model artifact
+		{"/var/lib/models/assistant.gguf", "/var/lib/models/assistant.gguf"},
+		{"registry.example.com/models/assistant:v1", "registry.example.com/models/assistant:v1"},
+		{"portainerci/kubesolo-assistant-model:qwen3.5-2b-q4_k_m", "docker.io/portainerci/kubesolo-assistant-model:qwen3.5-2b-q4_k_m"},
 	} {
 		cfg := assistantEnabled()
 		cfg.Assistant.Model = tc.model
-		if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("model %q: error should mention %q, got %v", tc.model, tc.want, err)
+		if _, err := Validate(cfg, testHost()); err != nil {
+			t.Errorf("model %q: %v", tc.model, err)
 		}
+		if cfg.Assistant.Model != tc.want {
+			t.Errorf("model %q normalised to %q, want %q", tc.model, cfg.Assistant.Model, tc.want)
+		}
+	}
+}
+
+func TestAssistantModelRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*types.Config)
+		want   string
+	}{
+		{"relative path", func(c *types.Config) { c.Assistant.Model = "models/assistant.gguf" }, "absolute path"},
+		{"invalid reference", func(c *types.Config) { c.Assistant.Model = "NOT A REF" }, "assistant.model"},
+		// Artifacts are fetched through KubeSolo's own containerd.
+		{"reference with an external runtime", func(c *types.Config) {
+			c.Runtime.Endpoint = "/run/crio/crio.sock"
+		}, "runtime.endpoint"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := assistantEnabled()
+			cfg.Assistant.Model = ""
+			tc.mutate(cfg)
+			if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("expected an error mentioning %q, got %v", tc.want, err)
+			}
+		})
 	}
 }
 

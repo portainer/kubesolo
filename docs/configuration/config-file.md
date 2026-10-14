@@ -260,7 +260,7 @@ d2k:
 
 assistant:
   enabled: false
-  model: ""               # absolute path to a GGUF file, required when enabled
+  model: ""               # "" = the default model; or a GGUF path, or a model artifact
   contextSize: 8192
 ```
 

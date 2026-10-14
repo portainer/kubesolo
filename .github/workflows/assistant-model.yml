@@ -1,0 +1,59 @@
+name: assistant-model
+
+# Publishes a model for KubeSolo's assistant as an OCI artifact whose single
+# layer is the GGUF file itself, so KubeSolo can run it straight from
+# containerd's content store without a second copy on disk.
+#
+# Run once per model, not per KubeSolo release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish, e.g. qwen3.5-2b-q4_k_m"
+        required: true
+      url:
+        description: "GGUF download URL, pinned to a revision"
+        required: true
+      sha256:
+        description: "Expected SHA-256 of the GGUF file"
+        required: true
+
+env:
+  REPOSITORY: docker.io/portainerci/kubesolo-assistant-model
+  ORAS_VERSION: "1.3.4"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Install oras
+        run: |
+          base="https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}"
+          tarball="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO "${base}/${tarball}"
+          curl -fsSL "${base}/oras_${ORAS_VERSION}_checksums.txt" | grep " ${tarball}\$" | sha256sum -c -
+          tar -xzf "${tarball}" oras
+          sudo install oras /usr/local/bin/oras
+
+      - name: Download the model
+        env:
+          URL: ${{ inputs.url }}
+          SHA256: ${{ inputs.sha256 }}
+        run: |
+          curl -fsSL -o model.gguf "${URL}"
+          echo "${SHA256}  model.gguf" | sha256sum -c -
+
+      - name: Log in to Docker Hub
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_PASSWORD: ${{ secrets.DOCKER_HUB_PASSWORD }}
+        run: echo "${DOCKER_HUB_PASSWORD}" | oras login docker.io -u "${DOCKER_HUB_USERNAME}" --password-stdin
+
+      - name: Push the model
+        env:
+          TAG: ${{ inputs.tag }}
+        run: oras push "${REPOSITORY}:${TAG}" model.gguf:application/vnd.docker.ai.gguf.v3

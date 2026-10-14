@@ -98,11 +98,13 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	}
 
 	if cfg.Assistant.Enabled {
-		if cfg.Assistant.Model == "" {
-			return warnings, fmt.Errorf("assistant.model is required when the assistant is enabled")
+		model, err := normaliseAssistantModel(cfg.Assistant.Model)
+		if err != nil {
+			return warnings, fmt.Errorf("assistant.model: %w", err)
 		}
-		if !filepath.IsAbs(cfg.Assistant.Model) {
-			return warnings, fmt.Errorf("assistant.model: %q must be an absolute path to a GGUF file", cfg.Assistant.Model)
+		cfg.Assistant.Model = model
+		if !filepath.IsAbs(model) && cfg.Runtime.Endpoint != "" {
+			return warnings, fmt.Errorf("assistant.model: a model artifact is fetched through KubeSolo's own containerd, which runtime.endpoint replaces; use an absolute path to a GGUF file instead")
 		}
 		if cfg.Assistant.ContextSize <= 0 {
 			return warnings, fmt.Errorf("assistant.contextSize must be greater than 0, got %d", cfg.Assistant.ContextSize)
@@ -324,4 +326,16 @@ func assistantUnsupported(host Host) string {
 		return fmt.Sprintf("the assistant needs at least 4 GB of memory, this host has %.1f GiB", float64(host.MemTotal)/(1<<30))
 	}
 	return ""
+}
+
+// normaliseAssistantModel accepts "" (the default model artifact), an absolute
+// path to a GGUF file, or an artifact reference, which it fully qualifies.
+func normaliseAssistantModel(model string) (string, error) {
+	switch {
+	case model == "" || filepath.IsAbs(model):
+		return model, nil
+	case strings.HasSuffix(model, ".gguf"):
+		return "", fmt.Errorf("%q must be an absolute path", model)
+	}
+	return NormaliseImageRef(model)
 }

@@ -23,23 +23,12 @@ While answering, `llama-server` uses about the size of the model file plus its c
 
 ## Enabling the assistant
 
-The model is a GGUF file you place on the host. KubeSolo only ever reads it.
-
-```bash
-sudo mkdir -p /var/lib/kubesolo-models
-sudo curl -L -o /var/lib/kubesolo-models/Qwen3.5-2B-Q4_K_M.gguf \
-  https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf
-sudo chmod 0444 /var/lib/kubesolo-models/Qwen3.5-2B-Q4_K_M.gguf
-```
-
 ```yaml
 # /etc/kubesolo/config.yaml
 api:
   enabled: true
 assistant:
   enabled: true
-  model: /var/lib/kubesolo-models/Qwen3.5-2B-Q4_K_M.gguf
-  contextSize: 8192
 ```
 
 | Setting | Env var | Default |
@@ -51,6 +40,34 @@ assistant:
 Changes take effect when KubeSolo restarts. `contextSize` is the context window in tokens: raising it lets longer questions through and raises the memory held while answering.
 
 ---
+
+## The model
+
+KubeSolo only ever reads the model. `assistant.model` takes one of three forms:
+
+| Value | Model |
+|---|---|
+| `""` (default) | Qwen3.5-2B at 4-bit (about 1.3 GB), fetched from `docker.io/portainerci/kubesolo-assistant-model`, pinned by digest |
+| `/var/lib/kubesolo-models/mine.gguf` | A GGUF file on the host |
+| `registry.example.com/models/mine:v1` | A model artifact in a registry |
+
+A model from a registry is fetched once containerd is up, in the background; a question asked before it arrives is answered with "the model is still being downloaded". If the registry cannot be reached, KubeSolo retries every minute. Once fetched, the model is kept in containerd's store, in a namespace of its own that the kubelet's image cleanup does not touch, and is used from there on every later start without contacting the registry.
+
+```bash
+journalctl -u kubesolo | grep "model is ready"
+```
+
+Registry mirrors and credentials come from the same [`hosts.toml` files](registry.md) as the rest of the node. A model artifact cannot be fetched with `runtime.endpoint` set, since it goes through KubeSolo's own containerd; use a file path there.
+
+### Publishing a model artifact
+
+The model is run where containerd stores it, so the artifact's single layer must be the GGUF file itself. Push it with [ORAS](https://oras.land):
+
+```bash
+oras push registry.example.com/models/mine:v1 mine.gguf:application/vnd.docker.ai.gguf.v3
+```
+
+An ordinary container image will not do — a `COPY mine.gguf` in a Dockerfile puts the model inside a tar archive, which would have to be unpacked into a second copy. KubeSolo refuses such an image, and a multi-platform one, and says why.
 
 ## Asking a question
 

@@ -194,7 +194,10 @@ assistant:
   # Verify: sudo kubesoloctl assistant ask "what are you?"
   enabled: false
 
-  # Absolute path to a GGUF model file, only ever read. Required when enabled.
+  # The model, only ever read. Empty = the default model, fetched as an OCI
+  # artifact once containerd is up. Or an absolute path to a GGUF file, or
+  # another artifact reference whose single layer is a GGUF file.
+  # Verify: journalctl -u kubesolo | grep "model is ready"
   model: ""
 
   # Context window in tokens; sizes the memory held while answering.

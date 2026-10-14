@@ -82,6 +82,11 @@ const (
 	// base path.
 	DefaultAssistantDir = "assistant"
 
+	// DefaultAssistantModel is the model artifact used when assistant.model is
+	// empty, pinned by digest so that a restart cannot change it. Its single
+	// layer is the GGUF file; it is published by the assistant-model workflow.
+	DefaultAssistantModel = "docker.io/portainerci/kubesolo-assistant-model:qwen3.5-2b-q4_k_m@sha256:77ff513db5cb970f52fabf6ea56e63bb649b409c303f8f06662da4b4c7aa0a83"
+
 	// DefaultAssistantStartTimeout bounds loading the model, which on slow
 	// storage such as an SD card takes minutes.
 	DefaultAssistantStartTimeout = 5 * time.Minute
