@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -682,26 +683,49 @@ func PullImage(img string) error {
 	return pullImage(context.Background(), cli, img)
 }
 
+// pullImage pulls img. When the pull fails but the engine has img already —
+// an image built or loaded locally, or a machine without network — the local
+// copy is used, as docker run does.
+// pulled records the images this run has pulled already: an upgrade pulls
+// before it stops anything and must not pull, or warn, a second time when the
+// container is created.
+var pulled = map[string]bool{}
+
 func pullImage(ctx context.Context, cli *client.Client, img string) error {
+	if pulled[img] {
+		return nil
+	}
+	defer func() { pulled[img] = true }()
 	log.Info().Msgf("pulling %s...", img)
 	rc, err := cli.ImagePull(ctx, img, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image %s: %w", img, err)
+	if err == nil {
+		err = logPullProgress(rc)
+		_ = rc.Close()
 	}
-	logPullProgress(rc)
-	_ = rc.Close()
-	return nil
+	if err == nil {
+		return nil
+	}
+	if _, inspectErr := cli.ImageInspect(ctx, img); inspectErr == nil {
+		log.Warn().Msgf("could not pull %s (%v); using the local image", img, err)
+		return nil
+	}
+	return fmt.Errorf("failed to pull image %s: %w", img, err)
 }
 
 // logPullProgress reads the Docker image pull JSON stream and emits zerolog
 // INFO lines for meaningful status changes (skips per-byte progress updates).
-func logPullProgress(r io.Reader) {
+// It returns the error the stream reports, if any: the engine reports some pull
+// failures there rather than as the request's error.
+func logPullProgress(r io.Reader) error {
 	seen := make(map[string]bool)
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		var m map[string]any
 		if err := json.Unmarshal(scanner.Bytes(), &m); err != nil {
 			continue
+		}
+		if msg, ok := m["error"].(string); ok && msg != "" {
+			return errors.New(msg)
 		}
 		status, _ := m["status"].(string)
 		id, _ := m["id"].(string)
@@ -719,4 +743,5 @@ func logPullProgress(r io.Reader) {
 			}
 		}
 	}
+	return scanner.Err()
 }

@@ -113,3 +113,20 @@ func TestParseVersionOutput(t *testing.T) {
 		t.Error("expected an error for output without a version")
 	}
 }
+
+// The engine reports some pull failures inside the progress stream rather than
+// as the request's error.
+func TestLogPullProgressReturnsStreamError(t *testing.T) {
+	ok := `{"status":"Pulling from portainer/kubesolo","id":"v1.2.2"}
+{"status":"Digest: sha256:abc"}
+`
+	if err := logPullProgress(strings.NewReader(ok)); err != nil {
+		t.Errorf("successful pull: %v", err)
+	}
+	failed := `{"status":"Pulling from portainer/kubesolo","id":"v9"}
+{"errorDetail":{"message":"manifest unknown"},"error":"manifest unknown"}
+`
+	if err := logPullProgress(strings.NewReader(failed)); err == nil || !strings.Contains(err.Error(), "manifest unknown") {
+		t.Errorf("failed pull: %v", err)
+	}
+}

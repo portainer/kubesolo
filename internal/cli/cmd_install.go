@@ -413,7 +413,7 @@ func checkContainerSettings(cfg *config.Config) ([]kubesoloconfig.Warning, error
 			service.ContainerNameFor(cfg.Name)+"-data", config.DefaultPath)
 	}
 	if cfg.OfflineInstall != "" {
-		return nil, fmt.Errorf("--offline-install is not supported in container mode: KubeSolo runs from the container image")
+		return nil, fmt.Errorf("--offline-install is not supported in container mode: KubeSolo runs from the container image; to install offline, load the image into the engine (docker load) and pass it with --image")
 	}
 	_, warnings, err := cfg.ToKubeSoloConfig()
 	return warnings, err

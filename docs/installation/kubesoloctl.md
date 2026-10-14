@@ -102,7 +102,7 @@ Common flags:
 | `--path` | `KUBESOLO_PATH` | `/var/lib/kubesolo` | Data directory (host mode only; container mode keeps state in a volume) |
 | `--run-mode` | `KUBESOLO_RUN_MODE` | `service` | `service`, `daemon`, `foreground`, or `container` |
 | `--name` | `KUBESOLO_NAME` | `kubesolo` | Instance name (container name + kubeconfig context) |
-| `--image` | `KUBESOLO_IMAGE` | `portainer/kubesolo:<version>` | Container image (container mode) |
+| `--image` | `KUBESOLO_IMAGE` | `portainer/kubesolo:<version>` | Container image (container mode). It is pulled first; an image the engine already has but cannot pull, such as one built locally or loaded with `docker load` for an offline install, is used as it is |
 | `--container-ports` | `KUBESOLO_CONTAINER_PORTS` | _(none)_ | Workload host ports to publish (container mode) |
 | `--d2k` | `KUBESOLO_D2K` | `false` | Enable the Docker-compatible API translator |
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | on (see below) | Enable the local-path storage provisioner |
