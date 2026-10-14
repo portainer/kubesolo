@@ -132,6 +132,8 @@ kubesoloctl kubeconfig fetch      # merge it into ~/.kube/config
 
 `fetch` reads from the container when one is running, otherwise from the local data directory.
 
+`install` and `fetch` merge into the first file listed in `$KUBECONFIG` when it is set, and into `~/.kube/config` otherwise, backing up an existing file first. They edit the file directly, so `kubectl` does not need to be installed.
+
 ### upgrade / rollback / status
 
 ```bash

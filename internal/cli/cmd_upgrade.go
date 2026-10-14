@@ -239,8 +239,12 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config) error {
 	cname := service.ContainerNameFor(cfg.Name)
 	if port, err := service.GetContainerAPIPort(cfg.Name); err == nil {
 		apiAddr := fmt.Sprintf("127.0.0.1:%d", port)
-		if data, err := kubeconfig.WaitForContainerKubeconfig(cname, ""); err == nil {
-			kubeconfig.MergeContainerKubeconfig(data, cfg.Name, "https://"+apiAddr)
+		data, err := kubeconfig.WaitForContainerKubeconfig(cname, "")
+		if err == nil {
+			err = kubeconfig.MergeContainerKubeconfig(data, cfg.Name, "https://"+apiAddr)
+		}
+		if err != nil {
+			p.Warn("kubeconfig not updated — " + err.Error())
 		}
 		if err := kubeconfig.WaitForAPIServer(apiAddr, 120*time.Second); err != nil {
 			p.Warn(fmt.Sprintf("API server not yet ready at https://%s", apiAddr))

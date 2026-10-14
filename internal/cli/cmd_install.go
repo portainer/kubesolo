@@ -338,15 +338,19 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	if cfg.RunMode != config.RunModeForeground {
 		p.Step("Merging kubeconfig")
 		if containerMode {
-			kubeconfig.MergeContainerKubeconfig(containerKubeconfig, cfg.Name, "https://"+apiAddr)
-			p.OK("Kubeconfig merged", "~/.kube/config")
+			if err := kubeconfig.MergeContainerKubeconfig(containerKubeconfig, cfg.Name, "https://"+apiAddr); err != nil {
+				p.Warn("kubeconfig not merged yet — " + err.Error())
+				p.Info("Once ready, run:  kubesoloctl kubeconfig fetch")
+			} else {
+				p.OK("Kubeconfig merged", kubeconfig.UserConfigPath())
+			}
 		} else if err := kubeconfig.MergeAfterStartup(cfg.Path); err != nil {
 			// Don't claim success — the cluster is still coming up. The kubeconfig
 			// is already on disk; the user can merge it once the API server is ready.
 			p.Warn("kubeconfig not merged yet — " + err.Error())
 			p.Info("Once ready, run:  kubesoloctl kubeconfig fetch")
 		} else {
-			p.OK("Kubeconfig merged", "~/.kube/config")
+			p.OK("Kubeconfig merged", kubeconfig.UserConfigPath())
 		}
 	}
 

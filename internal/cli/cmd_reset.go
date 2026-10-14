@@ -105,10 +105,15 @@ func runContainerReset(p *ui.Printer, name string) error {
 	cname := service.ContainerNameFor(name)
 	if port, err := service.GetContainerAPIPort(name); err == nil {
 		apiAddr := fmt.Sprintf("127.0.0.1:%d", port)
-		if data, err := kubeconfig.WaitForContainerKubeconfig(cname, ""); err == nil {
-			kubeconfig.MergeContainerKubeconfig(data, name, "https://"+apiAddr)
+		data, err := kubeconfig.WaitForContainerKubeconfig(cname, "")
+		if err == nil {
+			err = kubeconfig.MergeContainerKubeconfig(data, name, "https://"+apiAddr)
 		}
-		p.OK("Kubeconfig updated", "https://"+apiAddr)
+		if err != nil {
+			p.Warn("kubeconfig not updated — " + err.Error())
+		} else {
+			p.OK("Kubeconfig updated", "https://"+apiAddr)
+		}
 	} else {
 		p.Warn("could not discover container API port — run: kubesoloctl kubeconfig fetch")
 	}

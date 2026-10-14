@@ -51,7 +51,8 @@ func kubeconfigFetchCmd() *cobra.Command {
 		Use:   "fetch",
 		Short: "Merge the admin kubeconfig into ~/.kube/config",
 		Long: `Merges the KubeSolo admin kubeconfig into the local user's ~/.kube/config,
-backing up any existing config first.
+or into the first file in $KUBECONFIG when it is set, backing up any existing
+config first. kubectl is not needed.
 
 In container mode (a running KubeSolo container is detected), the kubeconfig is
 copied out of the container. Otherwise it is read from the local KubeSolo data
@@ -75,7 +76,7 @@ Examples:
 					return p.Fail("kubeconfig fetch", err)
 				}
 			}
-			p.OK("Kubeconfig merged", "~/.kube/config")
+			p.OK("Kubeconfig merged", kubeconfig.UserConfigPath())
 
 			p.Done("Kubeconfig ready")
 			return nil
