@@ -745,3 +745,64 @@ func logPullProgress(r io.Reader) error {
 	}
 	return scanner.Err()
 }
+
+// LoadImages copies images from the engine into the named instance's KubeSolo,
+// as kind load docker-image does for a kind node: the engine saves them as an
+// archive, which KubeSolo imports inside the container. It returns the names
+// the images were imported under.
+func LoadImages(name string, images []string) ([]string, error) {
+	cli, err := newContainerClient()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cli.Close() }()
+
+	ctx := context.Background()
+	archive, err := cli.ImageSave(ctx, images)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export %s from the engine: %w", strings.Join(images, ", "), err)
+	}
+	defer func() { _ = archive.Close() }()
+
+	exec, err := cli.ContainerExecCreate(ctx, ContainerNameFor(name), container.ExecOptions{
+		Cmd:          []string{"/usr/local/bin/kubesolo", "--import-images=" + config.DefaultPath},
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := cli.ContainerExecAttach(ctx, exec.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Close()
+
+	copied := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(resp.Conn, archive)
+		_ = resp.CloseWrite()
+		copied <- err
+	}()
+	var stdout, stderr bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, resp.Reader); err != nil {
+		return nil, err
+	}
+	if err := <-copied; err != nil {
+		return nil, fmt.Errorf("failed to send the images to the container: %w", err)
+	}
+
+	result, err := cli.ContainerExecInspect(ctx, exec.ID)
+	if err != nil {
+		return nil, err
+	}
+	if result.ExitCode != 0 {
+		msg := strings.TrimSpace(stderr.String())
+		if strings.Contains(msg, "import-images") {
+			return nil, fmt.Errorf("the KubeSolo in %s cannot import images; upgrade it to a release with kubesoloctl load support", ContainerNameFor(name))
+		}
+		return nil, fmt.Errorf("importing the images failed: %s", msg)
+	}
+	return strings.Fields(stdout.String()), nil
+}

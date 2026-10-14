@@ -88,6 +88,7 @@ kubesoloctl kubeconfig fetch
 | `reset` | Wipe all cluster state and start fresh (keeps the install) |
 | `uninstall` | Stop and remove KubeSolo, service files, and (optionally) data |
 | `kubeconfig` | Print, write, fetch, or view the admin kubeconfig |
+| `load` | Load images from the container engine into a container instance |
 | `d2k fetch` | Set up a Docker context for the d2k endpoint (container mode) |
 | `download` | Build an offline install bundle for an air-gapped machine |
 | `version` | Print version information |
@@ -226,6 +227,18 @@ Bare ports and ranges bind on all interfaces (reachable from other machines); sc
 ### Resource limits
 
 KubeSolo and its pods run inside the container's own cgroup, so `docker stats` shows what the whole node uses, and a limit set on the container (for example `docker update --memory=2g --memory-swap=2g kubesolo`) bounds KubeSolo and every pod together, as it would a kind node. Leave room for KubeSolo itself, about 250 MB: a limit below what KubeSolo needs makes it thrash rather than fail.
+
+### Loading local images
+
+`load` copies images from the container engine into a container instance, so pods can run an image you built without pushing it to a registry — what `kind load docker-image` does:
+
+```bash
+docker build -t my-app:dev .
+kubesoloctl load my-app:dev              # --name for a named instance
+kubectl create deployment my-app --image=my-app:dev
+```
+
+Pods refer to the image by the name it has in the engine. An image tagged `:latest` (or untagged) defaults to `imagePullPolicy: Always` and is pulled again; use another tag, or set `imagePullPolicy: IfNotPresent`. `load` needs a KubeSolo release newer than v1.2.2 in the container.
 
 ### d2k (Docker-compatible API)
 

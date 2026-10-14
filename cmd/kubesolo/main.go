@@ -39,6 +39,7 @@ import (
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubelet"
 	"github.com/portainer/kubesolo/pkg/kubernetes/kubeproxy"
 	kubesoloruntime "github.com/portainer/kubesolo/pkg/runtime"
+	"github.com/portainer/kubesolo/pkg/runtime/containerd"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 	"sigs.k8s.io/yaml"
@@ -154,6 +155,19 @@ func main() {
 		if err := executor.CheckDatastore(*flags.UpgradeCheckDatastore); err != nil {
 			fmt.Fprintln(os.Stderr, "datastore check failed:", err)
 			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	// kubesoloctl load: import images into the KubeSolo already running here.
+	if *flags.ImportImages != "" {
+		socket := filepath.Join(*flags.ImportImages, types.DefaultContainerdDir, types.DefaultContainerdSocket)
+		names, err := containerd.ImportArchive(context.Background(), socket, os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		for _, name := range names {
+			fmt.Println(name)
 		}
 		os.Exit(0)
 	}

@@ -72,6 +72,7 @@ Examples:
 		rollbackCmd(),
 		statusCmd(),
 		kubeconfigCmd(),
+		loadCmd(),
 		configCmd(),
 		d2kCmd(),
 		downloadCmd(&cfg),
