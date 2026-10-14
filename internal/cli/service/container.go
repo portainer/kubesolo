@@ -237,9 +237,13 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 			Env:          proxyEnv(proxyFor(cfg, prev), subnets),
 			ExposedPorts: exposedPorts,
 		},
+		// The cgroup namespace is left to the engine: private on cgroup v2, where
+		// KubeSolo then nests itself and its pods under the container's own
+		// cgroup, so the container's resource limits and accounting cover them.
+		// The host's namespace would put them at the engine's top-level cgroup,
+		// outside the container and shared with every other instance.
 		&container.HostConfig{
 			Privileged:    true,
-			CgroupnsMode:  container.CgroupnsModeHost,
 			Binds:         []string{m.vname() + ":/var/lib/kubesolo"},
 			PortBindings:  portBindings,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
@@ -448,7 +452,6 @@ func ResetContainer(name string) error {
 		},
 		&container.HostConfig{
 			Privileged:    true,
-			CgroupnsMode:  container.CgroupnsModeHost,
 			Binds:         []string{vname + ":/var/lib/kubesolo"},
 			PortBindings:  portBindings,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},

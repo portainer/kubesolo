@@ -200,6 +200,10 @@ kubesoloctl install --run-mode=container --container-ports=9001,8080:80,9000-910
 
 Bare ports and ranges bind on all interfaces (reachable from other machines); scope them to localhost with the `127.0.0.1:host:container` form. Published ports are preserved across `upgrade` and `reset`.
 
+### Resource limits
+
+KubeSolo and its pods run inside the container's own cgroup, so `docker stats` shows what the whole node uses, and a limit set on the container (for example `docker update --memory=2g --memory-swap=2g kubesolo`) bounds KubeSolo and every pod together, as it would a kind node. Leave room for KubeSolo itself, about 250 MB: a limit below what KubeSolo needs makes it thrash rather than fail.
+
 ### d2k (Docker-compatible API)
 
 When KubeSolo is installed with `--d2k`, set up a local Docker context that talks to the in-cluster translator over mTLS:
