@@ -205,6 +205,22 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		}
 	}
 
+	// ── Container settings ────────────────────────────────────────────────────
+	// Checked before the image is pulled or a running container replaced: a
+	// setting KubeSolo rejects would otherwise only show as a crash loop.
+	if containerMode {
+		warnings, err := checkContainerSettings(cfg)
+		if err != nil {
+			return p.Fail("configuration", err)
+		}
+		for _, w := range warnings {
+			p.Warn(w.String())
+		}
+		if cfg.InstallPrereqs {
+			p.Warn("--install-prereqs is ignored in container mode (the image ships its prerequisites)")
+		}
+	}
+
 	// ── Detect system ─────────────────────────────────────────────────────────
 	p.Step("Detecting system")
 	info, err := detect.Detect()
@@ -387,6 +403,20 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+// checkContainerSettings rejects settings that cannot work in container mode
+// and validates the rest the way KubeSolo will, returning its warnings.
+func checkContainerSettings(cfg *config.Config) ([]kubesoloconfig.Warning, error) {
+	if cfg.Path != config.DefaultPath {
+		return nil, fmt.Errorf("--path is not supported in container mode: cluster state lives in the %s volume, mounted at %s",
+			service.ContainerNameFor(cfg.Name)+"-data", config.DefaultPath)
+	}
+	if cfg.OfflineInstall != "" {
+		return nil, fmt.Errorf("--offline-install is not supported in container mode: KubeSolo runs from the container image")
+	}
+	_, warnings, err := cfg.ToKubeSoloConfig()
+	return warnings, err
 }
 
 // writeConfigFile renders the installer's settings into the KubeSolo
