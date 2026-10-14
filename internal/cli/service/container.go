@@ -21,6 +21,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/portainer/kubesolo/internal/cli/config"
 	hostnetwork "github.com/portainer/kubesolo/internal/runtime/network"
+	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -182,6 +183,12 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	if err := ensureNetwork(ctx, cli, m.nname(), mtu); err != nil {
 		return err
 	}
+	var subnets []string
+	if nw, err := cli.NetworkInspect(ctx, m.nname(), network.InspectOptions{}); err == nil {
+		for _, c := range nw.IPAM.Config {
+			subnets = append(subnets, c.Subnet)
+		}
+	}
 
 	// Bind to 127.0.0.1 on a port of our choosing, so multiple named clusters
 	// can run concurrently; see hostPortFor.
@@ -227,6 +234,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 			Image:        img,
 			Hostname:     hostname,
 			Cmd:          cmdArgs,
+			Env:          proxyEnv(proxyFor(cfg, prev), subnets),
 			ExposedPorts: exposedPorts,
 		},
 		&container.HostConfig{
@@ -276,6 +284,39 @@ func hostPortFor(prev *container.InspectResponse, p nat.Port) (string, error) {
 	}
 	defer func() { _ = l.Close() }()
 	return strconv.Itoa(l.Addr().(*net.TCPAddr).Port), nil
+}
+
+// proxyFor returns the proxy the container uses: --proxy when given, and
+// otherwise the previous container's, since an upgrade does not take --proxy.
+func proxyFor(cfg *config.Config, prev *container.InspectResponse) string {
+	if cfg.Proxy != "" || prev == nil || prev.Config == nil {
+		return cfg.Proxy
+	}
+	for _, e := range prev.Config.Env {
+		if v, ok := strings.CutPrefix(e, "HTTP_PROXY="); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// proxyEnv returns the proxy environment of the KubeSolo container, as the
+// service definition of a host install sets it. Unlike there, the node's own
+// addresses are not localhost: KubeSolo reaches its API server on the address
+// it has on the instance network, and pods and services on their own ranges,
+// none of which a proxy outside the container can reach. As kind does, these
+// are excluded alongside the cluster's DNS suffixes.
+func proxyEnv(proxy string, subnets []string) []string {
+	if proxy == "" {
+		return nil
+	}
+	noProxy := append([]string{"localhost", "127.0.0.1"}, subnets...)
+	noProxy = append(noProxy, types.DefaultPodCIDR, types.DefaultServiceClusterIPRange, ".svc", ".cluster.local")
+	return []string{
+		"HTTP_PROXY=" + proxy,
+		"HTTPS_PROXY=" + proxy,
+		"NO_PROXY=" + strings.Join(noProxy, ","),
+	}
 }
 
 // publishD2K reports whether the container needs the d2k port published. An
@@ -402,6 +443,7 @@ func ResetContainer(name string) error {
 			// container name; see Install.
 			Hostname:     cname,
 			Cmd:          cmdArgs,
+			Env:          resp.Config.Env,
 			ExposedPorts: exposedPorts,
 		},
 		&container.HostConfig{

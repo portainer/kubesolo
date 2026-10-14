@@ -110,7 +110,7 @@ Common flags:
 | `--mtu` | `KUBESOLO_MTU` | _(auto-detect)_ | Override the detected MTU; in container mode also sizes the outer Docker network |
 | `--portainer-edge-image` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | `docker.io/portainer/agent:lts` | Image deployed for the Portainer edge agent |
 | `--offline-install` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ | Install from a local tarball/binary instead of downloading (host mode only) |
-| `--proxy` | `KUBESOLO_PROXY` | _(none)_ | HTTP/HTTPS proxy injected into the service environment |
+| `--proxy` | `KUBESOLO_PROXY` | _(none)_ | HTTP/HTTPS proxy injected into the service environment, or the container's in container mode (kept across `upgrade` and `reset`) |
 | `--cpu-manager-policy` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` | `static` gives Guaranteed-QoS pods exclusive cores (not supported in container mode) |
 | `--cpu-manager-policy-options` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(none)_ | Comma-separated `key=value` options for the static policy |
 | `--reserved-cpus` | `KUBESOLO_RESERVED_CPUS` | `0` when the static policy is used | Cpuset reserved for the host and KubeSolo itself |
