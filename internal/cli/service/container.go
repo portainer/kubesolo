@@ -124,6 +124,37 @@ func (m *containerManager) cname() string { return ContainerNameFor(m.name) }
 func (m *containerManager) vname() string { return ContainerNameFor(m.name) + "-data" }
 
 func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
+	prev, err := InspectInstance(m.name)
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		return err
+	}
+	return ReplaceContainer(m.name, cfg, cmdArgs, prev)
+}
+
+// InspectInstance returns the named instance's container as the engine
+// reports it.
+func InspectInstance(name string) (*container.InspectResponse, error) {
+	cli, err := newContainerClient()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cli.Close() }()
+
+	insp, err := cli.ContainerInspect(context.Background(), ContainerNameFor(name))
+	if err != nil {
+		return nil, err
+	}
+	return &insp, nil
+}
+
+// ReplaceContainer replaces the named instance's container, if it has one, with
+// a new one running cfg's image with cmdArgs. The hostname, host ports and proxy
+// carry over from prev, the container being replaced as it was before anything
+// changed; nil means there is none. An upgrade passes the snapshot it took
+// before stopping the container, so a rollback restores them even when the new
+// container could not be created.
+func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, prev *container.InspectResponse) error {
+	m := &containerManager{name: name}
 	img := cfg.ContainerImage
 	if img == "" {
 		img = config.DefaultContainerImage + ":" + cfg.Version
@@ -150,9 +181,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	// Ready. A replacement keeps its predecessor's hostname, whatever it was; a
 	// first install uses the container name, which survives replacement.
 	hostname := m.cname()
-	var prev *container.InspectResponse
-	if insp, err := cli.ContainerInspect(ctx, m.cname()); err == nil {
-		prev = &insp
+	if insp := prev; insp != nil {
 		for p, b := range insp.HostConfig.PortBindings {
 			if p == "6443/tcp" || p == "2376/tcp" {
 				continue
@@ -166,13 +195,9 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 
 	// Pull before touching the running container: a pull that fails (a typo in
 	// the tag, no network) must leave the cluster running, not removed.
-	log.Info().Msgf("pulling %s...", img)
-	rc, err := cli.ImagePull(ctx, img, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image %s: %w", img, err)
+	if err := pullImage(ctx, cli, img); err != nil {
+		return err
 	}
-	logPullProgress(rc)
-	_ = rc.Close()
 
 	// Stop and remove any existing container so install is idempotent.
 	timeout := 10
@@ -352,39 +377,6 @@ func (m *containerManager) Uninstall() error {
 		log.Warn().Msgf("could not remove network %q: %v", nname, err)
 	}
 	return nil
-}
-
-// ContainerArgs returns the CMD of the running container identified by name.
-// Used by upgrade to preserve the original configuration flags.
-func ContainerArgs(name string) ([]string, error) {
-	cli, err := newContainerClient()
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cli.Close() }()
-
-	cname := ContainerNameFor(name)
-	resp, err := cli.ContainerInspect(context.Background(), cname)
-	if err != nil {
-		return nil, fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", cname, err)
-	}
-	return resp.Config.Cmd, nil
-}
-
-// ContainerImage returns the image the named instance's container was created
-// from, as it was given.
-func ContainerImage(name string) (string, error) {
-	cli, err := newContainerClient()
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = cli.Close() }()
-
-	resp, err := cli.ContainerInspect(context.Background(), ContainerNameFor(name))
-	if err != nil {
-		return "", fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", ContainerNameFor(name), err)
-	}
-	return resp.Config.Image, nil
 }
 
 // ContainerVersion returns the version of KubeSolo in the named instance's
@@ -677,6 +669,27 @@ func newContainerClient() (*client.Client, error) {
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
 	}
 	return cli, nil
+}
+
+// PullImage pulls img.
+func PullImage(img string) error {
+	cli, err := newContainerClient()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = cli.Close() }()
+	return pullImage(context.Background(), cli, img)
+}
+
+func pullImage(ctx context.Context, cli *client.Client, img string) error {
+	log.Info().Msgf("pulling %s...", img)
+	rc, err := cli.ImagePull(ctx, img, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", img, err)
+	}
+	logPullProgress(rc)
+	_ = rc.Close()
+	return nil
 }
 
 // logPullProgress reads the Docker image pull JSON stream and emits zerolog

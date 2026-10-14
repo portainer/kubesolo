@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/distribution/reference"
+	"github.com/docker/docker/api/types/container"
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
@@ -245,58 +246,73 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions)
 	if cfg.OfflineInstall != "" || opts.sha256 != "" || opts.detach {
 		return p.Fail("upgrade", fmt.Errorf("--offline-install, --sha256 and --detach apply to host installs only; a container upgrade replaces the image"))
 	}
+	if err := upgrade.ValidateHealthTimeout(int(opts.healthTimeout / time.Second)); err != nil {
+		return p.Fail("--health-timeout", err)
+	}
 
-	// ── Retrieve current container CMD before replacing it ────────────────────
+	// ── Retrieve current container before replacing it ────────────────────────
 	p.Step("Inspecting running container")
-	oldArgs, err := service.ContainerArgs(cfg.Name)
+	prev, err := service.InspectInstance(cfg.Name)
 	if err != nil {
-		return p.Fail("container inspect", err)
+		return p.Fail("container inspect", fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", service.ContainerNameFor(cfg.Name), err))
 	}
-	current, err := service.ContainerImage(cfg.Name)
-	if err != nil {
-		return p.Fail("container inspect", err)
-	}
+	current, oldArgs := prev.Config.Image, prev.Config.Cmd
 	if cfg.ContainerImage, err = containerUpgradeImage(current, cfg.ContainerImage, cfg.Version); err != nil {
 		return p.Fail("image", err)
 	}
+	running, versionErr := service.ContainerVersion(cfg.Name)
 	// A custom image is not described by --version, so only a release image is
 	// checked against the running version.
 	if cfg.ContainerImage == config.DefaultContainerImage+":"+cfg.Version {
-		running, err := service.ContainerVersion(cfg.Name)
-		if err != nil && !opts.force {
-			return p.Fail("version", fmt.Errorf("could not read the running version: %w; pass --force to upgrade anyway", err))
+		if versionErr != nil && !opts.force {
+			return p.Fail("version", fmt.Errorf("could not read the running version: %w; pass --force to upgrade anyway", versionErr))
 		}
-		if err == nil {
+		if versionErr == nil {
 			if err := checkContainerVersion(running, cfg.Version, opts.force); err != nil {
 				return p.Fail("version", err)
 			}
-			p.Info(fmt.Sprintf("Running %s, upgrading to %s", running, cfg.Version))
 		}
+	}
+	if versionErr == nil {
+		p.Info(fmt.Sprintf("Running %s, upgrading to %s", running, cfg.Version))
 	}
 	p.OK("Current configuration retrieved", config.AppName)
 
-	// ── Pull new image, stop old container, start fresh ───────────────────────
+	// ── Pull the new image while the cluster keeps running ────────────────────
 	p.Step(fmt.Sprintf("Upgrading KubeSolo container to %s", cfg.Version))
-
-	info, err := detect.Detect()
-	if err != nil {
-		return p.Fail("system detection", err)
-	}
-	mgr, err := service.New(info, config.RunModeContainer, cfg.Name)
-	if err != nil {
-		return p.Fail("container upgrade", err)
+	if err := service.PullImage(cfg.ContainerImage); err != nil {
+		p.Warn("nothing was changed: KubeSolo is still running")
+		return p.Fail("image", err)
 	}
 
-	// Install with the new version but preserve the original runtime flags.
-	if err := mgr.Install(cfg, oldArgs); err != nil {
+	// ── Back up the datastore of the stopped container ────────────────────────
+	if err := service.StopContainer(cfg.Name); err != nil {
 		return p.Fail("container upgrade", err)
 	}
-	apiAddr, data, err := awaitContainer(cfg.Name)
+	target := service.RollbackTarget{Image: current, Args: oldArgs, Version: running, Created: time.Now().UTC()}
+	if err := service.BackupDatastore(cfg.Name, current, target); err != nil {
+		if startErr := service.StartContainer(cfg.Name); startErr == nil {
+			p.Warn("nothing was changed: the previous container was started again")
+		}
+		return p.Fail("datastore backup", err)
+	}
+	p.OK("Datastore backed up", "rollback target: "+current)
+
+	// ── Replace the container, keeping the original runtime flags ─────────────
+	err = service.ReplaceContainer(cfg.Name, cfg, oldArgs, prev)
+	var apiAddr string
+	var data []byte
+	if err == nil {
+		apiAddr, data, err = awaitHealthy(cfg.Name, opts.healthTimeout)
+	}
 	if err != nil {
-		return containerFailed(p, cfg.Name, err)
+		return rollBackContainerUpgrade(p, cfg.Name, prev, target, opts.healthTimeout, err)
+	}
+	if err := service.SettleBackup(cfg.Name, cfg.ContainerImage); err != nil {
+		p.Warn("could not drop the previous rollback target: " + err.Error())
 	}
 	p.OK(fmt.Sprintf("KubeSolo %s container running", cfg.Version), cfg.Name)
-	p.OK("API server ready", "https://"+apiAddr)
+	p.OK("Node ready", "https://"+apiAddr)
 
 	// Update kubeconfig: the new container issued its own admin credentials.
 	p.Step("Updating kubeconfig")
@@ -307,5 +323,38 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions)
 	}
 
 	p.Done(fmt.Sprintf("KubeSolo upgraded to %s", cfg.Version))
+	p.Info("undo it with: kubesoloctl rollback --name " + cfg.Name)
 	return nil
+}
+
+// rollBackContainerUpgrade puts back the container an upgrade replaced, with the
+// datastore as it was, after the new one failed to become healthy, and reports
+// the upgrade as failed.
+func rollBackContainerUpgrade(p *ui.Printer, name string, prev *container.InspectResponse, target service.RollbackTarget, timeout time.Duration, cause error) error {
+	p.Warn("the new version did not become healthy: " + cause.Error())
+	if lines, err := service.ContainerLogTail(name, 15); err == nil {
+		p.Info("Last lines it logged:")
+		for _, l := range lines {
+			p.Info("  " + l)
+		}
+	}
+
+	p.Step("Rolling back to " + target.Image)
+	_ = service.StopContainer(name)
+	if err := service.RestoreDatastore(name, target.Image, true); err != nil {
+		return p.Fail("rollback", fmt.Errorf("could not restore the datastore, which is kept in the %s volume under upgrade/container-backup: %w", service.ContainerNameFor(name)+"-data", err))
+	}
+	restore := &config.Config{Name: name, ContainerImage: target.Image}
+	if err := service.ReplaceContainer(name, restore, target.Args, prev); err != nil {
+		return p.Fail("rollback", err)
+	}
+	apiAddr, data, err := awaitHealthy(name, timeout)
+	if err != nil {
+		return containerFailed(p, name, fmt.Errorf("the restored version did not become healthy either: %w", err))
+	}
+	if err := kubeconfig.MergeContainerKubeconfig(data, service.ContainerNameFor(name), "https://"+apiAddr); err != nil {
+		p.Warn("kubeconfig not updated — " + err.Error())
+	}
+	p.OK("Rolled back", target.Image)
+	return p.Fail("upgrade", fmt.Errorf("the upgrade failed and was rolled back: %w", cause))
 }

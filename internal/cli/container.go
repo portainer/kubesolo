@@ -14,17 +14,32 @@ import (
 // kubeconfig. It fails as soon as KubeSolo exits, and when the API server does
 // not answer within two minutes.
 func awaitContainer(name string) (apiAddr string, kc []byte, err error) {
-	port, err := service.GetContainerAPIPort(name)
+	return awaitContainerFor(name, 120*time.Second)
+}
+
+// awaitHealthy waits, up to timeout, for a container that replaced another to
+// come up with its node Ready, the health an upgrade or rollback requires.
+func awaitHealthy(name string, timeout time.Duration) (apiAddr string, kc []byte, err error) {
+	deadline := time.Now().Add(timeout)
+	if apiAddr, kc, err = awaitContainerFor(name, timeout); err != nil {
+		return apiAddr, kc, err
+	}
+	return apiAddr, kc, kubeconfig.WaitForNodeReady(kc, apiAddr, time.Until(deadline))
+}
+
+func awaitContainerFor(name string, timeout time.Duration) (apiAddr string, kc []byte, err error) {
+	// The kubeconfig first: its wait notices KubeSolo exiting, and a container
+	// that is not running has no published port to look up.
+	kc, err = kubeconfig.WaitForContainerKubeconfig(service.ContainerNameFor(name), "")
 	if err != nil {
 		return "", nil, err
 	}
-	apiAddr = fmt.Sprintf("127.0.0.1:%d", port)
-
-	kc, err = kubeconfig.WaitForContainerKubeconfig(service.ContainerNameFor(name), "")
+	port, err := service.GetContainerAPIPort(name)
 	if err != nil {
-		return apiAddr, nil, err
+		return "", kc, err
 	}
-	if err := kubeconfig.WaitForAPIServer(apiAddr, 120*time.Second); err != nil {
+	apiAddr = fmt.Sprintf("127.0.0.1:%d", port)
+	if err := kubeconfig.WaitForAPIServer(apiAddr, timeout); err != nil {
 		return apiAddr, kc, err
 	}
 	return apiAddr, kc, nil

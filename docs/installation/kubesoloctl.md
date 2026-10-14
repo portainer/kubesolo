@@ -190,6 +190,16 @@ kubesoloctl upgrade --name dev --version=v1.2.3 --image=registry.example.com/kub
 
 `--offline-install`, `--sha256` and `--detach` apply to host installs only.
 
+A container upgrade is backed up and rolled back like a host upgrade. The new
+image is pulled while the cluster keeps running; a pull that fails changes
+nothing. The container is then stopped, and its datastore copied inside the data
+volume, together with the image and command line that ran on it. If the new
+version's node is not Ready within `--health-timeout`, the datastore is restored
+and the previous container is put back. `kubesoloctl rollback --name <name>`
+undoes the last upgrade later, as on a host, losing whatever was changed in the
+cluster since. A reset removes the backup along with the rest of the cluster
+state.
+
 ---
 
 ## Container mode details

@@ -9,8 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
+	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
+	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/spf13/cobra"
@@ -18,6 +21,7 @@ import (
 
 func rollbackCmd() *cobra.Command {
 	var (
+		name          string
 		yes           bool
 		detach        bool
 		healthTimeout time.Duration
@@ -34,7 +38,7 @@ created or changed, secrets, the lot. Workloads are restarted.
 A rollback is only possible to the version immediately before the running one,
 and only until the next upgrade replaces the backup.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRollback(yes, detach, healthTimeout)
+			return runRollback(name, yes, detach, healthTimeout)
 		},
 	}
 	f := cmd.Flags()
@@ -42,15 +46,23 @@ and only until the next upgrade replaces the backup.`,
 	f.BoolVar(&detach, "detach", false, "Return once the rollback has started instead of following it")
 	f.DurationVar(&healthTimeout, "health-timeout", upgrade.DefaultHealthTimeout,
 		"How long the restored version has to become healthy")
+	f.StringVar(&name, "name", envOr("KUBESOLO_NAME", config.AppName),
+		"Name of the KubeSolo instance to roll back (container mode)")
 	return cmd
 }
 
-func runRollback(yes, detach bool, healthTimeout time.Duration) error {
+func runRollback(name string, yes, detach bool, healthTimeout time.Duration) error {
 	p := ui.New()
 	p.Header("rollback")
 
 	if err := upgrade.ValidateHealthTimeout(int(healthTimeout / time.Second)); err != nil {
 		return p.Fail("--health-timeout", err)
+	}
+	if containerModeActive(name) {
+		if detach {
+			return p.Fail("rollback", fmt.Errorf("--detach applies to host installs only"))
+		}
+		return runContainerRollback(p, name, yes, healthTimeout)
 	}
 	if err := preflight.CheckRoot(); err != nil {
 		return p.Fail("root check", err)
@@ -118,6 +130,62 @@ func runRollback(yes, detach bool, healthTimeout time.Duration) error {
 		return err
 	}
 	p.Done(fmt.Sprintf("KubeSolo rolled back from %s to %s", run.From, run.To))
+	return nil
+}
+
+// runContainerRollback restores the container and datastore the last upgrade of
+// a container instance replaced.
+func runContainerRollback(p *ui.Printer, name string, yes bool, healthTimeout time.Duration) error {
+	prev, err := service.InspectInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", service.ContainerNameFor(name), err))
+	}
+	target, err := service.ReadRollbackTarget(name)
+	if err != nil {
+		return p.Fail("rollback", err)
+	}
+	if target == nil {
+		return p.Fail("rollback", fmt.Errorf("there is no upgrade to roll back: %s has not been upgraded since it was installed or reset", service.ContainerNameFor(name)))
+	}
+
+	from := target.Image
+	if target.Version != "" {
+		from = target.Version + " (" + target.Image + ")"
+	}
+	p.Warn(fmt.Sprintf("this restores %s and the datastore as it was at %s, when %s was installed",
+		from, target.Created.Local().Format(time.RFC1123), prev.Config.Image))
+	p.Warn("every change made to the cluster since then is lost")
+	if !yes && !confirm("Roll back?") {
+		p.Info("rollback cancelled")
+		return nil
+	}
+
+	p.Step("Rolling back to " + from)
+	if err := service.PullImage(target.Image); err != nil {
+		p.Warn("nothing was changed")
+		return p.Fail("image", err)
+	}
+	if err := service.StopContainer(name); err != nil {
+		return p.Fail("rollback", err)
+	}
+	if err := service.RestoreDatastore(name, target.Image, false); err != nil {
+		if startErr := service.StartContainer(name); startErr == nil {
+			p.Warn("nothing was changed: the container was started again")
+		}
+		return p.Fail("datastore restore", err)
+	}
+	if err := service.ReplaceContainer(name, &config.Config{Name: name, ContainerImage: target.Image}, target.Args, prev); err != nil {
+		return p.Fail("rollback", err)
+	}
+	apiAddr, data, err := awaitHealthy(name, healthTimeout)
+	if err != nil {
+		return containerFailed(p, name, err)
+	}
+	p.OK("Node ready", "https://"+apiAddr)
+	if err := kubeconfig.MergeContainerKubeconfig(data, service.ContainerNameFor(name), "https://"+apiAddr); err != nil {
+		p.Warn("kubeconfig not updated — " + err.Error())
+	}
+	p.Done("KubeSolo rolled back to " + from)
 	return nil
 }
 
