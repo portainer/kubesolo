@@ -68,11 +68,12 @@ would otherwise hand-roll, which is why there is no raw `docker run` here:
 - Runs a **privileged** container with `cgroupns=host`, a persistent data volume,
   and publishes `6443/tcp` on a **random** `127.0.0.1` host port.
 - **Waits for the API server** and **merges a host-reachable kubeconfig**
-  (server rewritten to `https://127.0.0.1:<random-port>`, context `KS_NAME`) into
+  (server rewritten to `https://127.0.0.1:<port>`, context
+  `kubernetes-admin@<container name>`) into
   `~/.kube/config`.
 
-Because the published port is random, do **not** assume `6443:6443` — always go
-through the merged kubeconfig (`kubectl --context "$KS_NAME"`). `kubesoloctl
+Because the published port is chosen at install, do **not** assume `6443:6443` —
+always go through the merged kubeconfig (the `kc` helper resolves the context). `kubesoloctl
 kubeconfig view` returns the *in-container* kubeconfig (wrong host port) and is
 not suitable for host access.
 

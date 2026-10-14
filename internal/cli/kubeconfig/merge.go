@@ -35,16 +35,64 @@ func UserConfigPath() string {
 	return userKubeconfigPath(realHome)
 }
 
+// entries names what one KubeSolo instance owns in a kubeconfig.
+type entries struct {
+	clusters, users, contexts []string
+}
+
+// entryNames returns the entries the instance whose cluster is named cluster
+// owns once merged. KubeSolo names its users kubernetes-admin and admin-token,
+// as kubeadm does, so a merge scopes them to the cluster: two instances, or an
+// instance and a kubeadm cluster, would otherwise share one set of credentials.
+func entryNames(cluster string) entries {
+	var e entries
+	e.clusters = []string{cluster}
+	for _, user := range []string{"kubernetes-admin", "admin-token"} {
+		e.users = append(e.users, user+"@"+cluster)
+		e.contexts = append(e.contexts, user+"@"+cluster)
+	}
+	return e
+}
+
+// scope renames the entries of a KubeSolo kubeconfig to those entryNames
+// returns: the cluster becomes cluster, and each user and context is named
+// <user>@<cluster>.
+func scope(doc map[string]any, cluster string) {
+	for _, c := range namedList(doc, "clusters") {
+		c["name"] = cluster
+	}
+	for _, u := range namedList(doc, "users") {
+		u["name"] = fmt.Sprint(u["name"]) + "@" + cluster
+	}
+	renamed := map[string]string{}
+	for _, c := range namedList(doc, "contexts") {
+		ctx, _ := c["context"].(map[string]any)
+		if ctx == nil {
+			continue
+		}
+		user := fmt.Sprint(ctx["user"]) + "@" + cluster
+		ctx["cluster"] = cluster
+		ctx["user"] = user
+		renamed[fmt.Sprint(c["name"])] = user
+		c["name"] = user
+	}
+	if cc, ok := doc["current-context"].(string); ok && renamed[cc] != "" {
+		doc["current-context"] = renamed[cc]
+	}
+}
+
 // mergeInto merges the kubeconfig src into the file at path, creating it if
-// needed. Entries of src replace entries of the same name, everything else in
-// the file is kept, and src's current context becomes the current one. A
-// non-empty server replaces the server of src's clusters. An existing file is
-// backed up first. uid and gid, when positive, become the owner of the file.
-func mergeInto(path string, src []byte, server string, uid, gid int) error {
+// needed. src's entries are first scoped to cluster (see scope); they then
+// replace entries of the same name, everything else in the file is kept, and
+// src's current context becomes the current one. A non-empty server replaces
+// the server of src's clusters. An existing file is backed up first. uid and
+// gid, when positive, become the owner of the file.
+func mergeInto(path string, src []byte, cluster, server string, uid, gid int) error {
 	in, err := parseDoc(src)
 	if err != nil {
 		return fmt.Errorf("invalid KubeSolo kubeconfig: %w", err)
 	}
+	scope(in, cluster)
 	if server != "" {
 		for _, c := range namedList(in, "clusters") {
 			cluster, _ := c["cluster"].(map[string]any)
@@ -101,7 +149,7 @@ func mergeInto(path string, src []byte, server string, uid, gid int) error {
 // removeEntries deletes the named clusters, users and contexts from the file
 // at path, and unsets the current context if it was one of them. It reports
 // whether anything was removed; a missing file is not an error.
-func removeEntries(path string, clusters, users, contexts []string) (bool, error) {
+func removeEntries(path string, e entries) (bool, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
@@ -115,7 +163,7 @@ func removeEntries(path string, clusters, users, contexts []string) (bool, error
 	}
 
 	removed := false
-	for key, list := range map[string][]string{"clusters": clusters, "users": users, "contexts": contexts} {
+	for key, list := range map[string][]string{"clusters": e.clusters, "users": e.users, "contexts": e.contexts} {
 		for _, name := range list {
 			if remove(doc, key, name) {
 				removed = true
@@ -126,7 +174,7 @@ func removeEntries(path string, clusters, users, contexts []string) (bool, error
 		return false, nil
 	}
 	if cc, _ := doc["current-context"].(string); cc != "" {
-		for _, name := range contexts {
+		for _, name := range e.contexts {
 			if cc == name {
 				delete(doc, "current-context")
 			}

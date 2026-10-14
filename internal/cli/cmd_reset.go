@@ -107,7 +107,7 @@ func runContainerReset(p *ui.Printer, name string) error {
 		apiAddr := fmt.Sprintf("127.0.0.1:%d", port)
 		data, err := kubeconfig.WaitForContainerKubeconfig(cname, "")
 		if err == nil {
-			err = kubeconfig.MergeContainerKubeconfig(data, name, "https://"+apiAddr)
+			err = kubeconfig.MergeContainerKubeconfig(data, cname, "https://"+apiAddr)
 		}
 		if err != nil {
 			p.Warn("kubeconfig not updated — " + err.Error())

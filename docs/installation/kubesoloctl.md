@@ -204,18 +204,20 @@ When KubeSolo is installed with `--d2k`, set up a local Docker context that talk
 
 ```bash
 kubesoloctl d2k fetch                 # default instance
-kubesoloctl d2k fetch --name prod     # a named instance
+kubesoloctl d2k fetch --name prod     # a named instance (context: kubesolo-prod)
 
 docker --context kubesolo ps          # use it
 ```
 
-`d2k fetch` copies the CA + client certificate out of the container into `~/.docker/d2k/<name>/` and creates (or updates) a Docker context pointing at the container's published d2k port. The host port is random, so re-run `d2k fetch` after each upgrade or reset. See [d2k.md](../configuration/d2k.md) for the full integration.
+`d2k fetch` copies the CA + client certificate out of the container into `~/.docker/d2k/<container>/` and creates (or updates) a Docker context, named after the container, pointing at the container's published d2k port. The host port is random, so re-run `d2k fetch` after each upgrade or reset. See [d2k.md](../configuration/d2k.md) for the full integration.
 
 ---
 
 ## Multiple instances
 
-Use `--name` to run independent KubeSolo instances side by side in container mode. Each gets its own container (`kubesolo-<name>`), data volume, kubeconfig context, and (with d2k) Docker context. Pass the same `--name` to `upgrade`, `reset`, `uninstall`, `kubeconfig fetch`, and `d2k fetch` to target a specific instance.
+Use `--name` to run independent KubeSolo instances side by side in container mode. Each gets its own container (`kubesolo-<name>`), data volume, kubeconfig cluster, user and context, and (with d2k) Docker context, all named after the container: the instance `dev` is the kubeconfig context `kubernetes-admin@kubesolo-dev` and the Docker context `kubesolo-dev`. The default instance keeps the plain name `kubesolo`. Pass the same `--name` to `upgrade`, `reset`, `uninstall`, `kubeconfig fetch`, `kubeconfig view`, and `d2k fetch` to target a specific instance.
+
+KubeSolo's admin users are scoped the same way (`kubernetes-admin@<cluster>`), so installing an instance never replaces the credentials of another instance, or of a kubeadm cluster whose admin user is also called `kubernetes-admin`. Entries merged by an older kubesoloctl, under the bare instance name or the shared `kubernetes-admin` user, are left alone by `uninstall`; delete them with `kubectl config` if you no longer need them.
 
 ---
 

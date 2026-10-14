@@ -338,7 +338,7 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	if cfg.RunMode != config.RunModeForeground {
 		p.Step("Merging kubeconfig")
 		if containerMode {
-			if err := kubeconfig.MergeContainerKubeconfig(containerKubeconfig, cfg.Name, "https://"+apiAddr); err != nil {
+			if err := kubeconfig.MergeContainerKubeconfig(containerKubeconfig, service.ContainerNameFor(cfg.Name), "https://"+apiAddr); err != nil {
 				p.Warn("kubeconfig not merged yet — " + err.Error())
 				p.Info("Once ready, run:  kubesoloctl kubeconfig fetch")
 			} else {

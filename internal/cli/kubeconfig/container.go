@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/docker/docker/client"
@@ -18,7 +17,8 @@ import (
 const containerKubeconfigPath = "/var/lib/kubesolo/pki/admin/admin.kubeconfig"
 
 // FetchAndMergeFromContainer copies the admin kubeconfig out of the named
-// Docker container and merges it into the local user's kubeconfig.
+// Docker container and merges it into the local user's kubeconfig, under a
+// cluster named after the container.
 // socketPath overrides the Docker socket; pass "" to use DOCKER_HOST or the
 // platform default (/var/run/docker.sock).
 func FetchAndMergeFromContainer(containerName, socketPath string) error {
@@ -48,7 +48,7 @@ func FetchAndMergeFromContainer(containerName, socketPath string) error {
 	}
 
 	_, realHome, realUID, realGID := resolveRealUser()
-	return mergeInto(userKubeconfigPath(realHome), data, fmt.Sprintf("https://127.0.0.1:%d", port), realUID, realGID)
+	return mergeInto(userKubeconfigPath(realHome), data, containerName, fmt.Sprintf("https://127.0.0.1:%d", port), realUID, realGID)
 }
 
 // newDockerClient creates a Docker client. If socketPath is non-empty it is
@@ -150,31 +150,16 @@ func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error
 	return nil, fmt.Errorf("kubeconfig not available after 60s — run: kubesoloctl kubeconfig fetch once KubeSolo is ready")
 }
 
-// renameKubeconfigEntries replaces the hardcoded "kubesolo" / "kubesolo-admin"
-// identifiers that KubeSolo generates with name / name-admin.
-// This allows multiple named clusters to coexist in ~/.kube/config.
-func renameKubeconfigEntries(data []byte, name string) []byte {
-	if name == "" || name == "kubesolo" {
-		return data
-	}
-	s := strings.ReplaceAll(string(data), "kubesolo-admin", name+"-admin")
-	s = strings.ReplaceAll(s, "kubesolo", name)
-	return []byte(s)
-}
-
-// MergeContainerKubeconfig renames the context/cluster/user entries to name,
-// merges the result into the real user's kubeconfig, and points the cluster
-// server at serverURL, the full https://host:port value discovered from Docker.
-func MergeContainerKubeconfig(data []byte, name, serverURL string) error {
+// MergeContainerKubeconfig merges a KubeSolo container's admin kubeconfig into
+// the real user's kubeconfig under the cluster name cluster — the container's
+// name — and points the cluster server at serverURL, the full https://host:port
+// value discovered from Docker.
+func MergeContainerKubeconfig(data []byte, cluster, serverURL string) error {
 	if len(data) == 0 {
 		return fmt.Errorf("no kubeconfig to merge")
 	}
-	if name == "" {
-		name = "kubesolo"
-	}
-
 	_, realHome, realUID, realGID := resolveRealUser()
-	return mergeInto(userKubeconfigPath(realHome), renameKubeconfigEntries(data, name), serverURL, realUID, realGID)
+	return mergeInto(userKubeconfigPath(realHome), data, cluster, serverURL, realUID, realGID)
 }
 
 // WaitForAPIServer polls the Kubernetes API server at addr (host:port) until it

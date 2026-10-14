@@ -44,6 +44,7 @@ Examples:
 }
 
 func kubeconfigFetchCmd() *cobra.Command {
+	var name string
 	var containerName string
 	var socketPath string
 	var dataPath string
@@ -61,8 +62,11 @@ directory (a host install running as a system service).
 Examples:
   kubesoloctl kubeconfig fetch
   kubesoloctl kubeconfig fetch --path /var/lib/kubesolo   (host install)
-  kubesoloctl kubeconfig fetch --container my-kubesolo    (container mode)`,
+  kubesoloctl kubeconfig fetch --name dev                 (container mode)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if containerName == "" {
+				containerName = service.ContainerNameFor(name)
+			}
 			p := ui.New()
 			p.Header("kubeconfig fetch")
 
@@ -82,8 +86,7 @@ Examples:
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&containerName, "container", service.ContainerNameFor(envOr("KUBESOLO_NAME", config.AppName)),
-		"Container name or ID running KubeSolo (container mode)")
+	addInstanceFlags(cmd, &name, &containerName)
 	cmd.Flags().StringVar(&socketPath, "socket", "",
 		"Container engine socket path (default: DOCKER_HOST env or /var/run/docker.sock) (container mode)")
 	cmd.Flags().StringVar(&dataPath, "path", config.DefaultPath,
@@ -91,7 +94,18 @@ Examples:
 	return cmd
 }
 
+// addInstanceFlags adds the flags that pick the KubeSolo container: --name, as
+// every other command takes it, and --container, a container name or ID that
+// overrides it.
+func addInstanceFlags(cmd *cobra.Command, name, containerName *string) {
+	cmd.Flags().StringVar(name, "name", envOr("KUBESOLO_NAME", config.AppName),
+		"Name of the KubeSolo instance (container mode)")
+	cmd.Flags().StringVar(containerName, "container", "",
+		"Container name or ID running KubeSolo, instead of --name (container mode)")
+}
+
 func kubeconfigViewCmd() *cobra.Command {
+	var name string
 	var containerName string
 	var socketPath string
 	var dataPath string
@@ -106,8 +120,11 @@ data directory.
 
 Examples:
   kubesoloctl kubeconfig view
-  kubesoloctl kubeconfig view --container my-kubesolo`,
+  kubesoloctl kubeconfig view --name dev`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if containerName == "" {
+				containerName = service.ContainerNameFor(name)
+			}
 			if containerModeActiveFor(containerName) {
 				data, err := kubeconfig.GetFromContainer(containerName, socketPath)
 				if err != nil {
@@ -125,8 +142,7 @@ Examples:
 			return err
 		},
 	}
-	cmd.Flags().StringVar(&containerName, "container", service.ContainerNameFor(envOr("KUBESOLO_NAME", config.AppName)),
-		"Container name or ID running KubeSolo (container mode)")
+	addInstanceFlags(cmd, &name, &containerName)
 	cmd.Flags().StringVar(&socketPath, "socket", "",
 		"Container engine socket path (default: DOCKER_HOST env or /var/run/docker.sock) (container mode)")
 	cmd.Flags().StringVar(&dataPath, "path", config.DefaultPath,

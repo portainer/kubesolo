@@ -14,37 +14,34 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// HostCluster is the kubeconfig cluster name of a host install.
+const HostCluster = "kubesolo"
+
 // KubeSoloKubeconfigPath returns the default location of the admin kubeconfig
 // that KubeSolo generates during its first startup.
 func KubeSoloKubeconfigPath(dataPath string) string {
 	return filepath.Join(dataPath, "pki", "admin", "admin.kubeconfig")
 }
 
-// RemoveFromUserConfig surgically removes the named KubeSolo context, cluster,
-// and user entries from the real user's kubeconfig. name is the instance name
-// used during install (default "kubesolo"). It returns true if it actually
-// removed entries.
-func RemoveFromUserConfig(name string) bool {
-	if name == "" {
-		name = "kubesolo"
-	}
-
+// RemoveFromUserConfig surgically removes the context, cluster and user
+// entries of one KubeSolo instance from the real user's kubeconfig. cluster is
+// the instance's cluster name: its container name in container mode, and
+// "kubesolo" for a host install. It returns true if it actually removed
+// entries.
+func RemoveFromUserConfig(cluster string) bool {
 	_, realHome, _, _ := resolveRealUser()
 	kubeconfigFile := userKubeconfigPath(realHome)
 
-	removed, err := removeEntries(kubeconfigFile,
-		[]string{name},
-		[]string{"kubernetes-admin", "admin-token"},
-		[]string{"kubernetes-admin@" + name, "admin-token@" + name})
+	removed, err := removeEntries(kubeconfigFile, entryNames(cluster))
 	if err != nil {
-		log.Warn().Err(err).Msgf("could not remove %s entries from %s", name, kubeconfigFile)
+		log.Warn().Err(err).Msgf("could not remove %s entries from %s", cluster, kubeconfigFile)
 		return false
 	}
 	if !removed {
-		log.Debug().Msgf("no %s entries in %s — nothing to remove", name, kubeconfigFile)
+		log.Debug().Msgf("no %s entries in %s — nothing to remove", cluster, kubeconfigFile)
 		return false
 	}
-	log.Info().Msgf("%s kubeconfig entries removed from %s", name, kubeconfigFile)
+	log.Info().Msgf("%s kubeconfig entries removed from %s", cluster, kubeconfigFile)
 
 	// Inform about any backup the install step created so the user can restore it.
 	backups, _ := filepath.Glob(kubeconfigFile + ".backup-*")
@@ -97,7 +94,7 @@ func MergeFromDisk(dataPath string) error {
 		}
 	}
 
-	if err := mergeInto(userKubeconfigPath(realHome), data, "", realUID, realGID); err != nil {
+	if err := mergeInto(userKubeconfigPath(realHome), data, HostCluster, "", realUID, realGID); err != nil {
 		return err
 	}
 	log.Info().Msgf("kubeconfig also accessible at: %s", ksKubeconfig)

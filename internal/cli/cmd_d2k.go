@@ -31,8 +31,9 @@ func d2kFetchCmd() *cobra.Command {
 		Use:   "fetch",
 		Short: "Fetch D2K mTLS credentials from a container and create a Docker context",
 		Long: `Copies the D2K CA certificate and client keypair out of a running KubeSolo
-container, writes them to ~/.docker/d2k/<name>/, and creates (or updates)
-a Docker context named <name> pointing to the container's ephemeral D2K port.
+container, writes them to ~/.docker/d2k/<container>/, and creates (or updates)
+a Docker context named after the container (kubesolo, or kubesolo-<name> for a
+named instance) pointing to the container's D2K port.
 
 The host port is random (assigned by Docker at install time), so re-run this
 command after each upgrade or reset to keep the Docker context up to date.
@@ -59,15 +60,15 @@ Examples:
 
 			p.Step("Fetching credentials")
 			cname := service.ContainerNameFor(name)
-			if err := kubeconfig.FetchD2KFromContainer(cname, name, socketPath, port); err != nil {
+			if err := kubeconfig.FetchD2KFromContainer(cname, socketPath, port); err != nil {
 				return p.Fail("credential fetch", err)
 			}
-			p.OK("Docker context ready", name)
+			p.OK("Docker context ready", cname)
 
-			p.Done(fmt.Sprintf("D2K context %q configured", name))
+			p.Done(fmt.Sprintf("D2K context %q configured", cname))
 			p.Section("Next steps")
-			p.Info(fmt.Sprintf("docker --context %s ps", name))
-			p.Info(fmt.Sprintf("docker context use %s   # set as default", name))
+			p.Info(fmt.Sprintf("docker --context %s ps", cname))
+			p.Info(fmt.Sprintf("docker context use %s   # set as default", cname))
 			p.Info("")
 			p.Info("Re-run after upgrade or reset — the host port changes")
 			return nil

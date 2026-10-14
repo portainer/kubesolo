@@ -81,7 +81,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 		removeSELinuxPolicy()
 		if removeKubeconfig {
 			p.Step("Cleaning kubeconfig")
-			kubeconfig.RemoveFromUserConfig(name)
+			kubeconfig.RemoveFromUserConfig(kubeconfig.HostCluster)
 			p.OK("Kubeconfig entries removed", "")
 			p.Done("KubeSolo uninstalled.")
 			return nil
@@ -158,7 +158,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	// ── Clean kubeconfig ──────────────────────────────────────────────────────
 	if removeKubeconfig {
 		p.Step("Cleaning kubeconfig")
-		kubeconfig.RemoveFromUserConfig(name)
+		kubeconfig.RemoveFromUserConfig(kubeconfig.HostCluster)
 		p.OK("Kubeconfig entries removed", "")
 	}
 
@@ -208,12 +208,12 @@ func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig b
 	// point at the container's ephemeral host ports, which die with it — so they
 	// are always cleaned up, regardless of --remove-kubeconfig.
 	p.Step("Cleaning kubeconfig and Docker context")
-	cleaned := kubeconfig.RemoveFromUserConfig(name)
-	if kubeconfig.RemoveD2KContext(name) {
+	cleaned := kubeconfig.RemoveFromUserConfig(cname)
+	if kubeconfig.RemoveD2KContext(cname) {
 		cleaned = true
 	}
 	if cleaned {
-		p.OK("Kubeconfig and Docker context cleaned", name)
+		p.OK("Kubeconfig and Docker context cleaned", cname)
 	} else {
 		p.Info("No kubeconfig or Docker context entries to clean")
 	}
