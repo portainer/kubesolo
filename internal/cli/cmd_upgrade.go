@@ -232,27 +232,19 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config) error {
 	if err := mgr.Install(cfg, oldArgs); err != nil {
 		return p.Fail("container upgrade", err)
 	}
+	apiAddr, data, err := awaitContainer(cfg.Name)
+	if err != nil {
+		return containerFailed(p, cfg.Name, err)
+	}
 	p.OK(fmt.Sprintf("KubeSolo %s container running", cfg.Version), cfg.Name)
+	p.OK("API server ready", "https://"+apiAddr)
 
-	// Update kubeconfig with the new container's ephemeral port.
+	// Update kubeconfig: the new container issued its own admin credentials.
 	p.Step("Updating kubeconfig")
-	cname := service.ContainerNameFor(cfg.Name)
-	if port, err := service.GetContainerAPIPort(cfg.Name); err == nil {
-		apiAddr := fmt.Sprintf("127.0.0.1:%d", port)
-		data, err := kubeconfig.WaitForContainerKubeconfig(cname, "")
-		if err == nil {
-			err = kubeconfig.MergeContainerKubeconfig(data, cname, "https://"+apiAddr)
-		}
-		if err != nil {
-			p.Warn("kubeconfig not updated — " + err.Error())
-		}
-		if err := kubeconfig.WaitForAPIServer(apiAddr, 120*time.Second); err != nil {
-			p.Warn(fmt.Sprintf("API server not yet ready at https://%s", apiAddr))
-		} else {
-			p.OK("API server ready", "https://"+apiAddr)
-		}
+	if err := kubeconfig.MergeContainerKubeconfig(data, service.ContainerNameFor(cfg.Name), "https://"+apiAddr); err != nil {
+		p.Warn("kubeconfig not updated — " + err.Error())
 	} else {
-		p.Warn("could not discover container API port — run: kubesoloctl kubeconfig fetch")
+		p.OK("Kubeconfig updated", kubeconfig.UserConfigPath())
 	}
 
 	p.Done(fmt.Sprintf("KubeSolo upgraded to %s", cfg.Version))

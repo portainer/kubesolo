@@ -122,8 +122,9 @@ func GetFromContainer(containerName, socketPath string) ([]byte, error) {
 }
 
 // WaitForContainerKubeconfig polls the kubesolo container until the admin
-// kubeconfig is generated, then returns the raw bytes. Waits up to 60 seconds.
-// Returns an error if the file never appears or Docker is unreachable.
+// kubeconfig is generated, then returns the raw bytes. Waits up to 120 seconds,
+// as a host install does. Returns an error if the file never appears, the
+// container stops or restarts — KubeSolo exited — or Docker is unreachable.
 func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error) {
 	cli, err := newDockerClient(socketPath)
 	if err != nil {
@@ -131,10 +132,18 @@ func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error
 	}
 	defer func() { _ = cli.Close() }()
 
-	log.Info().Msgf("waiting for kubeconfig in container %q (up to 60s)...", containerName)
+	log.Info().Msgf("waiting for kubeconfig in container %q (up to 120s)...", containerName)
 
-	deadline := time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(120 * time.Second)
 	for time.Now().Before(deadline) {
+		if insp, err := cli.ContainerInspect(context.Background(), containerName); err == nil &&
+			(insp.RestartCount > 0 || insp.State == nil || !insp.State.Running) {
+			code := 0
+			if insp.State != nil {
+				code = insp.State.ExitCode
+			}
+			return nil, fmt.Errorf("KubeSolo exited in container %q (exit code %d)", containerName, code)
+		}
 		rc, _, err := cli.CopyFromContainer(context.Background(), containerName, containerKubeconfigPath)
 		if err != nil {
 			time.Sleep(2 * time.Second)
@@ -147,7 +156,7 @@ func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error
 		}
 		time.Sleep(2 * time.Second)
 	}
-	return nil, fmt.Errorf("kubeconfig not available after 60s — run: kubesoloctl kubeconfig fetch once KubeSolo is ready")
+	return nil, fmt.Errorf("KubeSolo did not write its kubeconfig within 120s")
 }
 
 // MergeContainerKubeconfig merges a KubeSolo container's admin kubeconfig into

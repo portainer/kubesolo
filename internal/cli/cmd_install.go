@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
@@ -314,20 +313,17 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		return p.Fail("service setup", err)
 	}
 
-	// In container mode, discover the host port the API server is published on, wait
-	// for the kubeconfig, and keep progress under the "Starting container" step.
+	// In container mode, wait for KubeSolo to come up, and keep progress under
+	// the "Starting container" step.
 	var containerKubeconfig []byte
 	var apiAddr string
 	if containerMode {
-		port, err := service.GetContainerAPIPort(cfg.Name)
+		apiAddr, containerKubeconfig, err = awaitContainer(cfg.Name)
 		if err != nil {
-			p.Warn("could not determine API server port — falling back to 6443")
-			apiAddr = "127.0.0.1:6443"
-		} else {
-			apiAddr = fmt.Sprintf("127.0.0.1:%d", port)
+			return containerFailed(p, cfg.Name, err)
 		}
-		containerKubeconfig, _ = kubeconfig.WaitForContainerKubeconfig(service.ContainerNameFor(cfg.Name), "")
 		p.OK(fmt.Sprintf("KubeSolo %s container running", cfg.Version), cfg.Name)
+		p.OK("API server ready", "https://"+apiAddr)
 	} else if cfg.RunMode == config.RunModeDaemon {
 		p.OK("KubeSolo started as a background daemon", config.PIDFile)
 	} else {
@@ -351,16 +347,6 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 			p.Info("Once ready, run:  kubesoloctl kubeconfig fetch")
 		} else {
 			p.OK("Kubeconfig merged", kubeconfig.UserConfigPath())
-		}
-	}
-
-	// ── Wait for API server ───────────────────────────────────────────────────
-	if containerMode {
-		p.Step("Waiting for API server")
-		if err := kubeconfig.WaitForAPIServer(apiAddr, 120*time.Second); err != nil {
-			p.Warn("API server not yet ready — it may still be initializing")
-		} else {
-			p.OK("API server ready", "https://"+apiAddr)
 		}
 	}
 

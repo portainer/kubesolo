@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"github.com/portainer/kubesolo/internal/cli/config"
 	hostnetwork "github.com/portainer/kubesolo/internal/runtime/network"
@@ -477,6 +479,30 @@ func GetContainerD2KPort(name string) (int, error) {
 		return 0, fmt.Errorf("invalid host port %q: %w", bindings[0].HostPort, err)
 	}
 	return port, nil
+}
+
+// ContainerLogTail returns the last lines KubeSolo logged in the named
+// instance's container, for reporting why it failed to come up.
+func ContainerLogTail(name string, lines int) ([]string, error) {
+	cli, err := newContainerClient()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cli.Close() }()
+
+	rc, err := cli.ContainerLogs(context.Background(), ContainerNameFor(name), container.LogsOptions{
+		ShowStdout: true, ShowStderr: true, Tail: strconv.Itoa(lines),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+
+	var out bytes.Buffer
+	if _, err := stdcopy.StdCopy(&out, &out, rc); err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.TrimRight(out.String(), "\n"), "\n"), nil
 }
 
 // ContainerExistsByName reports whether a container with the given name exists
