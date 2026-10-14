@@ -178,7 +178,14 @@ func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig b
 	// ── Stop and remove container ─────────────────────────────────────────────
 	p.Step("Removing KubeSolo container")
 	if !exists {
-		p.Warn(fmt.Sprintf("no KubeSolo container %q found — nothing to remove", cname))
+		p.Warn(fmt.Sprintf("no KubeSolo container %q found", cname))
+		// The network outlives a container removed by hand.
+		if removed, err := service.RemoveContainerNetwork(name); err != nil {
+			p.Warn(err.Error())
+		} else if removed {
+			p.OK("Network removed", cname+"-net")
+			exists = true
+		}
 	} else {
 		mgr, err := service.New(info, config.RunModeContainer, name)
 		if err != nil {

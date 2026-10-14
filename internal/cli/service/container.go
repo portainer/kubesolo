@@ -568,6 +568,45 @@ func ContainerExists(name string) bool {
 	return ContainerExistsByName(ContainerNameFor(name))
 }
 
+// InstanceExists reports whether anything of the named container instance is
+// left: its container, network or data volume. A container removed by hand
+// leaves the other two behind, and uninstall must still find them.
+func InstanceExists(name string) bool {
+	cli, err := newContainerClient()
+	if err != nil {
+		return false
+	}
+	defer func() { _ = cli.Close() }()
+
+	ctx := context.Background()
+	if _, err := cli.ContainerInspect(ctx, ContainerNameFor(name)); err == nil {
+		return true
+	}
+	if _, err := cli.NetworkInspect(ctx, networkNameFor(name), network.InspectOptions{}); err == nil {
+		return true
+	}
+	_, err = cli.VolumeInspect(ctx, ContainerNameFor(name)+"-data")
+	return err == nil
+}
+
+// RemoveContainerNetwork removes the named instance's network, reporting
+// whether there was one to remove.
+func RemoveContainerNetwork(name string) (bool, error) {
+	cli, err := newContainerClient()
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = cli.Close() }()
+
+	if err := cli.NetworkRemove(context.Background(), networkNameFor(name)); err != nil {
+		if cerrdefs.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to remove network %q: %w", networkNameFor(name), err)
+	}
+	return true, nil
+}
+
 func newContainerClient() (*client.Client, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
