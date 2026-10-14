@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -183,7 +184,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 		"6443/tcp": []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}},
 	}
 	exposedPorts := nat.PortSet{"6443/tcp": struct{}{}}
-	if cfg.D2K {
+	if publishD2K(cfg, cmdArgs) {
 		portBindings["2376/tcp"] = []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
 		exposedPorts["2376/tcp"] = struct{}{}
 	}
@@ -235,6 +236,13 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 
 	log.Info().Msgf("container %q started (id: %.12s)", m.cname(), resp.ID)
 	return nil
+}
+
+// publishD2K reports whether the container needs the d2k port published. An
+// upgrade passes the previous container's command line with a config that does
+// not set D2K, so the command line decides as well as the flag.
+func publishD2K(cfg *config.Config, cmdArgs []string) bool {
+	return cfg.D2K || slices.Contains(cmdArgs, "--d2k")
 }
 
 func (m *containerManager) Uninstall() error {
