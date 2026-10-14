@@ -178,6 +178,18 @@ In container mode, `upgrade` pulls the new image before touching the running
 container, and the replacement keeps the container's hostname, which is the
 node's name.
 
+As on a host, a container upgrade refuses a version that is not newer than the
+running one unless `--force` is given. An instance running a release image
+(`portainer/kubesolo`) moves to the release image of `--version`. One running
+any other image, such as a CI build or a private mirror, needs `--image` to name
+the image to upgrade to, rather than being switched to the public release:
+
+```bash
+kubesoloctl upgrade --name dev --version=v1.2.3 --image=registry.example.com/kubesolo:v1.2.3
+```
+
+`--offline-install`, `--sha256` and `--detach` apply to host installs only.
+
 ---
 
 ## Container mode details

@@ -103,3 +103,13 @@ func TestProxyFor(t *testing.T) {
 		t.Errorf("first install = %q", got)
 	}
 }
+
+func TestParseVersionOutput(t *testing.T) {
+	out := `{"level":"info","version":"v1.2.2","time":"2026-10-14T23:30:06Z","message":"kubesolo version"}` + "\n"
+	if v, err := parseVersionOutput(out); err != nil || v != "v1.2.2" {
+		t.Errorf("version = %q, %v", v, err)
+	}
+	if _, err := parseVersionOutput("kubesolo: error: unknown flag\n"); err == nil {
+		t.Error("expected an error for output without a version")
+	}
+}

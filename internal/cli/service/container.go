@@ -371,6 +371,67 @@ func ContainerArgs(name string) ([]string, error) {
 	return resp.Config.Cmd, nil
 }
 
+// ContainerImage returns the image the named instance's container was created
+// from, as it was given.
+func ContainerImage(name string) (string, error) {
+	cli, err := newContainerClient()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = cli.Close() }()
+
+	resp, err := cli.ContainerInspect(context.Background(), ContainerNameFor(name))
+	if err != nil {
+		return "", fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", ContainerNameFor(name), err)
+	}
+	return resp.Config.Image, nil
+}
+
+// ContainerVersion returns the version of KubeSolo in the named instance's
+// running container, as the binary reports it.
+func ContainerVersion(name string) (string, error) {
+	cli, err := newContainerClient()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = cli.Close() }()
+
+	ctx := context.Background()
+	exec, err := cli.ContainerExecCreate(ctx, ContainerNameFor(name), container.ExecOptions{
+		Cmd:          []string{"/usr/local/bin/kubesolo", "--version"},
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return "", err
+	}
+	resp, err := cli.ContainerExecAttach(ctx, exec.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return "", err
+	}
+	defer resp.Close()
+
+	var out bytes.Buffer
+	if _, err := stdcopy.StdCopy(&out, &out, resp.Reader); err != nil {
+		return "", err
+	}
+	return parseVersionOutput(out.String())
+}
+
+// parseVersionOutput finds the version in what kubesolo --version prints: a
+// JSON log line with a version field.
+func parseVersionOutput(out string) (string, error) {
+	for _, line := range strings.Split(out, "\n") {
+		var entry struct {
+			Version string `json:"version"`
+		}
+		if json.Unmarshal([]byte(line), &entry) == nil && entry.Version != "" {
+			return entry.Version, nil
+		}
+	}
+	return "", fmt.Errorf("no version in %q", strings.TrimSpace(out))
+}
+
 // RemoveContainerVolume removes the data volume for the named instance.
 // Called during uninstall --purge to delete all cluster state.
 func RemoveContainerVolume(name string) error {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/distribution/reference"
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
@@ -54,6 +55,9 @@ Examples:
 	f.BoolVar(&opts.detach, "detach", false, "Return once the upgrade has started instead of following it")
 	f.StringVar(&cfg.Name, "name", envOr("KUBESOLO_NAME", config.AppName),
 		"Name of the KubeSolo instance to upgrade (default: kubesolo)")
+	f.StringVar(&cfg.ContainerImage, "image", "",
+		"Container image to upgrade to (container mode; default: portainer/kubesolo:<version>).\n"+
+			"Required when the instance runs an image other than portainer/kubesolo")
 	return cmd
 }
 
@@ -69,7 +73,10 @@ func runUpgrade(cfg *config.Config, opts upgradeOptions) error {
 	p.Header("upgrade")
 
 	if containerModeActive(cfg.Name) {
-		return runContainerUpgrade(p, cfg)
+		return runContainerUpgrade(p, cfg, opts)
+	}
+	if cfg.ContainerImage != "" {
+		return p.Fail("upgrade", fmt.Errorf("--image applies to container instances only"))
 	}
 
 	if err := preflight.CheckRoot(); err != nil {
@@ -204,12 +211,67 @@ func startLocalUpgrade(p *ui.Printer, h *host, req upgrade.Request, from string)
 	return id, nil
 }
 
-func runContainerUpgrade(p *ui.Printer, cfg *config.Config) error {
+// containerUpgradeImage returns the image a container instance is upgraded to:
+// the one given with --image, or the release image of version when the
+// instance runs a release image. Any other image, such as a CI build or a
+// private mirror, has no release image to follow, so it must be named.
+func containerUpgradeImage(current, explicit, version string) (string, error) {
+	if explicit != "" {
+		return explicit, nil
+	}
+	if named, err := reference.ParseNormalizedNamed(current); err == nil && reference.FamiliarName(named) == config.DefaultContainerImage {
+		return config.DefaultContainerImage + ":" + version, nil
+	}
+	return "", fmt.Errorf("this instance runs %s, not a %s release image; pass --image with the image to upgrade to", current, config.DefaultContainerImage)
+}
+
+// checkContainerVersion refuses a target that is not newer than the running
+// version unless forced, as a host upgrade does.
+func checkContainerVersion(running, target string, force bool) error {
+	if force {
+		return nil
+	}
+	cmp, ok := compareVersions(target, running)
+	if !ok {
+		return fmt.Errorf("cannot compare %s with the running %s; pass --force to upgrade anyway", target, running)
+	}
+	if cmp <= 0 {
+		return fmt.Errorf("%s is not newer than the running %s; pass --force to install it anyway", target, running)
+	}
+	return nil
+}
+
+func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions) error {
+	if cfg.OfflineInstall != "" || opts.sha256 != "" || opts.detach {
+		return p.Fail("upgrade", fmt.Errorf("--offline-install, --sha256 and --detach apply to host installs only; a container upgrade replaces the image"))
+	}
+
 	// ── Retrieve current container CMD before replacing it ────────────────────
 	p.Step("Inspecting running container")
 	oldArgs, err := service.ContainerArgs(cfg.Name)
 	if err != nil {
 		return p.Fail("container inspect", err)
+	}
+	current, err := service.ContainerImage(cfg.Name)
+	if err != nil {
+		return p.Fail("container inspect", err)
+	}
+	if cfg.ContainerImage, err = containerUpgradeImage(current, cfg.ContainerImage, cfg.Version); err != nil {
+		return p.Fail("image", err)
+	}
+	// A custom image is not described by --version, so only a release image is
+	// checked against the running version.
+	if cfg.ContainerImage == config.DefaultContainerImage+":"+cfg.Version {
+		running, err := service.ContainerVersion(cfg.Name)
+		if err != nil && !opts.force {
+			return p.Fail("version", fmt.Errorf("could not read the running version: %w; pass --force to upgrade anyway", err))
+		}
+		if err == nil {
+			if err := checkContainerVersion(running, cfg.Version, opts.force); err != nil {
+				return p.Fail("version", err)
+			}
+			p.Info(fmt.Sprintf("Running %s, upgrading to %s", running, cfg.Version))
+		}
 	}
 	p.OK("Current configuration retrieved", config.AppName)
 
