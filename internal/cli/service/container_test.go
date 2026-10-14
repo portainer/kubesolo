@@ -130,3 +130,35 @@ func TestLogPullProgressReturnsStreamError(t *testing.T) {
 		t.Errorf("failed pull: %v", err)
 	}
 }
+
+func TestParseContainerMounts(t *testing.T) {
+	got, err := ParseContainerMounts("/Users/me/src:/src, /tmp/registry:/var/lib/kubesolo/containerd/registry:ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"/Users/me/src:/src", "/tmp/registry:/var/lib/kubesolo/containerd/registry:ro"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("binds = %v, want %v", got, want)
+	}
+	for _, bad := range []string{
+		"relative:/src",
+		"/src:relative",
+		"/src",
+		"/a:/b:rx",
+		"/data:/var/lib/kubesolo",
+		"/mods:/lib/modules",
+	} {
+		if _, err := ParseContainerMounts(bad); err == nil {
+			t.Errorf("%q: expected an error", bad)
+		}
+	}
+}
+
+// An upgrade or reset keeps the user's mounts and re-adds the ones kubesoloctl
+// owns itself, so they are neither lost nor doubled.
+func TestUserBinds(t *testing.T) {
+	prev := []string{"kubesolo-dev-data:/var/lib/kubesolo", "/lib/modules:/lib/modules:ro", "/Users/me/src:/src"}
+	if got := userBinds(prev); strings.Join(got, " ") != "/Users/me/src:/src" {
+		t.Errorf("userBinds = %v", got)
+	}
+}

@@ -149,6 +149,12 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 			"(e.g. --container-ports=9001,8080:80,9000-9100,53/udp). Bare ports and\n"+
 			"ranges map host==container; explicit host:container forms are honored.")
 
+	f.StringVar(&cfg.ContainerMounts, "container-mounts",
+		os.Getenv("KUBESOLO_CONTAINER_MOUNTS"),
+		"Container-mode only: comma-separated host directories to mount into the container\n"+
+			"as SRC:DST or SRC:DST:ro (e.g. --container-mounts=/Users/me/data:/data:ro),\n"+
+			"for hostPath volumes or containerd registry configuration")
+
 	f.StringVar(&cfg.Name, "name",
 		envOr("KUBESOLO_NAME", config.AppName),
 		"Name for this KubeSolo instance — used as the container name and kubeconfig context")
@@ -202,6 +208,16 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 			cfg.ContainerPorts = ""
 		} else if _, _, err := service.ParseContainerPorts(cfg.ContainerPorts); err != nil {
 			return p.Fail("container ports", err)
+		}
+	}
+
+	// ── Container mounts ──────────────────────────────────────────────────────
+	if cfg.ContainerMounts != "" {
+		if !containerMode {
+			p.Warn("--container-mounts is ignored outside container mode (host installs see the host's directories directly)")
+			cfg.ContainerMounts = ""
+		} else if _, err := service.ParseContainerMounts(cfg.ContainerMounts); err != nil {
+			return p.Fail("container mounts", err)
 		}
 	}
 

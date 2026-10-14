@@ -141,6 +141,12 @@ type Config struct {
 	// is deliberately NOT passed to the kubesolo binary via CmdArgs.
 	ContainerPorts string
 
+	// ContainerMounts is a comma-separated list of SRC:DST[:ro] host directories
+	// mounted into the container in container run mode, like kind's extraMounts.
+	// Like ContainerPorts, it is a container-runtime concern and is not passed to
+	// the kubesolo binary.
+	ContainerMounts string
+
 	// ConfigFile is where the KubeSolo configuration document is written, and
 	// the only flag passed to the binary once it is. Empty means the target
 	// binary predates the configuration file and must be given flags instead.

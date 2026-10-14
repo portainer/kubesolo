@@ -107,6 +107,7 @@ Common flags:
 | `--name` | `KUBESOLO_NAME` | `kubesolo` | Instance name (container name + kubeconfig context) |
 | `--image` | `KUBESOLO_IMAGE` | `portainer/kubesolo:<version>` | Container image (container mode). It is pulled first; an image the engine already has but cannot pull, such as one built locally or loaded with `docker load` for an offline install, is used as it is |
 | `--container-ports` | `KUBESOLO_CONTAINER_PORTS` | _(none)_ | Workload host ports to publish (container mode) |
+| `--container-mounts` | `KUBESOLO_CONTAINER_MOUNTS` | _(none)_ | Host directories to mount into the container (container mode) |
 | `--d2k` | `KUBESOLO_D2K` | `false` | Enable the Docker-compatible API translator |
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | on (see below) | Enable the local-path storage provisioner |
 | `--node-ip` | `KUBESOLO_NODE_IP` | _(auto-detect)_ | Override the detected node IP |
@@ -225,6 +226,16 @@ kubesoloctl install --run-mode=container --container-ports=9001,8080:80,9000-910
 | `53/udp` | UDP (TCP assumed otherwise) |
 
 Bare ports and ranges bind on all interfaces (reachable from other machines); scope them to localhost with the `127.0.0.1:host:container` form. Published ports are preserved across `upgrade` and `reset`.
+
+### Mounting host directories
+
+`--container-mounts` mounts host directories into the KubeSolo container — the same model as Kind's `extraMounts` — so pods can use them as `hostPath` volumes:
+
+```bash
+kubesoloctl install --container-mounts=/Users/me/data:/data,/Users/me/models:/models:ro
+```
+
+Each entry is `SRC:DST`, or `SRC:DST:ro` for read-only, with absolute paths; a pod then mounts `hostPath: {path: /data}`. On macOS the source must be a directory your engine shares with its VM (OrbStack and Docker Desktop share `/Users`; Colima shares your home directory). A mount can also place [containerd registry configuration](../configuration/registry.md) inside the data volume, for example `--container-mounts=/Users/me/registry:/var/lib/kubesolo/containerd/registry:ro`. Mounts are preserved across `upgrade` and `reset`; reinstall with `--container-mounts` to change them.
 
 ### Resource limits
 

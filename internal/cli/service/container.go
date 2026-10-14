@@ -235,6 +235,17 @@ func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, prev *c
 		exposedPorts["2376/tcp"] = struct{}{}
 	}
 
+	// Host directory mounts, like workload ports: explicit --container-mounts if
+	// given, otherwise whatever the previous container mounted.
+	var mounts []string
+	if cfg.ContainerMounts != "" {
+		if mounts, err = ParseContainerMounts(cfg.ContainerMounts); err != nil {
+			return err
+		}
+	} else if prev != nil && prev.HostConfig != nil {
+		mounts = userBinds(prev.HostConfig.Binds)
+	}
+
 	// Publish workload ports: explicit --container-ports if given, otherwise
 	// inherit whatever the previous container published (upgrade preservation).
 	if cfg.ContainerPorts != "" {
@@ -270,7 +281,7 @@ func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, prev *c
 		// outside the container and shared with every other instance.
 		&container.HostConfig{
 			Privileged:    true,
-			Binds:         containerBinds(name),
+			Binds:         containerBinds(name, mounts),
 			PortBindings:  portBindings,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
 			NetworkMode:   container.NetworkMode(m.nname()),
@@ -350,14 +361,14 @@ func proxyEnv(proxy string, subnets []string) []string {
 }
 
 // containerBinds returns the mounts of the named instance's container: its data
-// volume, and the kernel modules of the engine's host, read-only, as kind mounts
+// volume, the kernel modules of the engine's host, read-only, as kind mounts
 // them, so that KubeSolo can load the netfilter modules it needs on a host that
-// has not loaded them yet.
-func containerBinds(name string) []string {
-	return []string{
+// has not loaded them yet, and the user's own mounts.
+func containerBinds(name string, mounts []string) []string {
+	return append([]string{
 		ContainerNameFor(name) + "-data:" + containerDataDir,
 		"/lib/modules:/lib/modules:ro",
-	}
+	}, mounts...)
 }
 
 // publishD2K reports whether the container needs the d2k port published. An
@@ -517,7 +528,7 @@ func ResetContainer(name string) error {
 		},
 		&container.HostConfig{
 			Privileged:    true,
-			Binds:         containerBinds(name),
+			Binds:         containerBinds(name, userBinds(resp.HostConfig.Binds)),
 			PortBindings:  portBindings,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
 			NetworkMode:   container.NetworkMode(nname),
