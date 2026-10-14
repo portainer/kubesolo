@@ -45,6 +45,10 @@ type Host struct {
 	NumCPU int
 	GOARCH string
 
+	// MemTotal is the host's memory in bytes. Zero means unknown, and skips the
+	// checks that depend on it.
+	MemTotal uint64
+
 	// ContainerMode is what host detection found. It is only consulted when the
 	// configuration does not state one explicitly.
 	ContainerMode bool
@@ -81,6 +85,34 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 
 	if cfg.D2K.Enabled && !cfg.Network.LoadBalancer.Enabled {
 		return warnings, fmt.Errorf("d2k.enabled requires network.loadBalancer.enabled: the d2k Service endpoint is populated by the LoadBalancer webhook")
+	}
+
+	if cfg.Assistant.Enabled {
+		if reason := assistantUnsupported(host); reason != "" {
+			warnings = append(warnings, Warning{
+				Field:   "assistant.enabled",
+				Message: reason + ", disabling the assistant",
+			})
+			cfg.Assistant.Enabled = false
+		}
+	}
+
+	if cfg.Assistant.Enabled {
+		if cfg.Assistant.Model == "" {
+			return warnings, fmt.Errorf("assistant.model is required when the assistant is enabled")
+		}
+		if !filepath.IsAbs(cfg.Assistant.Model) {
+			return warnings, fmt.Errorf("assistant.model: %q must be an absolute path to a GGUF file", cfg.Assistant.Model)
+		}
+		if cfg.Assistant.ContextSize <= 0 {
+			return warnings, fmt.Errorf("assistant.contextSize must be greater than 0, got %d", cfg.Assistant.ContextSize)
+		}
+		if !cfg.API.Enabled {
+			warnings = append(warnings, Warning{
+				Field:   "api.enabled",
+				Message: "the assistant is asked through the configuration API, which is disabled; set api.enabled to true to reach it",
+			})
+		}
 	}
 
 	if ResolveContainerMode(cfg, host.ContainerMode) && cfg.Kubernetes.Kubelet.CPUManager.Policy == types.CPUManagerPolicyStatic {
@@ -278,4 +310,18 @@ func joinKeyValues(m map[string]string) string {
 		pairs = append(pairs, k+"="+m[k])
 	}
 	return strings.Join(pairs, ",")
+}
+
+// assistantUnsupported says why the host cannot run the assistant, or returns
+// "" if it can. llama-server is only built for amd64 and arm64.
+func assistantUnsupported(host Host) string {
+	switch {
+	case host.GOARCH != "amd64" && host.GOARCH != "arm64":
+		return fmt.Sprintf("the assistant is not supported on %s", host.GOARCH)
+	case host.NumCPU < types.AssistantMinCPUs:
+		return fmt.Sprintf("the assistant needs at least %d CPUs, this host has %d", types.AssistantMinCPUs, host.NumCPU)
+	case host.MemTotal != 0 && host.MemTotal < types.AssistantMinMemory:
+		return fmt.Sprintf("the assistant needs at least 4 GB of memory, this host has %.1f GiB", float64(host.MemTotal)/(1<<30))
+	}
+	return ""
 }

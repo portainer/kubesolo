@@ -408,6 +408,24 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { return setInt(&c.D2K.Port, v) },
 		},
 		{
+			ConfigPath: "assistant.enabled",
+			Envar:      "KUBESOLO_ASSISTANT_ENABLED",
+			Get:        func(c *types.Config) any { return c.Assistant.Enabled },
+			Set:        func(c *types.Config, v string) error { return setBool(&c.Assistant.Enabled, v) },
+		},
+		{
+			ConfigPath: "assistant.model",
+			Envar:      "KUBESOLO_ASSISTANT_MODEL",
+			Get:        func(c *types.Config) any { return c.Assistant.Model },
+			Set:        func(c *types.Config, v string) error { c.Assistant.Model = v; return nil },
+		},
+		{
+			ConfigPath: "assistant.contextSize",
+			Envar:      "KUBESOLO_ASSISTANT_CONTEXT_SIZE",
+			Get:        func(c *types.Config) any { return c.Assistant.ContextSize },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Assistant.ContextSize, v) },
+		},
+		{
 			ConfigPath: "metrics.enabled",
 			Flag:       "metrics-server",
 			Envar:      "KUBESOLO_METRICS_SERVER",

@@ -27,6 +27,7 @@ import (
 	"github.com/portainer/kubesolo/internal/system"
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/internal/upgrade/executor"
+	"github.com/portainer/kubesolo/pkg/assistant"
 	"github.com/portainer/kubesolo/pkg/components/configapi"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/d2k"
@@ -110,6 +111,7 @@ func service() (*kubesolo, error) {
 	validationWarnings, err := config.Validate(cfg, config.Host{
 		NumCPU:        runtime.NumCPU(),
 		GOARCH:        runtime.GOARCH,
+		MemTotal:      system.MemTotal(),
 		ContainerMode: system.IsRunningInContainer(),
 	})
 	if err != nil {
@@ -866,8 +868,10 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 		Host: config.Host{
 			NumCPU:        runtime.NumCPU(),
 			GOARCH:        runtime.GOARCH,
+			MemTotal:      system.MemTotal(),
 			ContainerMode: s.embedded.ContainerMode,
 		},
+		Assistant: s.newAssistant(),
 		Lifecycle: &configapi.Lifecycle{
 			Version:       Version,
 			Commit:        Commit,
@@ -890,6 +894,26 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 				Err(err).
 				Msg("configuration API exited with error")
 		}
+	})
+}
+
+// newAssistant prepares the assistant's llama-server, or returns nil when the
+// assistant is disabled or cannot run. Nothing is started until a question is
+// asked; a failure here costs the assistant, never KubeSolo.
+func (s *kubesolo) newAssistant() configapi.Asker {
+	if !s.cfg.Assistant.Enabled {
+		return nil
+	}
+	binary := filepath.Join(s.cfg.Path, types.DefaultAssistantDir, "llama-server")
+	if err := assistant.Install(embedded.LlamaServerBinary(), binary); err != nil {
+		log.Error().Str("component", "assistant").Err(err).Msg("cannot prepare llama-server, continuing without the assistant")
+		return nil
+	}
+	return assistant.New(assistant.Config{
+		Binary:       binary,
+		Model:        s.cfg.Assistant.Model,
+		ContextSize:  s.cfg.Assistant.ContextSize,
+		StartTimeout: types.DefaultAssistantStartTimeout,
 	})
 }
 

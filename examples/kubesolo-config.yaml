@@ -186,6 +186,20 @@ d2k:
   # Verify: kubectl get ns
   namespace: d2k
 
+assistant:
+  # KubeSolo's own model, run by llama-server as a child process outside
+  # Kubernetes, only while answering. Needs 2 CPUs and 4 GB of memory, and
+  # amd64 or arm64; elsewhere it disables itself with a warning. It is asked
+  # through the configuration API, so api.enabled must be on too.
+  # Verify: sudo kubesoloctl assistant ask "what are you?"
+  enabled: false
+
+  # Absolute path to a GGUF model file, only ever read. Required when enabled.
+  model: ""
+
+  # Context window in tokens; sizes the memory held while answering.
+  contextSize: 8192
+
 metrics:
   # Prometheus endpoint with control plane health gauges.
   # Verify: curl -s 127.0.0.1:9105/metrics | grep kubesolo_component_up

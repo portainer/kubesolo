@@ -43,6 +43,10 @@ type Options struct {
 	// the Portainer agent. It sits in a directory of its own, which is what is
 	// mounted into the agent's pod.
 	AgentSocketPath string
+
+	// Assistant answers POST /api/v1/assistant:ask. Nil means the assistant is
+	// disabled, and the endpoint says so.
+	Assistant Asker
 }
 
 // Service is the configuration API. It follows the same NewService/Run + readyCh

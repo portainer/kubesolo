@@ -34,6 +34,7 @@ type Config struct {
 	Storage    StorageConfig    `json:"storage"`
 	Portainer  PortainerConfig  `json:"portainer"`
 	D2K        D2KConfig        `json:"d2k"`
+	Assistant  AssistantConfig  `json:"assistant"`
 	Metrics    MetricsConfig    `json:"metrics"`
 	API        ConfigAPI        `json:"api"`
 }
@@ -228,6 +229,20 @@ type D2KConfig struct {
 	// Port is the port the d2k LoadBalancer Service publishes the Docker API on,
 	// at the LoadBalancer IP.
 	Port int `json:"port"`
+}
+
+// AssistantConfig covers KubeSolo's own diagnostic model. It runs llama-server
+// as a child process outside Kubernetes, only while answering, so that it still
+// works when the cluster does not.
+type AssistantConfig struct {
+	Enabled bool `json:"enabled"`
+
+	// Model is an absolute path to a GGUF model file. It is only ever read.
+	Model string `json:"model"`
+
+	// ContextSize is the context window in tokens. It sizes the memory held
+	// while answering.
+	ContextSize int `json:"contextSize"`
 }
 
 // ConfigAPI covers the config API itself.

@@ -178,3 +178,9 @@ func loadImages(containerdImagesDir string) error {
 	}
 	return nil
 }
+
+// LlamaServerBinary is the zstd-compressed llama-server the assistant runs, or
+// nil where this build has none.
+func LlamaServerBinary() []byte {
+	return llamaServerBinary
+}

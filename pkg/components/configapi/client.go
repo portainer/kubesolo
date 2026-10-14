@@ -121,6 +121,19 @@ func (c *Client) Status() (*upgrade.Status, error) {
 	return &out, c.doJSON(http.MethodGet, "/api/v1/status", nil, "", &out)
 }
 
+// Ask puts a question to KubeSolo's assistant and waits for the answer, which
+// takes far longer than any other request.
+func (c *Client) Ask(question string) (*AskResponse, error) {
+	body, err := json.Marshal(AskRequest{Question: question})
+	if err != nil {
+		return nil, err
+	}
+	slow := *c
+	slow.http = &http.Client{Transport: c.http.Transport, Timeout: askTimeout + 30*time.Second}
+	var out AskResponse
+	return &out, slow.doJSON(http.MethodPost, "/api/v1/assistant:ask", body, "application/json", &out)
+}
+
 func (c *Client) do(method, path string, body []byte, contentType string) (*Response, error) {
 	var out Response
 	if err := c.doJSON(method, path, body, contentType, &out); err != nil {

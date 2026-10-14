@@ -257,6 +257,11 @@ d2k:
   enabled: false
   namespace: d2k
   port: 2376              # the Docker API's port at the LoadBalancer IP
+
+assistant:
+  enabled: false
+  model: ""               # absolute path to a GGUF file, required when enabled
+  contextSize: 8192
 ```
 
 Only `kubernetes:` groups its contents, because that family grows: the API
@@ -276,6 +281,9 @@ of KubeSolo's own on the same port are refused before anything starts.
 |---|---|---|---|
 | `api.enabled` | `boolean` | `false` |
 | `api.socketPath` | `string` | `""` |
+| `assistant.contextSize` | `integer` | `8192` |
+| `assistant.enabled` | `boolean` | `false` |
+| `assistant.model` | `string` | `""` |
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |
 | `d2k.port` | `integer` | `2376` |

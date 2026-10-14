@@ -239,6 +239,7 @@ Full documentation is at [kubesolo.io](https://kubesolo.io/documentation). The g
 
 - [Configuration file](docs/configuration/config-file.md): every setting, its default, and the flag it replaces
 - [Configuration API](docs/configuration/config-api.md): reading and changing settings over a unix socket
+- [Assistant](docs/configuration/assistant.md): KubeSolo's own model, asked from the command line
 - [Example configuration](examples/kubesolo-config.yaml): every setting at its default, ready to copy
 - [Container mode](docs/configuration/container-mode.md): running KubeSolo itself in a container
 - [CPU pinning](docs/configuration/cpu-pinning.md): exclusive cores for latency-sensitive workloads

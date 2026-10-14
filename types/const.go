@@ -68,6 +68,23 @@ const (
 	// DefaultD2KNamespace is the namespace d2k is deployed into. Distinct from
 	// DefaultD2KDir, which names a PKI subdirectory that happens to match.
 	DefaultD2KNamespace = "d2k"
+
+	// DefaultAssistantContextSize fits a knowledge file, an evidence snapshot
+	// and an answer, while keeping the assistant's memory near 2 GB.
+	DefaultAssistantContextSize = 8192
+
+	// AssistantMinCPUs and AssistantMinMemory are the smallest host the
+	// assistant runs on. A host sold as 4 GB reports a little less, hence 3.5 GiB.
+	AssistantMinCPUs   = 2
+	AssistantMinMemory = 3584 << 20
+
+	// DefaultAssistantDir holds the extracted llama-server, relative to the
+	// base path.
+	DefaultAssistantDir = "assistant"
+
+	// DefaultAssistantStartTimeout bounds loading the model, which on slow
+	// storage such as an SD card takes minutes.
+	DefaultAssistantStartTimeout = 5 * time.Minute
 )
 
 // CPU manager policies. With the static policy, Guaranteed-QoS pods that request

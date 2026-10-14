@@ -77,6 +77,7 @@ Examples:
 		logsCmd(),
 		configCmd(),
 		d2kCmd(),
+		assistantCmd(),
 		downloadCmd(&cfg),
 		checkCmd(&cfg),
 		resetCmd(),

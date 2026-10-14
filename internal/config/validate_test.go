@@ -526,3 +526,124 @@ func TestAbsoluteAuthenticationConfigFileAccepted(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func assistantEnabled() *types.Config {
+	cfg := Defaults()
+	cfg.Assistant.Enabled = true
+	cfg.Assistant.Model = "/var/lib/models/assistant.gguf"
+	cfg.API.Enabled = true
+	return cfg
+}
+
+const gib = 1 << 30
+
+// The assistant needs room for a model of a couple of GB next to KubeSolo and
+// its workloads. A host too small for it, or an architecture llama-server is not
+// built for, turns it off rather than failing startup.
+func TestAssistantDisabledOnUnsuitableHost(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		host Host
+	}{
+		{"one cpu", Host{NumCPU: 1, GOARCH: "amd64", MemTotal: 8 * gib}},
+		{"too little memory", Host{NumCPU: 4, GOARCH: "amd64", MemTotal: 3 * gib}},
+		{"arm", Host{NumCPU: 4, GOARCH: "arm", MemTotal: 8 * gib}},
+		{"riscv64", Host{NumCPU: 4, GOARCH: "riscv64", MemTotal: 8 * gib}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := assistantEnabled()
+			warnings, err := Validate(cfg, tc.host)
+			if err != nil {
+				t.Fatalf("an unsuitable host should warn, not fail: %v", err)
+			}
+			if cfg.Assistant.Enabled {
+				t.Error("the assistant should have been disabled")
+			}
+			if len(warnings) == 0 || warnings[0].Field != "assistant.enabled" {
+				t.Errorf("expected a warning on assistant.enabled, got %v", warnings)
+			}
+		})
+	}
+}
+
+// A host sold as 4 GB reports a little less, so the threshold is 3.5 GiB.
+func TestAssistantAcceptsA4GBHost(t *testing.T) {
+	for _, host := range []Host{
+		{NumCPU: 2, GOARCH: "amd64", MemTotal: 3900 << 20},
+		{NumCPU: 6, GOARCH: "arm64", MemTotal: 7600 << 20},
+	} {
+		cfg := assistantEnabled()
+		warnings, err := Validate(cfg, host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cfg.Assistant.Enabled || len(warnings) != 0 {
+			t.Errorf("%+v: enabled=%v warnings=%v", host, cfg.Assistant.Enabled, warnings)
+		}
+	}
+}
+
+// kubesoloctl validates without knowing the memory of the host KubeSolo will
+// run on; unknown memory must not disable the assistant.
+func TestAssistantUnknownMemoryIsNotChecked(t *testing.T) {
+	cfg := assistantEnabled()
+	if _, err := Validate(cfg, testHost()); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Assistant.Enabled {
+		t.Error("the assistant should stay enabled when memory is unknown")
+	}
+}
+
+func TestAssistantModel(t *testing.T) {
+	for _, tc := range []struct {
+		model string
+		want  string
+	}{
+		{"", "assistant.model"},
+		{"models/assistant.gguf", "absolute path"},
+		{"registry.example.com/models/assistant:v1", "absolute path"},
+	} {
+		cfg := assistantEnabled()
+		cfg.Assistant.Model = tc.model
+		if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("model %q: error should mention %q, got %v", tc.model, tc.want, err)
+		}
+	}
+}
+
+func TestAssistantContextSize(t *testing.T) {
+	cfg := assistantEnabled()
+	cfg.Assistant.ContextSize = 0
+	if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), "assistant.contextSize") {
+		t.Errorf("a zero context size should be rejected, got %v", err)
+	}
+}
+
+// Settings of a disabled assistant are not checked, so the defaults stay valid.
+func TestAssistantIgnoredWhenDisabled(t *testing.T) {
+	cfg := Defaults()
+	cfg.Assistant.Model = "not a path"
+	if _, err := Validate(cfg, Host{NumCPU: 1, GOARCH: "riscv64", MemTotal: gib}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The assistant is asked through the configuration API; enabling one without
+// the other leaves no way to reach it.
+func TestAssistantWithoutTheAPIWarns(t *testing.T) {
+	cfg := assistantEnabled()
+	cfg.API.Enabled = false
+	warnings, err := Validate(cfg, testHost())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 || warnings[0].Field != "api.enabled" {
+		t.Errorf("expected a warning on api.enabled, got %v", warnings)
+	}
+
+	cfg = assistantEnabled()
+	if warnings, _ := Validate(cfg, testHost()); len(warnings) != 0 {
+		t.Errorf("unexpected warnings with the API enabled: %v", warnings)
+	}
+}

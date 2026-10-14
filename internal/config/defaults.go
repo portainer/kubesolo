@@ -90,6 +90,12 @@ func Defaults() *types.Config {
 			Port:      int(types.DefaultD2KPort),
 		},
 
+		Assistant: types.AssistantConfig{
+			Enabled:     false,
+			Model:       "",
+			ContextSize: types.DefaultAssistantContextSize,
+		},
+
 		Metrics: types.MetricsConfig{
 			Enabled:     false,
 			BindAddress: types.DefaultMetricsBindAddress,

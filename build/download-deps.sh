@@ -14,6 +14,7 @@ LOCAL_PATH_PROVISIONER_VERSION="v0.0.36"
 PAUSE_IMAGE_VERSION="3.10"
 D2K_VERSION="1.2.3"
 CRANE_VERSION="v0.21.5"
+LLAMA_CPP_VERSION="v0.6.0"
 
 # Offline mode embeds all OCI images; online mode (default) skips optional images
 OFFLINE=false
@@ -159,6 +160,32 @@ rm internal/core/embedded/bin/cni/cni-plugins.tgz
 for plugin in bridge host-local portmap loopback; do
     zstd -19 --rm -q "internal/core/embedded/bin/cni/${plugin}"
 done
+
+# Build llama-server for the assistant. llama.cpp publishes no static binaries,
+# so it is built from source; the assistant only supports amd64 and arm64.
+if [ "${ARCH}" = "amd64" ] || [ "${ARCH}" = "arm64" ]; then
+    echo "Building llama-server ${LLAMA_CPP_VERSION} for ${OS}-${ARCH} using Docker..."
+    if ! command -v docker &> /dev/null; then
+        echo "Docker is required to build llama-server but is not installed."
+        exit 1
+    fi
+    if ! docker build --platform ${OS}/${ARCH} -f build/llama-server.Dockerfile --build-arg LLAMA_CPP_VERSION=${LLAMA_CPP_VERSION} -t llama-server-builder-${ARCH} .; then
+        echo "Error building llama-server Docker image."
+        exit 1
+    fi
+    docker rm -f temp-llama-server >/dev/null 2>&1
+    if ! docker create --name temp-llama-server llama-server-builder-${ARCH} noop >/dev/null; then
+        echo "Error creating temporary container."
+        exit 1
+    fi
+    if ! docker cp temp-llama-server:/llama-server internal/core/embedded/bin/llama-server; then
+        echo "Error extracting llama-server binary from container."
+        docker rm temp-llama-server >/dev/null 2>&1
+        exit 1
+    fi
+    docker rm temp-llama-server >/dev/null
+    zstd -19 -f --rm -q internal/core/embedded/bin/llama-server
+fi
 
 # Download container images
 echo "Checking if Crane is available..."
