@@ -2,23 +2,9 @@ package cli
 
 import (
 	"runtime"
-	"strings"
 
 	"github.com/portainer/kubesolo/internal/cli/service"
 )
-
-// ensureArg returns args with flag appended if it is not already present (in
-// either bare "--flag" or "--flag=value" form). Used to guarantee container-mode
-// invariants such as --full survive an upgrade of a container created before
-// they became the default, where the original CMD is reused verbatim.
-func ensureArg(args []string, flag string) []string {
-	for _, a := range args {
-		if a == flag || strings.HasPrefix(a, flag+"=") {
-			return args
-		}
-	}
-	return append(args, flag)
-}
 
 // containerModeActive reports whether the named KubeSolo instance runs as a
 // container on this host. It is true on macOS (the binary is Linux-only, so

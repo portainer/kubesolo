@@ -211,9 +211,6 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config) error {
 	if err != nil {
 		return p.Fail("container inspect", err)
 	}
-	// Container mode always runs with upstream defaults (--full); ensure it
-	// survives upgrades of containers created before that became the default.
-	oldArgs = ensureArg(oldArgs, "--full")
 	p.OK("Current configuration retrieved", config.AppName)
 
 	// ── Pull new image, stop old container, start fresh ───────────────────────
