@@ -1,0 +1,34 @@
+{
+  "incident": {
+    "trigger": "KubeSolo did not shut down cleanly (crash, fatal error, kill or power loss)",
+    "time": "2026-10-14T06:30:00Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-14T06:15:52Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:15:52Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:16:12Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:16:12Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime",
+        "2026-10-14T06:20:00Z apiserver: Failed to update lease: Precondition failed: UID in precondition: 4a1c0e7e-2d4f-4c51-9d2b-62b1f2b0c3a1, UID in object meta: \"\"",
+        "2026-10-14T06:21:00Z apiserver: [-]poststarthook/rbac/bootstrap-roles failed: reason withheld",
+        "2026-10-14T06:22:00Z kubesolo: API server failed to start: apiserver /healthz check failed: component health check failed after multiple attempts"
+      ],
+      "host": {
+        "diskUsedPercent": 12,
+        "memoryAvailableMiB": 2900,
+        "uptimeSeconds": 86400
+      },
+      "events": [
+        "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem"
+      ]
+    }
+  },
+  "expect": {
+    "actions": [
+      "repair_database"
+    ],
+    "mentions": [
+      "database",
+      "kine"
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: runtime, kubelet",
+    "time": "2026-10-14T06:30:00Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-14T06:15:52Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:15:52Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:16:12Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:16:12Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime",
+        "2026-10-14T06:20:00Z kubelet: StopContainer for \"9f1c2e\" failed: rpc error: code = DeadlineExceeded desc = an error occurs during waiting for container \"9f1c2e\" to be killed: wait container \"9f1c2e\": context deadline exceeded",
+        "2026-10-14T06:21:00Z containerd: ttrpc: received message on inactive stream"
+      ],
+      "host": {
+        "diskUsedPercent": 12,
+        "memoryAvailableMiB": 2900,
+        "uptimeSeconds": 86400
+      },
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "ok",
+        "kine": "ok",
+        "kubelet": "PLEG is not healthy: pleg was last seen active 3m2s ago",
+        "runtime": "context deadline exceeded",
+        "webhook": "ok"
+      },
+      "events": [
+        "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem"
+      ]
+    }
+  },
+  "expect": {
+    "actions": [
+      "restart_component"
+    ],
+    "mentions": [
+      "containerd",
+      "runtime"
+    ]
+  }
+}

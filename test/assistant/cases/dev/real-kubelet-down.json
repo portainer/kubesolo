@@ -1,0 +1,43 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: kubelet",
+    "time": "2026-10-14T06:29:12.755276505Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "ok",
+        "kine": "ok",
+        "kubelet": "Get \"http://127.0.0.1:10248/healthz\": dial tcp 127.0.0.1:10248: connect: connection refused",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-14T06:19:57Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:19:57Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:19:58Z apiserver: Error removing old endpoints from kubernetes service: no API server IP addresses were listed in storage, refusing to erase all endpoints for the kubernetes Service",
+        "2026-10-14T06:20:17Z kubelet: Skipping pod synchronization: [container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]",
+        "2026-10-14T06:20:17Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:20:17Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime",
+        "2026-10-14T06:20:27Z kubeproxy: Kube-proxy configuration may be incomplete or incorrect: nodePortAddresses is unset; NodePort connections will be accepted on all local IPs. Consider using `--nodeport-addresses primary`"
+      ],
+      "events": [
+        "2026-10-14T06:16:12Z default/node/kubesolo-rnd InvalidDiskCapacity: invalid capacity 0 on image filesystem",
+        "2026-10-14T06:17:20Z default/node/kubesolo-rnd InvalidDiskCapacity: invalid capacity 0 on image filesystem"
+      ],
+      "host": {
+        "diskUsedPercent": 10,
+        "memoryAvailableMiB": 3127,
+        "uptimeSeconds": 89767
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "restart_component"
+    ],
+    "mentions": [
+      "kubelet"
+    ]
+  }
+}

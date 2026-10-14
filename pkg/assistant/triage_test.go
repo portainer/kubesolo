@@ -118,6 +118,26 @@ func TestAnIncidentIsTriagedWithTheKnowledge(t *testing.T) {
 	}
 }
 
+// The model writes the fields in the schema's order, so the action must come
+// after the summary and the cause: chosen first, it is a guess the reasoning
+// then only justifies.
+func TestTheActionIsChosenAfterTheCause(t *testing.T) {
+	tr, requests := newTestTriager(t, "diagnose")
+	pendingIncident(t, tr.Store, tr.now(), "kine")
+
+	tr.triagePending(context.Background(), tr.now())
+
+	schema := string(requestsMade(t, requests)[0].ResponseFormat.JSONSchema.Schema)
+	last := -1
+	for _, field := range []string{`"summary"`, `"cause"`, `"action"`, `"confidence"`} {
+		i := strings.Index(schema, field)
+		if i <= last {
+			t.Fatalf("%s is out of order in the schema: %s", field, schema)
+		}
+		last = i
+	}
+}
+
 // Incidents are served in the order they are triaged, so triaging oldest
 // first means a poller asking for everything after the newest ID it has seen
 // never misses one.

@@ -1,0 +1,40 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: apiserver, kubelet",
+    "time": "2026-10-14T06:30:00Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-14T06:15:52Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:15:52Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:16:12Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:16:12Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime",
+        "2026-10-14T06:20:00Z kubelet: Unable to register node with API server: Post \"https://192.168.1.35:6443/api/v1/nodes\": tls: failed to verify certificate: x509: certificate is valid for 10.43.0.1, 127.0.0.1, 192.168.1.20, not 192.168.1.35"
+      ],
+      "host": {
+        "diskUsedPercent": 12,
+        "memoryAvailableMiB": 2900,
+        "uptimeSeconds": 86400
+      },
+      "components": {
+        "apiserver": "x509: certificate is valid for 10.43.0.1, 127.0.0.1, 192.168.1.20, not 192.168.1.35",
+        "controller": "ok",
+        "coredns": "ok",
+        "kine": "ok",
+        "kubelet": "node not registered",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "events": [
+        "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem"
+      ]
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "certificate"
+    ]
+  }
+}

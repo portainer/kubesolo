@@ -52,9 +52,9 @@ const (
 const triagePrompt = `You are the KubeSolo assistant. KubeSolo is a single-node Kubernetes distribution for edge devices: one binary running containerd, kine (SQLite in place of etcd), the API server, the controller manager, the scheduler, the kubelet and CoreDNS.
 
 Triage the incident you are given, using the knowledge below. Answer with:
-- summary: one or two sentences on what went wrong;
-- cause: the most likely cause;
-- action: the one action that would fix it; report_only when none fits or a person must act;
+- summary: one sentence on what went wrong;
+- cause: the most likely cause, and the knowledge entry it matches;
+- action: the Action that entry gives for this evidence; report_only when no entry matches or a person must act;
 - confidence: low when the evidence matches nothing in the knowledge.
 
 # Knowledge
@@ -64,21 +64,26 @@ Triage the incident you are given, using the knowledge below. Answer with:
 // diagnosisFormat constrains the model's answer to a Diagnosis with an action
 // and a confidence from the fixed lists.
 var diagnosisFormat = map[string]any{
-	"type": "json_schema",
-	"json_schema": map[string]any{
-		"name": "diagnosis",
-		"schema": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"summary":    map[string]any{"type": "string", "maxLength": 400},
-				"cause":      map[string]any{"type": "string", "maxLength": 400},
-				"action":     map[string]any{"type": "string", "enum": Actions},
-				"confidence": map[string]any{"type": "string", "enum": confidences},
-			},
-			"required":             []string{"summary", "cause", "action", "confidence"},
-			"additionalProperties": false,
-		},
-	},
+	"type":        "json_schema",
+	"json_schema": map[string]any{"name": "diagnosis", "schema": diagnosisSchema},
+}
+
+// diagnosisSchema is written out rather than built from a map, whose keys
+// encoding/json sorts: the model writes the fields in the schema's order, and
+// must reach the action only after the summary and the cause.
+var diagnosisSchema = json.RawMessage(`{"type":"object","properties":{` +
+	`"summary":{"type":"string","maxLength":400},` +
+	`"cause":{"type":"string","maxLength":400},` +
+	`"action":{"type":"string","enum":` + mustJSON(Actions) + `},` +
+	`"confidence":{"type":"string","enum":` + mustJSON(confidences) + `}},` +
+	`"required":["summary","cause","action","confidence"],"additionalProperties":false}`)
+
+func mustJSON(v any) string {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
 }
 
 // Diagnose asks the model to triage the incident with the knowledge file. It

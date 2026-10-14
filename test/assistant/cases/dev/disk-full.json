@@ -1,0 +1,44 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: kine, apiserver",
+    "time": "2026-10-14T06:30:00Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-14T06:15:52Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:15:52Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:16:12Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:16:12Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime",
+        "2026-10-14T06:20:00Z kine: write /var/lib/kubesolo/kine/state.db-wal: no space left on device",
+        "2026-10-14T06:21:00Z apiserver: Error creating leases: rpc error: code = Unknown desc = disk I/O error"
+      ],
+      "host": {
+        "diskUsedPercent": 99,
+        "memoryAvailableMiB": 2900,
+        "uptimeSeconds": 86400
+      },
+      "components": {
+        "apiserver": "unexpected status 500",
+        "controller": "ok",
+        "coredns": "ok",
+        "kine": "database or disk is full",
+        "kubelet": "ok",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "events": [
+        "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem",
+        "2026-10-14T06:25:00Z default/node/edge-01 FreeDiskSpaceFailed: Failed to garbage collect required amount of images. Attempted to free 2.1GB, but only found 0 bytes eligible to free"
+      ]
+    }
+  },
+  "expect": {
+    "actions": [
+      "free_disk_space",
+      "prune_images"
+    ],
+    "mentions": [
+      "disk",
+      "space"
+    ]
+  }
+}

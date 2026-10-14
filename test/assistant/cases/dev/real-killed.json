@@ -1,0 +1,29 @@
+{
+  "incident": {
+    "trigger": "KubeSolo did not shut down cleanly (crash, fatal error, kill or power loss)",
+    "time": "2026-10-14T06:16:52.846053445Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-14T06:15:52Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:15:52Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:15:53Z apiserver: Error removing old endpoints from kubernetes service: no API server IP addresses were listed in storage, refusing to erase all endpoints for the kubernetes Service",
+        "2026-10-14T06:16:12Z kubelet: Image garbage collection failed once. Stats initialization may not have completed yet: invalid capacity 0 on image filesystem",
+        "2026-10-14T06:16:12Z kubelet: Skipping pod synchronization: [container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]",
+        "2026-10-14T06:16:12Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:16:12Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime",
+        "2026-10-14T06:16:22Z kubeproxy: Kube-proxy configuration may be incomplete or incorrect: nodePortAddresses is unset; NodePort connections will be accepted on all local IPs. Consider using `--nodeport-addresses primary`"
+      ],
+      "host": {
+        "diskUsedPercent": 10,
+        "memoryAvailableMiB": 3364,
+        "uptimeSeconds": 89027
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": []
+  }
+}

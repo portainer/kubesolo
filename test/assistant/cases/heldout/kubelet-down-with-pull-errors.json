@@ -1,0 +1,41 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: kubelet",
+    "time": "2026-10-14T06:30:00Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-14T06:15:52Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:15:52Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:16:12Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:16:12Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime"
+      ],
+      "host": {
+        "diskUsedPercent": 12,
+        "memoryAvailableMiB": 2900,
+        "uptimeSeconds": 86400
+      },
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "ok",
+        "kine": "ok",
+        "kubelet": "Get \"http://127.0.0.1:10248/healthz\": dial tcp 127.0.0.1:10248: connect: connection refused",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "events": [
+        "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem",
+        "2026-10-14T06:25:00Z shop/pod/api-7c9d ErrImagePull: Failed to pull image \"registry.example.com/shop/api:1.4\": not found",
+        "2026-10-14T06:25:00Z shop/pod/api-7c9d BackOff: Back-off pulling image \"registry.example.com/shop/api:1.4\""
+      ]
+    }
+  },
+  "expect": {
+    "actions": [
+      "restart_component"
+    ],
+    "mentions": [
+      "kubelet"
+    ]
+  }
+}

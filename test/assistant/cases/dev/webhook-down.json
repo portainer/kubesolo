@@ -1,0 +1,39 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: webhook",
+    "time": "2026-10-14T06:30:00Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-14T06:15:52Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:15:52Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:16:12Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:16:12Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime"
+      ],
+      "host": {
+        "diskUsedPercent": 12,
+        "memoryAvailableMiB": 2900,
+        "uptimeSeconds": 86400
+      },
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "ok",
+        "kine": "ok",
+        "kubelet": "ok",
+        "runtime": "ok",
+        "webhook": "Get \"https://127.0.0.1:10443/healthz\": dial tcp 127.0.0.1:10443: connect: connection refused"
+      },
+      "events": [
+        "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem"
+      ]
+    }
+  },
+  "expect": {
+    "actions": [
+      "restart_component"
+    ],
+    "mentions": [
+      "webhook"
+    ]
+  }
+}

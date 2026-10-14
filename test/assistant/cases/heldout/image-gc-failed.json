@@ -1,0 +1,44 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: kubelet",
+    "time": "2026-10-14T06:30:00Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-14T06:15:52Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-14T06:15:52Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-14T06:16:12Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-14T06:16:12Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime",
+        "2026-10-14T06:20:00Z kubelet: Image garbage collection failed multiple times in a row: failed to garbage collect required amount of images. Attempted to free 3.4GB, but only found 1.1GB eligible to free"
+      ],
+      "host": {
+        "diskUsedPercent": 91,
+        "memoryAvailableMiB": 2900,
+        "uptimeSeconds": 86400
+      },
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "ok",
+        "kine": "ok",
+        "kubelet": "unexpected status 500",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "events": [
+        "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem",
+        "2026-10-14T06:25:00Z default/node/edge-01 ImageGCFailed: failed to garbage collect required amount of images",
+        "2026-10-14T06:25:00Z default/node/edge-01 NodeHasDiskPressure: Node edge-01 status is now: NodeHasDiskPressure"
+      ]
+    }
+  },
+  "expect": {
+    "actions": [
+      "prune_images",
+      "free_disk_space"
+    ],
+    "mentions": [
+      "image",
+      "disk"
+    ]
+  }
+}
