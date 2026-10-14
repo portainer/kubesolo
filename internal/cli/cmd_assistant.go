@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/spf13/cobra"
 )
+
+var errAPIUnreachable = errors.New("the configuration API is not reachable: the assistant is reached through it, so set api.enabled to true and restart KubeSolo")
 
 func assistantCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -29,7 +33,61 @@ api.enabled must be true.`,
 			return runAsk(strings.Join(args, " "))
 		},
 	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "incidents [ID]",
+		Short: "List the incidents the assistant has recorded, or show one",
+		Long: `List the incidents the assistant has recorded, oldest first, or show one
+whole as JSON. The last 100 are kept.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				return runIncident(args[0])
+			}
+			return runIncidents()
+		},
+	})
 	return cmd
+}
+
+func runIncidents() error {
+	p := ui.New()
+	h, err := findHost()
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	if h.api == nil {
+		return p.Fail("assistant", errAPIUnreachable)
+	}
+	list, err := h.api.Incidents("")
+	if err != nil {
+		return p.Fail("assistant", err)
+	}
+	if len(list) == 0 {
+		p.Info("no incidents recorded")
+		return nil
+	}
+	for _, inc := range list {
+		fmt.Printf("%s  %s  %s\n", inc.ID, inc.Kind, inc.Trigger)
+	}
+	return nil
+}
+
+func runIncident(id string) error {
+	p := ui.New()
+	h, err := findHost()
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	if h.api == nil {
+		return p.Fail("assistant", errAPIUnreachable)
+	}
+	inc, err := h.api.Incident(id)
+	if err != nil {
+		return p.Fail("assistant", err)
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(inc)
 }
 
 func runAsk(question string) error {
@@ -39,7 +97,7 @@ func runAsk(question string) error {
 		return p.Fail("KubeSolo", err)
 	}
 	if h.api == nil {
-		return p.Fail("assistant", errors.New("the configuration API is not reachable: the assistant is asked through it, so set api.enabled to true and restart KubeSolo"))
+		return p.Fail("assistant", errAPIUnreachable)
 	}
 
 	p.Step("asking the assistant (this can take a minute or more)")

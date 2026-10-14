@@ -13,6 +13,7 @@ import (
 
 	kubesolokubernetes "github.com/portainer/kubesolo/internal/kubernetes"
 	"github.com/portainer/kubesolo/internal/runtime/network"
+	"github.com/portainer/kubesolo/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -60,6 +61,16 @@ func (s *Service) buildProbers() map[string]prober {
 		ComponentWebhook:    probeTCP(net.JoinHostPort("127.0.0.1", strconv.Itoa(s.embedded.WebhookPort))),
 		ComponentCoreDNS:    probeCoreDNS(clientCache),
 	}
+}
+
+// Probers returns the same component health probes, for the assistant, which
+// runs them whether or not the metrics endpoint is enabled.
+func Probers(embedded types.Embedded) map[string]func(context.Context) error {
+	out := map[string]func(context.Context) error{}
+	for name, probe := range (&Service{embedded: embedded}).buildProbers() {
+		out[name] = probe
+	}
+	return out
 }
 
 // newProbeHTTPClient returns a small http.Client suitable for plain-HTTP

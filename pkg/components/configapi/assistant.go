@@ -33,7 +33,7 @@ type AskResponse struct {
 
 func (s *Service) handleAsk(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Assistant == nil {
-		writeErrorFor(w, r, http.StatusNotFound, ErrorResponse{Error: "the assistant is not enabled: set assistant.enabled to true and restart KubeSolo"})
+		writeErrorFor(w, r, http.StatusNotFound, assistantDisabled)
 		return
 	}
 
@@ -67,5 +67,45 @@ func (s *Service) handleAsk(w http.ResponseWriter, r *http.Request) {
 		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 	default:
 		writeJSON(w, http.StatusOK, AskResponse{Answer: answer})
+	}
+}
+
+// Incidents reads the incidents the assistant has recorded.
+type Incidents interface {
+	List(since string) ([]assistant.Summary, error)
+	Get(id string) (*assistant.Incident, error)
+}
+
+// assistantDisabled is the answer to every assistant endpoint when it is off.
+var assistantDisabled = ErrorResponse{Error: "the assistant is not enabled: set assistant.enabled to true and restart KubeSolo"}
+
+// handleIncidents lists incidents after ?since=<id>, oldest first. A poller
+// passes the newest ID it has seen.
+func (s *Service) handleIncidents(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Incidents == nil {
+		writeErrorFor(w, r, http.StatusNotFound, assistantDisabled)
+		return
+	}
+	list, err := s.opts.Incidents.List(r.URL.Query().Get("since"))
+	if err != nil {
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Service) handleIncident(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Incidents == nil {
+		writeErrorFor(w, r, http.StatusNotFound, assistantDisabled)
+		return
+	}
+	inc, err := s.opts.Incidents.Get(r.PathValue("id"))
+	switch {
+	case errors.Is(err, assistant.ErrNoIncident):
+		writeErrorFor(w, r, http.StatusNotFound, ErrorResponse{Error: err.Error()})
+	case err != nil:
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+	default:
+		writeJSON(w, http.StatusOK, inc)
 	}
 }

@@ -85,7 +85,7 @@ func SetLoggingMode(mode string) {
 		return
 	}
 
-	log.Logger = log.Output(out)
+	log.Logger = log.Output(teeErrors{out})
 	setBridgeOutput(out)
 }
 
@@ -98,7 +98,7 @@ func SetOutput(w io.Writer) {
 		FormatMessage: formatMessage,
 		NoColor:       true,
 	}
-	log.Logger = log.Output(out)
+	log.Logger = log.Output(teeErrors{out})
 	setBridgeOutput(out)
 }
 
@@ -111,7 +111,7 @@ func isTerminal(f *os.File) bool {
 }
 
 func setBridgeOutput(out io.Writer) {
-	l := zerolog.New(out).With().Timestamp().Logger()
+	l := zerolog.New(teeErrors{out}).With().Timestamp().Logger()
 	bridge.Store(&l)
 }
 

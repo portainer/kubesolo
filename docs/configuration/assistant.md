@@ -100,6 +100,33 @@ sudo curl -s --unix-socket /var/lib/kubesolo/config.sock \
 
 ---
 
+## Incidents
+
+With the assistant enabled, KubeSolo records an **incident** when something goes wrong with KubeSolo itself:
+
+| Trigger | Recorded |
+|---|---|
+| KubeSolo did not shut down cleanly: a crash, a fatal error, a kill or a power loss | On the next start. A crash within 15 minutes of the previous one is part of the same crash loop and is not recorded again |
+| A control plane component (containerd, kine, API server, controller manager, kubelet, webhook, CoreDNS) fails its health check for 5 minutes | Once per outage, however many components it takes down. A new outage needs every component healthy in between |
+
+Each incident carries a snapshot of the node at the time: each component's health, KubeSolo's latest error log lines, recent Kubernetes warning events, and disk and memory use. A snapshot is a few KB, and at most 12 KB. The 100 most recent incidents are kept, under `/var/lib/kubesolo/assistant/incidents/`.
+
+```bash
+sudo kubesoloctl assistant incidents          # list, oldest first
+sudo kubesoloctl assistant incidents <id>     # one incident, as JSON
+```
+
+They are served by the configuration API, including on the Portainer agent's socket:
+
+| Request | Returns |
+|---|---|
+| `GET /api/v1/assistant/incidents?since=<id>` | Each incident after `<id>` (all without it), oldest first: `id`, `time`, `kind`, `trigger` |
+| `GET /api/v1/assistant/incidents/<id>` | The incident with its snapshot, or `404` |
+
+IDs sort in time order, so a poller asks for everything after the newest ID it has seen, and nothing needs acknowledging.
+
+---
+
 ## Troubleshooting
 
 ```bash

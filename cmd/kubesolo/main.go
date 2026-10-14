@@ -21,6 +21,7 @@ import (
 	"github.com/portainer/kubesolo/internal/config/flags"
 	"github.com/portainer/kubesolo/internal/core/embedded"
 	"github.com/portainer/kubesolo/internal/core/pki"
+	kubesolokubernetes "github.com/portainer/kubesolo/internal/kubernetes"
 	"github.com/portainer/kubesolo/internal/logging"
 	"github.com/portainer/kubesolo/internal/runtime/cri"
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
@@ -30,6 +31,7 @@ import (
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/internal/upgrade/executor"
 	"github.com/portainer/kubesolo/pkg/assistant"
+	"github.com/portainer/kubesolo/pkg/assistant/node"
 	"github.com/portainer/kubesolo/pkg/components/configapi"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/d2k"
@@ -77,6 +79,11 @@ type kubesolo struct {
 	startupFile *types.Config
 
 	embedded types.Embedded
+
+	// incidents and errorLog are the assistant's incident recording; nil when
+	// the assistant is disabled.
+	incidents *assistant.Store
+	errorLog  *assistant.ErrorLog
 }
 
 // the channels for the kubesolo application
@@ -266,6 +273,11 @@ func (s *kubesolo) run() {
 		Str("build-date", BuildDate).
 		Str("commit", Commit).
 		Msg("starting kubesolo...")
+
+	if s.cfg.Assistant.Enabled {
+		s.startIncidentRecording(ctx)
+		defer s.stopIncidentRecording()
+	}
 
 	log.Info().Str("component", "kubesolo").Msg("ensuring all embedded dependencies are available...")
 	if err := embedded.EnsureEmbeddedDependencies(s.embedded); err != nil {
@@ -480,6 +492,10 @@ func (s *kubesolo) run() {
 	// the previous process's.
 	if err := upgrade.RecordStarted(upgrade.NewLayout(s.cfg.Path, *flags.Config), s.startupConfig); err != nil {
 		log.Warn().Str("component", "upgrade").Err(err).Msg("could not record that KubeSolo has started")
+	}
+
+	if s.incidents != nil {
+		s.wg.Go(func() { s.watchComponents(ctx) })
 	}
 
 	s.wg.Go(func() { s.verifyPendingUpgrade(ctx) })
@@ -874,6 +890,7 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 			ContainerMode: s.embedded.ContainerMode,
 		},
 		Assistant: s.newAssistant(ctx),
+		Incidents: s.incidentsForAPI(),
 		Lifecycle: &configapi.Lifecycle{
 			Version:       Version,
 			Commit:        Commit,
@@ -948,13 +965,13 @@ func (s *kubesolo) fetchAssistantModel(ctx context.Context, a *assistant.Assista
 
 	for {
 		log.Info().Str("component", "assistant").Str("model", ref).Msg("fetching the model...")
-		path, err := assistant.FetchModel(ctx, c, ref, s.embedded.ContainerdRegistryConfigDir, s.embedded.ContainerdRootDir)
+		path, err := node.FetchModel(ctx, c, ref, s.embedded.ContainerdRegistryConfigDir, s.embedded.ContainerdRootDir)
 		a.SetModel(path, err)
 		if err == nil {
 			log.Info().Str("component", "assistant").Str("model", ref).Msg("model is ready")
 			return
 		}
-		if errors.Is(err, assistant.ErrNotAModel) {
+		if errors.Is(err, node.ErrNotAModel) {
 			log.Error().Str("component", "assistant").Str("model", ref).Err(err).Msg("cannot use the model")
 			return
 		}
@@ -965,6 +982,87 @@ func (s *kubesolo) fetchAssistantModel(ctx context.Context, a *assistant.Assista
 			return
 		}
 	}
+}
+
+// startIncidentRecording starts keeping KubeSolo's recent errors, and records
+// an incident if the previous run did not shut down cleanly. It runs before
+// anything else, so that a crash at any later point is caught on the next
+// start. A failure here costs the assistant its incidents, never KubeSolo.
+func (s *kubesolo) startIncidentRecording(ctx context.Context) {
+	dir := filepath.Join(s.cfg.Path, types.DefaultAssistantDir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		log.Error().Str("component", "assistant").Err(err).Msg("cannot record incidents")
+		return
+	}
+	errorsFile := filepath.Join(dir, "errors.log")
+	previous := assistant.PreviousErrors(errorsFile)
+	unclean, err := assistant.MarkRunning(filepath.Join(dir, "running"))
+	if err != nil {
+		log.Error().Str("component", "assistant").Err(err).Msg("cannot record incidents")
+		return
+	}
+
+	s.incidents = assistant.NewStore(filepath.Join(dir, "incidents"))
+	s.errorLog = assistant.NewErrorLog(errorsFile)
+	logging.SetErrorSink(s.errorLog)
+	s.wg.Go(func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = s.errorLog.Flush()
+			}
+		}
+	})
+
+	if unclean {
+		if err := assistant.RecordUncleanShutdown(s.incidents, previous, s.cfg.Path, filepath.Join(dir, "last-crash"), time.Now()); err != nil {
+			log.Error().Str("component", "assistant").Err(err).Msg("cannot record the incident")
+		}
+	}
+}
+
+// stopIncidentRecording marks a clean shutdown. A crash or a fatal error never
+// reaches it, which is how the next start knows.
+func (s *kubesolo) stopIncidentRecording() {
+	if s.incidents == nil {
+		return
+	}
+	_ = s.errorLog.Flush()
+	if err := assistant.MarkStopped(filepath.Join(s.cfg.Path, types.DefaultAssistantDir, "running")); err != nil {
+		log.Error().Str("component", "assistant").Err(err).Msg("cannot mark a clean shutdown")
+	}
+}
+
+// watchComponents records an incident when control plane components stay
+// unhealthy. It starts once KubeSolo has come up, so startup is not an outage.
+func (s *kubesolo) watchComponents(ctx context.Context) {
+	collector := &assistant.Collector{
+		Probes:  metrics.Probers(s.embedded),
+		Errors:  s.errorLog.Lines,
+		DataDir: s.cfg.Path,
+	}
+	if cs, err := kubesolokubernetes.GetKubernetesClient(s.embedded.AdminKubeconfigFile); err == nil {
+		collector.Events = node.WarningEvents(cs)
+	}
+	(&assistant.Watcher{
+		Collector: collector,
+		Store:     s.incidents,
+		Interval:  assistant.DefaultWatchInterval,
+		Threshold: assistant.DefaultUnhealthyThreshold,
+	}).Run(ctx)
+}
+
+// incidentsForAPI is the store the API serves, or nil when the assistant is
+// disabled. It must be an untyped nil, which the API reads as disabled.
+func (s *kubesolo) incidentsForAPI() configapi.Incidents {
+	if s.incidents == nil {
+		return nil
+	}
+	return s.incidents
 }
 
 // agentSocketPath is the API socket mounted into the Portainer agent's pod, or

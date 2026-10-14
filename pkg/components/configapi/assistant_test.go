@@ -20,6 +20,10 @@ func (f fakeAsker) Ask(ctx context.Context, question string) (string, error) { r
 // assistantAPI runs the API with the given assistant, nil meaning disabled, and
 // returns a client for it.
 func assistantAPI(t *testing.T, asker Asker) *Client {
+	return assistantAPIWith(t, asker, nil)
+}
+
+func assistantAPIWith(t *testing.T, asker Asker, incidents Incidents) *Client {
 	t.Helper()
 	dir := shortTempDir(t)
 	configPath := filepath.Join(dir, "config.yaml")
@@ -34,6 +38,7 @@ func assistantAPI(t *testing.T, asker Asker) *Client {
 		ConfigPath: configPath,
 		Host:       config.Host{NumCPU: 4, GOARCH: "amd64"},
 		Assistant:  asker,
+		Incidents:  incidents,
 	})
 	done := make(chan error, 1)
 	go func() { done <- svc.Run() }()
@@ -116,5 +121,75 @@ func TestAskOutlastsTheWriteTimeout(t *testing.T) {
 	}
 	if got.Answer != "slow answer" {
 		t.Errorf("answer = %q", got.Answer)
+	}
+}
+
+func incidentsAPI(t *testing.T) (*Client, *assistant.Store, []string) {
+	t.Helper()
+	store := assistant.NewStore(t.TempDir())
+	base := time.Date(2026, 10, 14, 3, 0, 0, 0, time.UTC)
+	var ids []string
+	for i, trigger := range []string{"unhealthy for 5m0s: kine", "KubeSolo did not shut down cleanly"} {
+		at := base.Add(time.Duration(i) * time.Hour)
+		inc := assistant.Incident{ID: at.Format("20060102T150405.000000000Z"), Time: at, Kind: assistant.KindKubeSolo, Trigger: trigger}
+		inc.Snapshot.Components = map[string]string{"kine": "connection refused"}
+		if err := store.Save(inc); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, inc.ID)
+	}
+	return assistantAPIWith(t, nil, store), store, ids
+}
+
+func TestIncidentsArePolledAfterACursor(t *testing.T) {
+	c, _, ids := incidentsAPI(t)
+
+	all, err := c.Incidents("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 || all[0].ID != ids[0] || all[1].Trigger != "KubeSolo did not shut down cleanly" {
+		t.Fatalf("incidents = %+v", all)
+	}
+
+	newer, err := c.Incidents(ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(newer) != 1 || newer[0].ID != ids[1] {
+		t.Errorf("since %s = %+v", ids[0], newer)
+	}
+
+	none, err := c.Incidents(ids[1])
+	if err != nil || len(none) != 0 {
+		t.Errorf("nothing new should be an empty list, got %+v, %v", none, err)
+	}
+}
+
+func TestIncidentIsReadWhole(t *testing.T) {
+	c, _, ids := incidentsAPI(t)
+
+	inc, err := c.Incident(ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inc.Snapshot.Components["kine"] != "connection refused" {
+		t.Errorf("incident = %+v", inc)
+	}
+
+	_, err = c.Incident("20991231T000000.000000000Z")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
+		t.Errorf("an unknown incident should be 404, got %v", err)
+	}
+}
+
+func TestIncidentsWhenTheAssistantIsDisabled(t *testing.T) {
+	c := assistantAPIWith(t, nil, nil)
+
+	_, err := c.Incidents("")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound || !strings.Contains(err.Error(), "assistant.enabled") {
+		t.Fatalf("expected a 404 telling how to enable it, got %v", err)
 	}
 }

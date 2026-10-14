@@ -71,6 +71,8 @@ func (s *Service) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/config", s.handleDelete)
 	mux.HandleFunc("POST /api/v1/config:validate", s.handleValidate)
 	mux.HandleFunc("POST /api/v1/assistant:ask", s.handleAsk)
+	mux.HandleFunc("GET /api/v1/assistant/incidents", s.handleIncidents)
+	mux.HandleFunc("GET /api/v1/assistant/incidents/{id}", s.handleIncident)
 
 	if s.opts.Lifecycle != nil {
 		mux.HandleFunc("POST /api/v1/upgrade", s.handleUpgrade)

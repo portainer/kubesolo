@@ -8,9 +8,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/portainer/kubesolo/internal/upgrade"
+	"github.com/portainer/kubesolo/pkg/assistant"
 	"github.com/portainer/kubesolo/types"
 )
 
@@ -132,6 +134,19 @@ func (c *Client) Ask(question string) (*AskResponse, error) {
 	slow.http = &http.Client{Transport: c.http.Transport, Timeout: askTimeout + 30*time.Second}
 	var out AskResponse
 	return &out, slow.doJSON(http.MethodPost, "/api/v1/assistant:ask", body, "application/json", &out)
+}
+
+// Incidents lists the assistant's incidents after since, oldest first; an
+// empty since lists them all.
+func (c *Client) Incidents(since string) ([]assistant.Summary, error) {
+	var out []assistant.Summary
+	return out, c.doJSON(http.MethodGet, "/api/v1/assistant/incidents?since="+url.QueryEscape(since), nil, "", &out)
+}
+
+// Incident reads one incident whole.
+func (c *Client) Incident(id string) (*assistant.Incident, error) {
+	var out assistant.Incident
+	return &out, c.doJSON(http.MethodGet, "/api/v1/assistant/incidents/"+url.PathEscape(id), nil, "", &out)
 }
 
 func (c *Client) do(method, path string, body []byte, contentType string) (*Response, error) {

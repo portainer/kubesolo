@@ -1,4 +1,7 @@
-package assistant
+// Package node holds the parts of the assistant that talk to the node's
+// containerd and Kubernetes. They are kept out of package assistant so that
+// kubesoloctl, which uses its API types, does not link either client.
+package node
 
 import (
 	"context"
