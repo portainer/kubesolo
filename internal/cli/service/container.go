@@ -123,7 +123,6 @@ type containerManager struct {
 }
 
 func (m *containerManager) cname() string { return ContainerNameFor(m.name) }
-func (m *containerManager) vname() string { return ContainerNameFor(m.name) + "-data" }
 
 func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	prev, err := InspectInstance(m.name)
@@ -271,7 +270,7 @@ func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, prev *c
 		// outside the container and shared with every other instance.
 		&container.HostConfig{
 			Privileged:    true,
-			Binds:         []string{m.vname() + ":/var/lib/kubesolo"},
+			Binds:         containerBinds(name),
 			PortBindings:  portBindings,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
 			NetworkMode:   container.NetworkMode(m.nname()),
@@ -347,6 +346,17 @@ func proxyEnv(proxy string, subnets []string) []string {
 		"HTTP_PROXY=" + proxy,
 		"HTTPS_PROXY=" + proxy,
 		"NO_PROXY=" + strings.Join(noProxy, ","),
+	}
+}
+
+// containerBinds returns the mounts of the named instance's container: its data
+// volume, and the kernel modules of the engine's host, read-only, as kind mounts
+// them, so that KubeSolo can load the netfilter modules it needs on a host that
+// has not loaded them yet.
+func containerBinds(name string) []string {
+	return []string{
+		ContainerNameFor(name) + "-data:" + containerDataDir,
+		"/lib/modules:/lib/modules:ro",
 	}
 }
 
@@ -507,7 +517,7 @@ func ResetContainer(name string) error {
 		},
 		&container.HostConfig{
 			Privileged:    true,
-			Binds:         []string{vname + ":/var/lib/kubesolo"},
+			Binds:         containerBinds(name),
 			PortBindings:  portBindings,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
 			NetworkMode:   container.NetworkMode(nname),
