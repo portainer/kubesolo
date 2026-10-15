@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/distribution/reference"
@@ -15,6 +16,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/preflight"
 	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/spf13/cobra"
 )
@@ -226,6 +228,34 @@ func containerUpgradeImage(current, explicit, version string) (string, error) {
 	return "", fmt.Errorf("this instance runs %s, not a %s release image; pass --image with the image to upgrade to", current, config.DefaultContainerImage)
 }
 
+// containerUpgradeArgs returns the command line and, when it changes, the
+// configuration file of the container an upgrade creates. A container still
+// configured by flags moves onto a configuration file, as a host install does on
+// upgrade, once the target release reads one; settings that mean nothing in a
+// container are left out and returned as dropped. A container already on a
+// configuration file keeps it.
+func containerUpgradeArgs(oldArgs []string, cfg *config.Config) (args []string, doc []byte, dropped []string, err error) {
+	for _, a := range oldArgs {
+		if strings.HasPrefix(a, "--config=") {
+			return oldArgs, nil, nil, nil
+		}
+	}
+	// A custom image is not described by --version; it is taken to be current.
+	if cfg.ContainerImage == "" || cfg.ContainerImage == config.DefaultContainerImage+":"+cfg.Version {
+		if cmp, ok := compareVersions(cfg.Version, config.MinConfigFileVersion); ok && cmp < 0 {
+			return oldArgs, nil, nil, nil
+		}
+	}
+	resolved, _, dropped, _, err := config.ContainerConfig(oldArgs)
+	if err != nil {
+		return nil, nil, dropped, err
+	}
+	if doc, err = kubesoloconfig.Marshal(resolved); err != nil {
+		return nil, nil, dropped, err
+	}
+	return []string{"--config=" + config.ContainerConfigFile}, doc, dropped, nil
+}
+
 // checkContainerVersion refuses a target that is not newer than the running
 // version unless forced, as a host upgrade does.
 func checkContainerVersion(running, target string, force bool) error {
@@ -276,6 +306,16 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions)
 	if versionErr == nil {
 		p.Info(fmt.Sprintf("Running %s, upgrading to %s", running, cfg.Version))
 	}
+	newArgs, newDoc, dropped, err := containerUpgradeArgs(oldArgs, cfg)
+	if err != nil {
+		return p.Fail("configuration", fmt.Errorf("cannot move the instance's flags onto a configuration file: %w", err))
+	}
+	if newDoc != nil {
+		p.Info("Moving the instance's settings from flags onto " + config.ContainerConfigFile)
+		for _, f := range dropped {
+			p.Warn(f + " is ignored in container mode: kubesoloctl or the container decides it")
+		}
+	}
 	p.OK("Current configuration retrieved", config.AppName)
 
 	// ── Pull the new image while the cluster keeps running ────────────────────
@@ -299,7 +339,7 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions)
 	p.OK("Datastore backed up", "rollback target: "+current)
 
 	// ── Replace the container, keeping the original runtime flags ─────────────
-	err = service.ReplaceContainer(cfg.Name, cfg, oldArgs, nil, prev)
+	err = service.ReplaceContainer(cfg.Name, cfg, newArgs, newDoc, prev)
 	var apiAddr string
 	var data []byte
 	if err == nil {

@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/portainer/kubesolo/internal/cli/config"
 )
 
 func TestContainerUpgradeImage(t *testing.T) {
@@ -41,5 +43,34 @@ func TestCheckContainerVersion(t *testing.T) {
 		if err := checkContainerVersion("v1.2.2", target, true); err != nil {
 			t.Errorf("%s with --force: %v", target, err)
 		}
+	}
+}
+
+func TestContainerUpgradeArgs(t *testing.T) {
+	flags := []string{"--path=/var/lib/kubesolo", "--mtu=1400", "--d2k", "--d2k-namespace=d2k", "--debug"}
+
+	args, doc, dropped, err := containerUpgradeArgs(flags, &config.Config{Version: "v1.2.2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(args, " ") != "--config=/etc/kubesolo/config.yaml" || doc == nil {
+		t.Fatalf("args = %v, doc = %s", args, doc)
+	}
+	if strings.Join(dropped, " ") != "--mtu" {
+		t.Errorf("dropped = %v", dropped)
+	}
+	if !strings.Contains(string(doc), "debug: true") || strings.Contains(string(doc), "mtu: 1400") {
+		t.Errorf("doc:\n%s", doc)
+	}
+
+	// Already on a configuration file: kept as it is.
+	onFile := []string{"--config=/etc/kubesolo/config.yaml"}
+	if args, doc, _, err := containerUpgradeArgs(onFile, &config.Config{Version: "v1.2.3"}); err != nil || doc != nil || strings.Join(args, " ") != onFile[0] {
+		t.Errorf("config file: args = %v, doc = %s, err = %v", args, doc, err)
+	}
+
+	// A target that predates the configuration file keeps the flags.
+	if args, doc, _, err := containerUpgradeArgs(flags, &config.Config{Version: "v1.2.0"}); err != nil || doc != nil || len(args) != len(flags) {
+		t.Errorf("old target: args = %v, doc = %s, err = %v", args, doc, err)
 	}
 }
