@@ -149,6 +149,26 @@ func (c *Client) Incident(id string) (*assistant.Incident, error) {
 	return &out, c.doJSON(http.MethodGet, "/api/v1/assistant/incidents/"+url.PathEscape(id), nil, "", &out)
 }
 
+// Approve agrees with the action suggested for an incident.
+func (c *Client) Approve(id, note string) (*assistant.Incident, error) {
+	return c.review(id, "approve", ReviewRequest{Note: note})
+}
+
+// Reject disagrees with the action suggested for an incident; action, if
+// given, is the right one.
+func (c *Client) Reject(id, action, note string) (*assistant.Incident, error) {
+	return c.review(id, "reject", ReviewRequest{Action: action, Note: note})
+}
+
+func (c *Client) review(id, verb string, req ReviewRequest) (*assistant.Incident, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	var out assistant.Incident
+	return &out, c.doJSON(http.MethodPost, "/api/v1/assistant/incidents/"+url.PathEscape(id)+":"+verb, body, "application/json", &out)
+}
+
 func (c *Client) do(method, path string, body []byte, contentType string) (*Response, error) {
 	var out Response
 	if err := c.doJSON(method, path, body, contentType, &out); err != nil {

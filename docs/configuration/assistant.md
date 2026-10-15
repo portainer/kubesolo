@@ -165,10 +165,40 @@ They are served by the configuration API, including on the Portainer agent's soc
 
 | Request | Returns |
 |---|---|
-| `GET /api/v1/assistant/incidents?since=<id>` | Each triaged incident after `<id>` (all without it), oldest first: `id`, `time`, `kind`, `trigger`, `triage` |
-| `GET /api/v1/assistant/incidents/<id>` | The incident with its snapshot and triage, or `404` |
+| `GET /api/v1/assistant/incidents?since=<id>` | Each triaged incident after `<id>` (all without it), oldest first: `id`, `time`, `kind`, `trigger`, `triage`, `review` |
+| `GET /api/v1/assistant/incidents/<id>` | The incident with its snapshot, triage and review, or `404` |
+| `POST /api/v1/assistant/incidents/<id>:approve` | Records an approval; see [Reviews](#reviews) |
+| `POST /api/v1/assistant/incidents/<id>:reject` | Records a rejection |
 
 IDs sort in time order, and incidents are served in that order, so a poller asks for everything after the newest ID it has seen, and nothing needs acknowledging.
+
+### Reviews
+
+A person can say whether a diagnosis was right. Reviews are kept with the incident, as the labelled data the model and its knowledge are measured — and later trained — against. **No action is carried out yet**: approving only records agreement.
+
+```bash
+sudo kubesoloctl assistant approve <id> --note "kubelet was wedged"
+sudo kubesoloctl assistant reject <id> --action repair_database --note "lease UID mismatch"
+```
+
+Over the API, both take an optional body, `{"action": "...", "note": "..."}`, and return the incident:
+
+```json
+"review": {
+  "verdict": "rejected",
+  "action": "repair_database",
+  "note": "lease UID mismatch",
+  "time": "2026-10-15T09:00:00Z"
+}
+```
+
+| | Approve | Reject |
+|---|---|---|
+| Allowed when | The action is rated `high` and is not `report_only` | Any served incident, even one whose triage failed or was skipped |
+| `action` | The suggested one | The right one, if the reviewer knows it; a missed fix behind `report_only` is worth recording too |
+| Refused with | `409` when no action is offered, `400` for another action | `400` for an unknown action |
+
+A later review replaces an earlier one. Reviews are pruned with their incident, after the latest 100.
 
 ---
 

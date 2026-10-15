@@ -194,3 +194,86 @@ func TestIncidentsWhenTheAssistantIsDisabled(t *testing.T) {
 		t.Fatalf("expected a 404 telling how to enable it, got %v", err)
 	}
 }
+
+// reviewAPI serves a store holding a high-rated restart and a medium-rated
+// one.
+func reviewAPI(t *testing.T) (c *Client, high, medium string) {
+	t.Helper()
+	store := assistant.NewStore(t.TempDir())
+	base := time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
+	var ids []string
+	for i, p := range []float64{0.97, 0.75} {
+		at := base.Add(time.Duration(i) * time.Minute)
+		rating := assistant.RatingHigh
+		if p < assistant.ActionThreshold {
+			rating = assistant.RatingMedium
+		}
+		inc := assistant.Incident{ID: at.Format("20060102T150405.000000000Z"), Time: at, Kind: assistant.KindKubeSolo, Trigger: "unhealthy for 5m0s: kubelet",
+			Triage: &assistant.Triage{Status: assistant.TriageDone, Diagnosis: assistant.Diagnosis{Summary: "s", Action: "restart_component", ActionProbability: p, Rating: rating}}}
+		if err := store.Save(inc); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, inc.ID)
+	}
+	return assistantAPIWith(t, nil, store), ids[0], ids[1]
+}
+
+func TestApproveAndRejectOverTheAPI(t *testing.T) {
+	c, high, medium := reviewAPI(t)
+
+	inc, err := c.Approve(high, "kubelet was wedged")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := inc.Review; r == nil || r.Verdict != assistant.VerdictApproved || r.Action != "restart_component" || r.Note != "kubelet was wedged" {
+		t.Errorf("review = %+v", inc.Review)
+	}
+
+	inc, err = c.Reject(medium, "clean_orphaned_containers", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := inc.Review; r == nil || r.Verdict != assistant.VerdictRejected || r.Action != "clean_orphaned_containers" {
+		t.Errorf("review = %+v", inc.Review)
+	}
+
+	// Polled incidents carry their review.
+	list, _ := c.Incidents("")
+	if len(list) != 2 || list[0].Review == nil || list[1].Review == nil {
+		t.Errorf("incidents = %+v", list)
+	}
+}
+
+func TestReviewsRefusedOverTheAPI(t *testing.T) {
+	c, high, medium := reviewAPI(t)
+	for _, tc := range []struct {
+		name   string
+		review func() error
+		status int
+	}{
+		{"approving what is not offered", func() error { _, err := c.Approve(medium, ""); return err }, http.StatusConflict},
+		{"an unknown action", func() error { _, err := c.Reject(high, "reboot", ""); return err }, http.StatusBadRequest},
+		{"an unknown incident", func() error { _, err := c.Approve("20991231T000000.000000000Z", ""); return err }, http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var apiErr *APIError
+			if err := tc.review(); !errors.As(err, &apiErr) || apiErr.Status != tc.status {
+				t.Errorf("got %v, want status %d", err, tc.status)
+			}
+		})
+	}
+
+	// Only approve and reject are verbs on an incident.
+	var apiErr *APIError
+	if err := c.doJSON(http.MethodPost, "/api/v1/assistant/incidents/"+high+":delete", nil, "", nil); !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
+		t.Errorf("an unknown verb: got %v, want 404", err)
+	}
+}
+
+func TestReviewsWhenTheAssistantIsDisabled(t *testing.T) {
+	c := assistantAPIWith(t, nil, nil)
+	var apiErr *APIError
+	if _, err := c.Approve("20261015T090000.000000000Z", ""); !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound || !strings.Contains(err.Error(), "assistant.enabled") {
+		t.Errorf("expected a 404 telling how to enable it, got %v", err)
+	}
+}

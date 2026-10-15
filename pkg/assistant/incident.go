@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -39,6 +40,9 @@ type Incident struct {
 	// Triage is nil until the incident has been triaged; until then it is not
 	// served.
 	Triage *Triage `json:"triage,omitempty"`
+
+	// Review is what a person made of the diagnosis; nil until reviewed.
+	Review *Review `json:"review,omitempty"`
 }
 
 // Summary is an incident without its snapshot, for listing.
@@ -48,6 +52,7 @@ type Summary struct {
 	Kind    string    `json:"kind"`
 	Trigger string    `json:"trigger"`
 	Triage  *Triage   `json:"triage"`
+	Review  *Review   `json:"review,omitempty"`
 }
 
 // Triage outcomes.
@@ -95,6 +100,10 @@ func newIncidentID(t time.Time) string {
 type Store struct {
 	dir   string
 	added chan struct{}
+
+	// mu serialises writes, so that a review and a triage cannot overwrite
+	// each other.
+	mu sync.Mutex
 }
 
 // NewStore returns a store in dir, created on the first save.
@@ -109,6 +118,26 @@ func (s *Store) Added() <-chan struct{} {
 
 // Save writes the incident and deletes the oldest beyond MaxIncidents.
 func (s *Store) Save(inc Incident) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.save(inc)
+}
+
+// update applies change to the triaged incident id and saves it.
+func (s *Store) update(id string, change func(*Incident) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	inc, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	if err := change(inc); err != nil {
+		return err
+	}
+	return s.save(*inc)
+}
+
+func (s *Store) save(inc Incident) error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
 	}
@@ -165,7 +194,7 @@ func (s *Store) List(since string) ([]Summary, error) {
 		if err != nil {
 			continue // deleted by a concurrent save, or not triaged yet
 		}
-		out = append(out, Summary{ID: inc.ID, Time: inc.Time, Kind: inc.Kind, Trigger: inc.Trigger, Triage: inc.Triage})
+		out = append(out, Summary{ID: inc.ID, Time: inc.Time, Kind: inc.Kind, Trigger: inc.Trigger, Triage: inc.Triage, Review: inc.Review})
 	}
 	return out, nil
 }
