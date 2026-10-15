@@ -74,6 +74,7 @@ func (s *Service) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/assistant/incidents", s.handleIncidents)
 	mux.HandleFunc("GET /api/v1/assistant/incidents/{id}", s.handleIncident)
 	mux.HandleFunc("POST /api/v1/assistant/incidents/{idverb}", s.handleReview)
+	mux.HandleFunc("GET /api/v1/assistant/report", s.handleReport)
 
 	if s.opts.Lifecycle != nil {
 		mux.HandleFunc("POST /api/v1/upgrade", s.handleUpgrade)

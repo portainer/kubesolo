@@ -51,6 +51,10 @@ type Options struct {
 	// Incidents serves the assistant's incidents. Nil means the assistant is
 	// disabled.
 	Incidents Incidents
+
+	// Reporter writes the assistant's report; nil when the assistant is
+	// disabled.
+	Reporter Reporter
 }
 
 // Service is the configuration API. It follows the same NewService/Run + readyCh

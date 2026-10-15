@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -89,6 +90,11 @@ type ReviewRequest struct {
 // reviewVerbs maps each verb on an incident to its review verdict.
 var reviewVerbs = map[string]string{"approve": assistant.VerdictApproved, "reject": assistant.VerdictRejected}
 
+// Reporter writes the assistant's report on the node.
+type Reporter interface {
+	Report(ctx context.Context) (assistant.Report, error)
+}
+
 // assistantDisabled is the answer to every assistant endpoint when it is off.
 var assistantDisabled = ErrorResponse{Error: "the assistant is not enabled: set assistant.enabled to true and restart KubeSolo"}
 
@@ -166,4 +172,27 @@ func (s *Service) handleReview(w http.ResponseWriter, r *http.Request) {
 		record(r, func(rl *requestLog) { rl.changed = []string{"assistant.incidents." + id + ".review"} })
 		writeJSON(w, http.StatusOK, inc)
 	}
+}
+
+// handleReport answers the node's health and latest incidents, as JSON or,
+// with ?format=text, as text for a person at a terminal.
+func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Reporter == nil {
+		writeErrorFor(w, r, http.StatusNotFound, assistantDisabled)
+		return
+	}
+	// Each component's health probe can take up to 5 seconds when it hangs,
+	// longer together than the server's write timeout allows.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Minute))
+	rep, err := s.opts.Reporter.Report(r.Context())
+	if err != nil {
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if r.URL.Query().Get("format") == "text" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = io.WriteString(w, rep.Text())
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }

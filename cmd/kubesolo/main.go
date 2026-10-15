@@ -899,6 +899,7 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 		},
 		Assistant: s.newAssistant(ctx),
 		Incidents: s.incidentsForAPI(),
+		Reporter:  s.reporterForAPI(),
 		Lifecycle: &configapi.Lifecycle{
 			Version:       Version,
 			Commit:        Commit,
@@ -1084,6 +1085,18 @@ func (s *kubesolo) incidentsForAPI() configapi.Incidents {
 		return nil
 	}
 	return s.incidents
+}
+
+// reporterForAPI writes the assistant's report, or is nil when the assistant
+// is disabled. It must be an untyped nil, which the API reads as disabled.
+func (s *kubesolo) reporterForAPI() configapi.Reporter {
+	if s.incidents == nil {
+		return nil
+	}
+	return &assistant.Reporter{
+		Collector: &assistant.Collector{Probes: metrics.Probers(s.embedded), DataDir: s.cfg.Path},
+		Store:     s.incidents,
+	}
 }
 
 // agentSocketPath is the API socket mounted into the Portainer agent's pod, or

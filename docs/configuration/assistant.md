@@ -169,6 +169,7 @@ They are served by the configuration API, including on the Portainer agent's soc
 | `GET /api/v1/assistant/incidents/<id>` | The incident with its snapshot, triage and review, or `404` |
 | `POST /api/v1/assistant/incidents/<id>:approve` | Records an approval; see [Reviews](#reviews) |
 | `POST /api/v1/assistant/incidents/<id>:reject` | Records a rejection |
+| `GET /api/v1/assistant/report` | The node's health and latest incidents; see [The report](#the-report) |
 
 IDs sort in time order, and incidents are served in that order, so a poller asks for everything after the newest ID it has seen, and nothing needs acknowledging.
 
@@ -199,6 +200,25 @@ Over the API, both take an optional body, `{"action": "...", "note": "..."}`, an
 | Refused with | `409` when no action is offered, `400` for another action | `400` for an unknown action |
 
 A later review replaces an earlier one. Reviews are pruned with their incident, after the latest 100.
+
+### The report
+
+The report is the node's health now and its 10 latest incidents, each with where its action stands:
+
+```bash
+sudo kubesoloctl assistant report          # for a person
+sudo kubesoloctl assistant report --json   # for a program
+```
+
+| `state` | Meaning |
+|---|---|
+| `awaiting approval` | The action is rated `high` and nobody has reviewed it yet |
+| `approved` / `rejected` | Reviewed |
+| `not offered` | The action is rated below `high`, so it is only reported |
+| `report only` | The model found nothing to do, or something a person must do |
+| `triage failed` / `triage skipped` | No diagnosis; the triage's `reason` says why |
+
+Over the API, `GET /api/v1/assistant/report` returns it as JSON, and `?format=text` as the same text the command prints. `totalIncidents` and `awaitingApproval` count every incident kept, not only the 10 shown.
 
 ---
 

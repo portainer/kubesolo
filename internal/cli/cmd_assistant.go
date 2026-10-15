@@ -81,8 +81,43 @@ measure and improve the assistant.`,
 	}
 	reject.Flags().StringVar(&action, "action", "", "the right action: "+strings.Join(assistant.Actions, ", "))
 	reject.Flags().StringVar(&note, "note", "", "why, for whoever reads the incident later")
-	cmd.AddCommand(approve, reject)
+	var asJSON bool
+	report := &cobra.Command{
+		Use:   "report",
+		Short: "Show the node's health and the assistant's latest incidents",
+		Long: `Show the node's health now and the assistant's latest incidents: each one's
+diagnosis, how far to trust its action, and whether it awaits approval or was
+reviewed.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runReport(asJSON)
+		},
+	}
+	report.Flags().BoolVar(&asJSON, "json", false, "print the report as JSON")
+	cmd.AddCommand(approve, reject, report)
 	return cmd
+}
+
+func runReport(asJSON bool) error {
+	p := ui.New()
+	h, err := findHost()
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	if h.api == nil {
+		return p.Fail("assistant", errAPIUnreachable)
+	}
+	r, err := h.api.Report()
+	if err != nil {
+		return p.Fail("assistant", err)
+	}
+	if asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(r)
+	}
+	fmt.Print(r.Text())
+	return nil
 }
 
 func runReview(id string, review func(*configapi.Client) (*assistant.Incident, error)) error {

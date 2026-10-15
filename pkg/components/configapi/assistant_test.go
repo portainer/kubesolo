@@ -3,6 +3,7 @@ package configapi
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -274,6 +275,68 @@ func TestReviewsWhenTheAssistantIsDisabled(t *testing.T) {
 	c := assistantAPIWith(t, nil, nil)
 	var apiErr *APIError
 	if _, err := c.Approve("20261015T090000.000000000Z", ""); !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound || !strings.Contains(err.Error(), "assistant.enabled") {
+		t.Errorf("expected a 404 telling how to enable it, got %v", err)
+	}
+}
+
+type fakeReporter struct{}
+
+func (fakeReporter) Report(context.Context) (assistant.Report, error) {
+	return assistant.Report{
+		Time:             time.Date(2026, 10, 15, 4, 0, 0, 0, time.UTC),
+		Components:       map[string]string{"kubelet": "connection refused"},
+		Incidents:        []assistant.ReportIncident{},
+		AwaitingApproval: 2,
+	}, nil
+}
+
+func reportAPI(t *testing.T, reporter Reporter) *Client {
+	t.Helper()
+	dir := shortTempDir(t)
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := config.Write(configPath, config.Defaults()); err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(dir, "c.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	svc := NewService(ctx, cancel, make(chan struct{}), Options{SocketPath: socket, ConfigPath: configPath, Reporter: reporter})
+	done := make(chan error, 1)
+	go func() { done <- svc.Run() }()
+	<-svc.readyCh
+	t.Cleanup(func() { cancel(); <-done })
+	return NewClient(socket)
+}
+
+func TestReportOverTheAPI(t *testing.T) {
+	c := reportAPI(t, fakeReporter{})
+
+	r, err := c.Report()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Components["kubelet"] != "connection refused" || r.AwaitingApproval != 2 {
+		t.Errorf("report = %+v", r)
+	}
+
+	// The same report as text, for curl at a terminal.
+	resp, err := c.http.Get("http://localhost/api/v1/assistant/report?format=text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	text, _ := io.ReadAll(resp.Body)
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Errorf("content type = %s", ct)
+	}
+	if !strings.Contains(string(text), "connection refused") || !strings.Contains(string(text), "2 action(s) awaiting approval") {
+		t.Errorf("text report = %q", text)
+	}
+}
+
+func TestReportWhenTheAssistantIsDisabled(t *testing.T) {
+	c := reportAPI(t, nil)
+	var apiErr *APIError
+	if _, err := c.Report(); !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound || !strings.Contains(err.Error(), "assistant.enabled") {
 		t.Errorf("expected a 404 telling how to enable it, got %v", err)
 	}
 }

@@ -149,6 +149,12 @@ func (c *Client) Incident(id string) (*assistant.Incident, error) {
 	return &out, c.doJSON(http.MethodGet, "/api/v1/assistant/incidents/"+url.PathEscape(id), nil, "", &out)
 }
 
+// Report reads the assistant's report on the node.
+func (c *Client) Report() (*assistant.Report, error) {
+	var out assistant.Report
+	return &out, c.doJSON(http.MethodGet, "/api/v1/assistant/report", nil, "", &out)
+}
+
 // Approve agrees with the action suggested for an incident.
 func (c *Client) Approve(id, note string) (*assistant.Incident, error) {
 	return c.review(id, "approve", ReviewRequest{Note: note})
