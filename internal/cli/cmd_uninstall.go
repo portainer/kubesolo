@@ -175,6 +175,11 @@ func hostInstalled() bool {
 }
 
 func runContainerUninstall(p *ui.Printer, name string, purge, keepConfig bool) error {
+	unlock, err := service.LockInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	defer unlock()
 	info, err := detect.Detect()
 	if err != nil {
 		return p.Fail("system detection", err)

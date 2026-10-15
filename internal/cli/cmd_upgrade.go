@@ -281,6 +281,11 @@ func checkContainerVersion(running, target string, force bool) error {
 }
 
 func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions) error {
+	unlock, err := service.LockInstance(cfg.Name)
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	defer unlock()
 	if cfg.OfflineInstall != "" || opts.sha256 != "" || opts.detach {
 		return p.Fail("upgrade", fmt.Errorf("--offline-install, --sha256 and --detach apply to host installs only; a container upgrade replaces the image"))
 	}

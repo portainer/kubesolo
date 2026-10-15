@@ -94,6 +94,11 @@ func runReset(name, dataPath string, force bool) error {
 }
 
 func runContainerReset(p *ui.Printer, name string) error {
+	unlock, err := service.LockInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	defer unlock()
 	p.Step("Resetting KubeSolo container")
 	if err := service.ResetContainer(name); err != nil {
 		return p.Fail("container reset", err)

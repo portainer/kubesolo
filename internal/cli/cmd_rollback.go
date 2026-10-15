@@ -136,6 +136,11 @@ func runRollback(name string, yes, detach bool, healthTimeout time.Duration) err
 // runContainerRollback restores the container and datastore the last upgrade of
 // a container instance replaced.
 func runContainerRollback(p *ui.Printer, name string, yes bool, healthTimeout time.Duration) error {
+	unlock, err := service.LockInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	defer unlock()
 	prev, err := service.InspectInstance(name)
 	if err != nil {
 		return p.Fail("KubeSolo", fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", service.ContainerNameFor(name), err))

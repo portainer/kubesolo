@@ -242,6 +242,11 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		if cfg.InstallPrereqs {
 			p.Warn("--install-prereqs is ignored in container mode (the image ships its prerequisites)")
 		}
+		unlock, err := service.LockInstance(cfg.Name)
+		if err != nil {
+			return p.Fail("KubeSolo", err)
+		}
+		defer unlock()
 	}
 
 	// ── Detect system ─────────────────────────────────────────────────────────
