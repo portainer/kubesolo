@@ -260,3 +260,38 @@ current-context: kubernetes-admin@kubernetes
 		t.Errorf("clusters after removing b = %s", got)
 	}
 }
+
+// KUBECONFIG may point at KubeSolo's own admin.kubeconfig; merging it again,
+// or into itself, must not stack the instance suffix.
+func TestScopeIsIdempotent(t *testing.T) {
+	doc, err := parseDoc([]byte(kubesoloKubeconfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope(doc, "kubesolo")
+	scope(doc, "kubesolo")
+	if got := strings.Join(names(doc, "users"), ","); got != "kubernetes-admin@kubesolo" {
+		t.Errorf("users = %s", got)
+	}
+	ctx := find(doc, "contexts", "kubernetes-admin@kubesolo")
+	if ctx == nil || ctx["context"].(map[string]any)["user"] != "kubernetes-admin@kubesolo" {
+		t.Errorf("contexts = %v", names(doc, "contexts"))
+	}
+	if doc["current-context"] != "kubernetes-admin@kubesolo" {
+		t.Errorf("current-context = %v", doc["current-context"])
+	}
+}
+
+func TestMergeIntoItselfIsANoOp(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "admin.kubeconfig")
+	if err := os.WriteFile(path, []byte(kubesoloKubeconfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KUBECONFIG", path)
+	if err := mergeFile(path, path, "kubesolo", -1, -1); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != kubesoloKubeconfig {
+		t.Errorf("the source kubeconfig was rewritten:\n%s", data)
+	}
+}

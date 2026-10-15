@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -56,13 +57,21 @@ func entryNames(cluster string) entries {
 
 // scope renames the entries of a KubeSolo kubeconfig to those entryNames
 // returns: the cluster becomes cluster, and each user and context is named
-// <user>@<cluster>.
+// <user>@<cluster>. Entries already scoped are left as they are, so scoping a
+// kubeconfig merged before does not stack the suffix.
 func scope(doc map[string]any, cluster string) {
+	scoped := func(name any) string {
+		n := fmt.Sprint(name)
+		if strings.HasSuffix(n, "@"+cluster) {
+			return n
+		}
+		return n + "@" + cluster
+	}
 	for _, c := range namedList(doc, "clusters") {
 		c["name"] = cluster
 	}
 	for _, u := range namedList(doc, "users") {
-		u["name"] = fmt.Sprint(u["name"]) + "@" + cluster
+		u["name"] = scoped(u["name"])
 	}
 	renamed := map[string]string{}
 	for _, c := range namedList(doc, "contexts") {
@@ -70,7 +79,7 @@ func scope(doc map[string]any, cluster string) {
 		if ctx == nil {
 			continue
 		}
-		user := fmt.Sprint(ctx["user"]) + "@" + cluster
+		user := scoped(ctx["user"])
 		ctx["cluster"] = cluster
 		ctx["user"] = user
 		renamed[fmt.Sprint(c["name"])] = user
@@ -144,6 +153,23 @@ func mergeInto(path string, src []byte, cluster, server string, uid, gid int) er
 	chown(path, uid, gid)
 	log.Info().Msgf("kubeconfig merged successfully: %s", path)
 	return nil
+}
+
+// mergeFile merges the kubeconfig file src into dst, as mergeInto does. When
+// dst is src itself — KUBECONFIG set to KubeSolo's own admin kubeconfig — there
+// is nothing to merge, and the file KubeSolo generated is left alone.
+func mergeFile(dst, src, cluster string, uid, gid int) error {
+	if a, err := os.Stat(dst); err == nil {
+		if b, err := os.Stat(src); err == nil && os.SameFile(a, b) {
+			log.Info().Msgf("%s is KubeSolo's own kubeconfig; nothing to merge", dst)
+			return nil
+		}
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return mergeInto(dst, data, cluster, "", uid, gid)
 }
 
 // removeEntries deletes the named clusters, users and contexts from the file

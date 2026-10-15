@@ -77,8 +77,7 @@ func MergeAfterStartup(dataPath string) error {
 // service.
 func MergeFromDisk(dataPath string) error {
 	ksKubeconfig := KubeSoloKubeconfigPath(dataPath)
-	data, err := os.ReadFile(ksKubeconfig)
-	if err != nil {
+	if _, err := os.Stat(ksKubeconfig); err != nil {
 		return fmt.Errorf("kubeconfig not found at %s — is KubeSolo running?", ksKubeconfig)
 	}
 
@@ -94,7 +93,7 @@ func MergeFromDisk(dataPath string) error {
 		}
 	}
 
-	if err := mergeInto(userKubeconfigPath(realHome), data, HostCluster, "", realUID, realGID); err != nil {
+	if err := mergeFile(userKubeconfigPath(realHome), ksKubeconfig, HostCluster, realUID, realGID); err != nil {
 		return err
 	}
 	log.Info().Msgf("kubeconfig also accessible at: %s", ksKubeconfig)
