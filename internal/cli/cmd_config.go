@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
+	"github.com/portainer/kubesolo/internal/cli/config"
+	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
 	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/pkg/components/configapi"
@@ -17,7 +21,7 @@ import (
 )
 
 func configCmd() *cobra.Command {
-	var path string
+	var path, name string
 
 	cmd := &cobra.Command{
 		Use:   "config",
@@ -44,18 +48,75 @@ Examples:
   kubesoloctl config validate -f ./candidate.yaml
 
   # List every setting, its type and its default:
-  kubesoloctl config schema`,
+  kubesoloctl config schema
+
+  # Change a setting of a container instance, then restart it:
+  kubesoloctl config set --name dev logging.debug true`,
 	}
 
 	cmd.PersistentFlags().StringVar(&path, "config", types.DefaultConfigFile, "KubeSolo configuration file")
-	cmd.AddCommand(
-		configGetCmd(&path),
-		configSetCmd(&path),
-		configEditCmd(&path),
-		configValidateCmd(&path),
-		configSchemaCmd(),
-	)
+	cmd.PersistentFlags().StringVar(&name, "name", envOr("KUBESOLO_NAME", config.AppName),
+		"Name of the KubeSolo instance, for a container instance")
+	for _, sub := range []*cobra.Command{configGetCmd(&path), configSetCmd(&path), configEditCmd(&path), configValidateCmd(&path)} {
+		cmd.AddCommand(onContainerConfig(sub, &path, &name))
+	}
+	cmd.AddCommand(configSchemaCmd())
 	return cmd
+}
+
+// configContainer names the container while a config command works on the
+// configuration file of a container instance rather than a host install's.
+var configContainer string
+
+// onContainerConfig makes a config subcommand work on a container instance:
+// the instance's configuration file is copied out of its configuration volume,
+// the subcommand runs on the copy as it would on a host's file, and a changed
+// copy is written back. A host install is left to the subcommand as it is.
+func onContainerConfig(sub *cobra.Command, path, name *string) *cobra.Command {
+	run := sub.RunE
+	sub.RunE = func(cmd *cobra.Command, args []string) error {
+		// validate -f checks a candidate file, and --config names the file to
+		// work on, wherever KubeSolo runs.
+		if cmd.Flags().Changed("file") || cmd.Flags().Changed("config") || !containerModeActive(*name) {
+			return run(cmd, args)
+		}
+
+		insp, err := service.InspectInstance(*name)
+		if err != nil {
+			return fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", service.ContainerNameFor(*name), err)
+		}
+		if !config.UsesConfigFile(insp.Config.Cmd) {
+			return fmt.Errorf("%s is configured by flags, not a configuration file; upgrade it (kubesoloctl upgrade --name %s) to move its settings onto one",
+				service.ContainerNameFor(*name), *name)
+		}
+		before, err := service.ReadContainerConfig(*name)
+		if err != nil {
+			return err
+		}
+		dir, err := os.MkdirTemp("", "kubesolo-config-*")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+		local := filepath.Join(dir, filepath.Base(config.ContainerConfigFile))
+		if err := os.WriteFile(local, before, 0o600); err != nil {
+			return err
+		}
+
+		hostPath := *path
+		*path, configContainer = local, service.ContainerNameFor(*name)
+		defer func() { *path, configContainer = hostPath, "" }()
+		if err := run(cmd, args); err != nil {
+			return err
+		}
+
+		after, err := os.ReadFile(local)
+		if err != nil || bytes.Equal(after, before) {
+			return err
+		}
+		return service.WriteContainerConfig(*name, after)
+	}
+	return sub
 }
 
 // backend is where a config command reads and writes.
@@ -135,16 +196,35 @@ func load(p *ui.Printer, path string) (*types.Config, error) {
 	return cfg, nil
 }
 
+// configLabel names the configuration file a command worked on: for a container
+// instance, the file in the container rather than the local copy it edited.
+func configLabel(path string) string {
+	if configContainer != "" {
+		return configContainer + ":" + config.ContainerConfigFile
+	}
+	return path
+}
+
+// restartHint says how to apply a saved change.
+func restartHint() string {
+	if configContainer != "" {
+		return "restart KubeSolo for this to take effect:  docker restart " + configContainer
+	}
+	return "restart KubeSolo for this to take effect"
+}
+
 // validationHost describes the machine for validation purposes.
 //
-// ContainerMode is reported as false because kubesoloctl cannot know whether the
-// KubeSolo it is configuring will run inside a container. The consequence is
-// narrow: a static CPU manager policy is accepted here and rejected by KubeSolo
-// itself at startup, where the real answer is known.
+// ContainerMode is known for a container instance. For a host's file it is
+// reported as false, because kubesoloctl cannot know whether the KubeSolo it is
+// configuring will run inside a container. The consequence is narrow: a static
+// CPU manager policy is accepted there and rejected by KubeSolo itself at
+// startup, where the real answer is known.
 func validationHost() kubesoloconfig.Host {
 	return kubesoloconfig.Host{
-		NumCPU: runtime.NumCPU(),
-		GOARCH: runtime.GOARCH,
+		NumCPU:        runtime.NumCPU(),
+		GOARCH:        runtime.GOARCH,
+		ContainerMode: configContainer != "",
 	}
 }
 
@@ -195,6 +275,9 @@ func configSetCmd(path *string) *cobra.Command {
 			field, ok := kubesoloconfig.FieldByPath(name)
 			if !ok {
 				return unknownPath(name)
+			}
+			if configContainer != "" && slices.Contains(config.ContainerIgnored, name) {
+				return fmt.Errorf("%s is ignored in container mode: kubesoloctl or the container decides it", name)
 			}
 
 			p := ui.New()
@@ -254,8 +337,8 @@ func configSetCmd(path *string) *cobra.Command {
 				return err
 			}
 
-			p.OK(fmt.Sprintf("%s set", name), *path)
-			p.Info("restart KubeSolo for this to take effect")
+			p.OK(fmt.Sprintf("%s set", name), configLabel(*path))
+			p.Info(restartHint())
 			return nil
 		},
 	}
@@ -328,6 +411,13 @@ func runConfigEdit(path string) error {
 		}
 	}
 
+	if configContainer != "" {
+		if set := config.ContainerIgnoredSet(edited); len(set) > 0 {
+			return fmt.Errorf("%s ignored in container mode: kubesoloctl or the container decides them\n\nyour edits are kept at %s",
+				strings.Join(set, ", "), tmpName)
+		}
+	}
+
 	if b.api != nil {
 		resp, err := b.api.Put(edited)
 		if err != nil {
@@ -353,8 +443,8 @@ func runConfigEdit(path string) error {
 	}
 	_ = os.Remove(tmpName) // best effort; the edits are already saved
 
-	p.OK("configuration saved", path)
-	p.Info("restart KubeSolo for this to take effect")
+	p.OK("configuration saved", configLabel(path))
+	p.Info(restartHint())
 	return nil
 }
 
@@ -440,7 +530,7 @@ func configValidateCmd(path *string) *cobra.Command {
 				return err
 			}
 
-			p.OK("configuration is valid", *path)
+			p.OK("configuration is valid", configLabel(*path))
 			return nil
 		},
 	}

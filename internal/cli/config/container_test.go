@@ -75,3 +75,19 @@ func TestContainerConfigFromAContainerCommandLine(t *testing.T) {
 		t.Errorf("dropped = %s", got)
 	}
 }
+
+func TestContainerIgnoredSet(t *testing.T) {
+	doc, _, _, _, err := ContainerConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ContainerIgnoredSet(doc); len(got) != 0 {
+		t.Errorf("a container's own configuration sets %v", got)
+	}
+	doc.Network.MTU = 1400
+	doc.Kubernetes.NodeName = "other"
+	doc.Logging.Debug = true // relevant: not reported
+	if got := strings.Join(ContainerIgnoredSet(doc), " "); got != "network.mtu kubernetes.nodeName" {
+		t.Errorf("ignored settings = %s", got)
+	}
+}

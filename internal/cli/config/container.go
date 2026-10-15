@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"runtime"
 	"strings"
 
@@ -86,4 +87,32 @@ func ContainerConfig(args []string) (doc *types.Config, kept, dropped []string, 
 		ContainerMode: true,
 	})
 	return doc, kept, dropped, append(warnings, validationWarnings...), err
+}
+
+// ContainerIgnoredSet returns the settings in ContainerIgnored that doc changes
+// from what a container instance has: a configuration a user edited to set one.
+func ContainerIgnoredSet(doc *types.Config) []string {
+	base, _, _, _, err := ContainerConfig(nil)
+	if err != nil {
+		return nil
+	}
+	var set []string
+	for _, p := range ContainerIgnored {
+		f, ok := kubesoloconfig.FieldByPath(p)
+		if ok && !reflect.DeepEqual(f.Get(doc), f.Get(base)) {
+			set = append(set, p)
+		}
+	}
+	return set
+}
+
+// UsesConfigFile reports whether a KubeSolo command line reads a configuration
+// file rather than flags.
+func UsesConfigFile(args []string) bool {
+	for _, a := range args {
+		if strings.HasPrefix(a, "--config=") {
+			return true
+		}
+	}
+	return false
 }

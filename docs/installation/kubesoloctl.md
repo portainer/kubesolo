@@ -126,6 +126,13 @@ On a host install of KubeSolo v1.2.1 or later, `install` writes the settings to 
 
 In container mode, `install` writes the configuration file into a `kubesolo-<name>-config` volume mounted at `/etc/kubesolo`, and the container runs with `--config` only. Settings that mean nothing inside a container are left out of it, and `install` reports them as ignored: `--path`, `--node-ip`, `--mtu`, `--cpu-manager-policy`, `--cpu-manager-policy-options` and `--reserved-cpus` — kubesoloctl or the container decides these (the data volume, the container's address and network, its cpuset) — as well as the LoadBalancer IP, node name, runtime endpoint and API settings of the file. The configuration volume survives `reset`; `uninstall` removes it unless `--keep-config` is given. A container installed by an older kubesoloctl, which passes flags, is moved onto a configuration file the next time it is upgraded, leaving out the same settings; `rollback` restores its flags.
 
+`kubesoloctl config get|set|edit|validate --name <name>` work on a container instance's file as they do on a host's. `set` and `edit` refuse the settings left out above, and a change takes effect when the container restarts (`docker restart kubesolo-<name>`):
+
+```bash
+kubesoloctl config set --name dev logging.debug true
+docker restart kubesolo-dev
+```
+
 In container mode, settings are validated the same way before the image is pulled or a running container is replaced, so a bad value fails the install instead of leaving a container that restarts forever.
 
 CPU pinning flags are validated before anything is installed, so a bad cpuset or an unsupported policy option fails immediately rather than crash-looping the service. See the [CPU pinning guide](../configuration/cpu-pinning.md).

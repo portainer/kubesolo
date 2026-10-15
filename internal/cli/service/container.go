@@ -382,6 +382,39 @@ func containerBinds(name string, mounts []string) []string {
 	}, mounts...)
 }
 
+// ReadContainerConfig returns the configuration file of the named instance's
+// container, running or not.
+func ReadContainerConfig(name string) ([]byte, error) {
+	cli, err := newContainerClient()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cli.Close() }()
+
+	rc, _, err := cli.CopyFromContainer(context.Background(), ContainerNameFor(name), config.ContainerConfigFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s from %s: %w", config.ContainerConfigFile, ContainerNameFor(name), err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	tr := tar.NewReader(rc)
+	if _, err := tr.Next(); err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", config.ContainerConfigFile, err)
+	}
+	return io.ReadAll(tr)
+}
+
+// WriteContainerConfig replaces the configuration file of the named instance's
+// container, running or not. KubeSolo reads it when it next starts.
+func WriteContainerConfig(name string, doc []byte) error {
+	cli, err := newContainerClient()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = cli.Close() }()
+	return writeContainerConfig(context.Background(), cli, ContainerNameFor(name), doc)
+}
+
 // containerConfigDir holds the configuration file of a KubeSolo container.
 var containerConfigDir = path.Dir(config.ContainerConfigFile)
 

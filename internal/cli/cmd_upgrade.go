@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/distribution/reference"
@@ -235,10 +234,8 @@ func containerUpgradeImage(current, explicit, version string) (string, error) {
 // container are left out and returned as dropped. A container already on a
 // configuration file keeps it.
 func containerUpgradeArgs(oldArgs []string, cfg *config.Config) (args []string, doc []byte, dropped []string, err error) {
-	for _, a := range oldArgs {
-		if strings.HasPrefix(a, "--config=") {
-			return oldArgs, nil, nil, nil
-		}
+	if config.UsesConfigFile(oldArgs) {
+		return oldArgs, nil, nil, nil
 	}
 	// A custom image is not described by --version; it is taken to be current.
 	if cfg.ContainerImage == "" || cfg.ContainerImage == config.DefaultContainerImage+":"+cfg.Version {
