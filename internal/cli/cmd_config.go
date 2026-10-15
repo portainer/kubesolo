@@ -68,6 +68,24 @@ Examples:
 // configuration file of a container instance rather than a host install's.
 var configContainer string
 
+// configInstance is that instance's name, and configContainerD2K reports
+// whether its container publishes the d2k port.
+var (
+	configInstance     string
+	configContainerD2K bool
+)
+
+// checkContainerChange refuses a configuration a container instance cannot run
+// as it is: d2k is reached through a port published when the container is
+// created, which a restart cannot add.
+func checkContainerChange(cfg *types.Config) error {
+	if configContainer != "" && cfg.D2K.Enabled && !configContainerD2K {
+		return fmt.Errorf("d2k needs its port published, which happens when the container is created; reinstall with d2k instead: kubesoloctl install --name %s --d2k",
+			configInstance)
+	}
+	return nil
+}
+
 // onContainerConfig makes a config subcommand work on a container instance:
 // the instance's configuration file is copied out of its configuration volume,
 // the subcommand runs on the copy as it would on a host's file, and a changed
@@ -104,7 +122,8 @@ func onContainerConfig(sub *cobra.Command, path, name *string) *cobra.Command {
 		}
 
 		hostPath := *path
-		*path, configContainer = local, service.ContainerNameFor(*name)
+		_, d2kPublished := insp.HostConfig.PortBindings["2376/tcp"]
+		*path, configContainer, configInstance, configContainerD2K = local, service.ContainerNameFor(*name), *name, d2kPublished
 		defer func() { *path, configContainer = hostPath, "" }()
 		if err := run(cmd, args); err != nil {
 			return err
@@ -301,6 +320,9 @@ func configSetCmd(path *string) *cobra.Command {
 			if err := field.Set(cfg, value); err != nil {
 				return fmt.Errorf("%s: %w", name, err)
 			}
+			if err := checkContainerChange(cfg); err != nil {
+				return err
+			}
 
 			if b.api != nil {
 				// Only this one setting is sent, so a concurrent change to any
@@ -415,6 +437,9 @@ func runConfigEdit(path string) error {
 		if set := config.ContainerIgnoredSet(edited); len(set) > 0 {
 			return fmt.Errorf("%s ignored in container mode: kubesoloctl or the container decides them\n\nyour edits are kept at %s",
 				strings.Join(set, ", "), tmpName)
+		}
+		if err := checkContainerChange(edited); err != nil {
+			return fmt.Errorf("%w\n\nyour edits are kept at %s", err, tmpName)
 		}
 	}
 
