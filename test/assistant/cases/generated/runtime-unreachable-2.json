@@ -1,0 +1,80 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m30s: runtime",
+    "time": "2026-10-15T08:45:44.096110996Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "ok",
+        "kine": "ok",
+        "kubelet": "ok",
+        "runtime": "stat /var/lib/kubesolo/containerd/containerd.sock: no such file or directory",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-15T08:38:17Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:19Z kine: error while range on /registry/namespaces/ /registry/namespaces0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:19Z kine: Failed to list /registry/namespaces/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:19Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:24Z kine: error while range on /registry/servicecidrs/ /registry/servicecidrs0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:24Z kine: Failed to list /registry/servicecidrs/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:24Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:28Z kine: error while range on /registry/poddisruptionbudgets/ /registry/poddisruptionbudgets0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:28Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:28Z kine: Failed to list /registry/poddisruptionbudgets/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:33Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-15T08:38:33Z apiserver: Timeout or abort while handling",
+        "2026-10-15T08:38:33Z apiserver: Post-timeout activity",
+        "2026-10-15T08:38:33Z apiserver: Unhandled Error: unable to sync kubernetes service: Get \"https://[::1]:6443/apis/discovery.k8s.io/v1/namespaces/default/endpointslices/kubernetes\": stream error: stream ID 1141; INTERNAL_ERROR; received from peer",
+        "2026-10-15T08:38:35Z kine: Failed to list compact_rev_key_apiserver for revision 100729: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:35Z apiserver: etcd: endpoint ([127.0.0.1:2379]): etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:35Z kine: error in compact revision:100729 : rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:35Z apiserver: etcd: endpoint ([127.0.0.1:2379]) compact failed: etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:44Z kine: error while range on /registry/endpointslices/ /registry/endpointslices0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:44Z kine: Failed to list /registry/endpointslices/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:44Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:47Z kine: error while range on /registry/priorityclasses/ /registry/priorityclasses0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:47Z kine: Failed to list /registry/priorityclasses/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:47Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:39:06Z kine: Failed to list /registry/resourcequotas/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:39:06Z kine: error while range on /registry/resourcequotas/ /registry/resourcequotas0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:39:06Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:39:08Z kine: Failed to list /registry/networkpolicies/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:39:08Z kine: error while range on /registry/networkpolicies/ /registry/networkpolicies0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:39:08Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old."
+      ],
+      "events": [
+        "2026-10-15T08:18:19Z default/node/kubesolo-rnd InvalidDiskCapacity: invalid capacity 0 on image filesystem"
+      ],
+      "host": {
+        "diskUsedPercent": 14,
+        "memoryAvailableMiB": 3173,
+        "uptimeSeconds": 184358
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "restart_component"
+    ],
+    "mentions": [
+      "containerd",
+      "runtime"
+    ]
+  },
+  "source": {
+    "fault": "runtime-unreachable",
+    "run": 2,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-15T08:46:54.851974649Z",
+      "summary": "KubeSolo runtime is unhealthy due to a missing containerd socket file, causing the apiserver to fail with context deadline exceeded errors.",
+      "cause": "The containerd socket at /var/lib/kubesolo/containerd/containerd.sock does not exist, indicating the runtime failed to start or was killed before the socket was created. This matches the 'runtime' component failure in the triage knowledge.",
+      "action": "restart_component",
+      "actionProbability": 0.6861863430554737,
+      "rating": "medium"
+    }
+  }
+}

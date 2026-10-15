@@ -8,6 +8,7 @@ and the triage prompt before they ship.
 |---|---|
 | `cases/dev` | Tune the knowledge and the prompt against these |
 | `cases/heldout` | Do not tune against these: they show whether a change generalises |
+| `cases/generated` | Made by breaking a test node on purpose; see [Generating cases](#generating-cases) |
 
 Each case is an incident as KubeSolo records it, and what is expected of the
 diagnosis:
@@ -92,3 +93,58 @@ by a full disk (0.48).
 Small changes to the prompt move borderline cases: dropping the model's rating
 of itself took the 2B from 10 / 11 to 11 / 9, all of the change below 0.8.
 Judge a change by what passes 0.8 as much as by the totals.
+
+## Generating cases
+
+[`inject/generate.sh`](inject/generate.sh) breaks a KubeSolo node on purpose,
+waits for the assistant to record and triage the incident, saves it as a case,
+and puts the node right. The label comes from the fault, which is known, not
+from the model; the model's own triage is kept beside it, under `source`, for
+reference.
+
+It runs on the node, as root, and **breaks it**: use a test node, with the
+assistant and the API enabled, and `kubectl` installed.
+
+```bash
+# on the node: six faults, three runs each, about 4 hours
+./generate.sh /root/generated 3 kubelet-down kine-blocked runtime-unreachable killed coredns-firewall db-corrupt
+```
+
+| Fault | How | Labelled |
+|---|---|---|
+| `kubelet-down` | Rejects the kubelet's health port for 7 minutes | `restart_component` |
+| `kine-blocked` | Rejects kine's port for 7 minutes | `restart_component` |
+| `runtime-unreachable` | Moves containerd's socket away for 7 minutes | `restart_component` |
+| `killed` | `kill -9` | `report_only` |
+| `disk-full` | Fills the disk to 32 MiB short of full for 7 minutes, then deletes the pods evicted meanwhile | `free_disk_space`; records no incident yet, see below |
+| `coredns-firewall` | Rejects pod traffic to the API server and restarts CoreDNS | `report_only` |
+| `db-corrupt` | Overwrites part of the datastore, lets KubeSolo fail on it, then puts the saved copy back | `repair_database` |
+
+Odd runs add noise workloads, a crash-looping pod and an unpullable image, so
+each fault is also seen among unrelated warnings. Each fault starts from a
+node that has been healthy for 90 seconds, so that it is an outage of its own,
+and a fault that produces no incident within 25 minutes is logged and skipped.
+
+`disk-full` shows a gap: every component stays healthy while the disk is full,
+so no incident is recorded, while the kubelet evicts pods and their
+replacements by the thousand. On the test node that left 7,303 failed pods,
+held in the API server's memory (KubeSolo grew to 1.8 GB), until they were
+deleted.
+
+### First generated batch
+
+Six faults, three runs each, on the 2 vCPU test node, October 2026. The 2B
+triaged them live, as KubeSolo does:
+
+| Fault | Right | Offered at 0.8 |
+|---|---|---|
+| `db-corrupt` | 3 / 3 | 3, all right |
+| `coredns-firewall` | 3 / 3 | — (`report_only`) |
+| `kubelet-down` | 2 / 3 | 2, both right |
+| `runtime-unreachable` | 2 / 3 | 1, right |
+| `killed` | 2 / 3 | — |
+| `kine-blocked` | 1 / 3 | 0: wrong actions at 0.72 and 0.41 |
+
+13 of 18 right; every wrong action rated below 0.8, so none would have been
+offered. A blocked kine is the weak spot: the model reaches for
+`repair_database` or `free_disk_space`.

@@ -1,0 +1,39 @@
+{
+  "incident": {
+    "trigger": "KubeSolo did not shut down cleanly (crash, fatal error, kill or power loss)",
+    "time": "2026-10-15T09:01:49.068095753Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-15T09:01:45Z kine: SQLite integrity check failed. The SQLite WAL artefacts may be corrupt after an unclean shutdown. Remove /var/lib/kubesolo/kine/db/state.db-wal and /var/lib/kubesolo/kine/db/state.db-shm manually, or restart with --db-wal-repair to remove them automatically."
+      ],
+      "host": {
+        "diskUsedPercent": 14,
+        "memoryAvailableMiB": 3407,
+        "uptimeSeconds": 185323
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "repair_database"
+    ],
+    "mentions": [
+      "database",
+      "kine"
+    ]
+  },
+  "source": {
+    "fault": "db-corrupt",
+    "run": 2,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-15T09:05:33.473774882Z",
+      "summary": "KubeSolo experienced an unclean shutdown with SQLite WAL corruption detected in the kine datastore.",
+      "cause": "The kine database is damaged, matching the knowledge entry for 'database disk image is malformed' or 'file is not a database' from SQLite integrity check failures.",
+      "action": "repair_database",
+      "actionProbability": 0.8434160273218142,
+      "rating": "high"
+    }
+  }
+}

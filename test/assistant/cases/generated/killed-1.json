@@ -1,0 +1,65 @@
+{
+  "incident": {
+    "trigger": "KubeSolo did not shut down cleanly (crash, fatal error, kill or power loss)",
+    "time": "2026-10-15T08:00:05.842202455Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-15T07:55:01Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:55:13Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:55:25Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:55:40Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:55:54Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:55:59Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"crashloop\" with CrashLoopBackOff: \"back-off 5m0s restarting failed container=crashloop pod=crashloop_inject-noise(2d2d64fa-e0b4-49a2-94c0-074e8dc009df)\"",
+        "2026-10-15T07:56:06Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:56:18Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:56:30Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:56:43Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:59:02Z containerd: PullImage \"registry.invalid/inject/missing:1\" failed: rpc error: code = Unknown desc = failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": d",
+        "2026-10-15T07:59:02Z kubelet: PullImage from image service failed: rpc error: code = Unknown desc = failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": dial tcp: lookup regi",
+        "2026-10-15T07:59:02Z kubelet: Failed to pull image: failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": dial tcp: lookup registry.invalid on 127.0.0.53:53: no such host",
+        "2026-10-15T07:59:02Z kubelet: Unhandled Error: container unpullable start failed in pod unpullable_inject-noise(b3b6b8b2-f6b6-4a9e-a739-d3c76801023d): ErrImagePull: failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://regis",
+        "2026-10-15T07:59:02Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ErrImagePull: \"failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: failed to do request: Head \\\"https://registry.invalid/v2/inject/missing/manifests",
+        "2026-10-15T07:59:03Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:59:04Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"crashloop\" with CrashLoopBackOff: \"back-off 10s restarting failed container=crashloop pod=crashloop_inject-noise(a2f501d1-a394-414e-8e99-2fea566bf2ea)\"",
+        "2026-10-15T07:59:18Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"crashloop\" with CrashLoopBackOff: \"back-off 20s restarting failed container=crashloop pod=crashloop_inject-noise(a2f501d1-a394-414e-8e99-2fea566bf2ea)\"",
+        "2026-10-15T07:59:18Z containerd: PullImage \"registry.invalid/inject/missing:1\" failed: rpc error: code = Unknown desc = failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": d",
+        "2026-10-15T07:59:18Z kubelet: PullImage from image service failed: rpc error: code = Unknown desc = failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": dial tcp: lookup regi",
+        "2026-10-15T07:59:18Z kubelet: Failed to pull image: failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": dial tcp: lookup registry.invalid on 127.0.0.53:53: no such host",
+        "2026-10-15T07:59:18Z kubelet: Unhandled Error: container unpullable start failed in pod unpullable_inject-noise(b3b6b8b2-f6b6-4a9e-a739-d3c76801023d): ErrImagePull: failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://regis",
+        "2026-10-15T07:59:18Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ErrImagePull: \"failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: failed to do request: Head \\\"https://registry.invalid/v2/inject/missing/manifests",
+        "2026-10-15T07:59:31Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T07:59:44Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"crashloop\" with CrashLoopBackOff: \"back-off 40s restarting failed container=crashloop pod=crashloop_inject-noise(a2f501d1-a394-414e-8e99-2fea566bf2ea)\"",
+        "2026-10-15T07:59:45Z containerd: PullImage \"registry.invalid/inject/missing:1\" failed: rpc error: code = Unknown desc = failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": d",
+        "2026-10-15T07:59:45Z kubelet: PullImage from image service failed: rpc error: code = Unknown desc = failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": dial tcp: lookup regi",
+        "2026-10-15T07:59:45Z kubelet: Failed to pull image: failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": dial tcp: lookup registry.invalid on 127.0.0.53:53: no such host",
+        "2026-10-15T07:59:45Z kubelet: Unhandled Error: container unpullable start failed in pod unpullable_inject-noise(b3b6b8b2-f6b6-4a9e-a739-d3c76801023d): ErrImagePull: failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://regis",
+        "2026-10-15T07:59:45Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ErrImagePull: \"failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: failed to do request: Head \\\"https://registry.invalid/v2/inject/missing/manifests"
+      ],
+      "host": {
+        "diskUsedPercent": 15,
+        "memoryAvailableMiB": 3386,
+        "uptimeSeconds": 181620
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": []
+  },
+  "source": {
+    "fault": "killed",
+    "run": 1,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-15T08:02:59.185105747Z",
+      "summary": "KubeSolo pods are stuck in CrashLoopBackOff due to pulling an invalid image from an unreachable registry.",
+      "cause": "The image \"registry.invalid/inject/missing:1\" cannot be resolved because the registry host is unreachable (DNS lookup failed), matching the 'unsupported host' or 'Missing kernel support' knowledge entries regarding network resolution failures.",
+      "action": "report_only",
+      "actionProbability": 0.8430839570528307,
+      "rating": "high"
+    }
+  }
+}

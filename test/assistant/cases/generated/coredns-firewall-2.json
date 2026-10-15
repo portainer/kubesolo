@@ -1,0 +1,61 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m30s: coredns",
+    "time": "2026-10-15T08:58:00.711439601Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "no available coredns replicas",
+        "kine": "ok",
+        "kubelet": "ok",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-15T08:48:45Z apiserver: Failed to parse etcd version: could not parse \"\" as version",
+        "2026-10-15T08:48:45Z apiserver: Could not construct pre-rendered responses for ServiceAccountIssuerDiscovery endpoints. Endpoints will not be enabled. Error: issuer URL must use https scheme, got: kubernetes.default.svc",
+        "2026-10-15T08:48:46Z apiserver: Error removing old endpoints from kubernetes service: no API server IP addresses were listed in storage, refusing to erase all endpoints for the kubernetes Service",
+        "2026-10-15T08:49:05Z kubelet: Error getting the current node from lister: node \"kubesolo-rnd\" not found",
+        "2026-10-15T08:49:05Z kubelet: Skipping pod synchronization: [container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]",
+        "2026-10-15T08:49:05Z kubelet: Image garbage collection failed once. Stats initialization may not have completed yet: invalid capacity 0 on image filesystem",
+        "2026-10-15T08:49:05Z kubelet: Failed to read data from checkpoint: checkpoint is not found",
+        "2026-10-15T08:49:05Z kubelet: eviction manager: failed to check if we have separate container filesystem. Ignoring.: no imagefs label for configured runtime",
+        "2026-10-15T08:49:15Z kubeproxy: Kube-proxy configuration may be incomplete or incorrect: nodePortAddresses is unset; NodePort connections will be accepted on all local IPs. Consider using `--nodeport-addresses primary`"
+      ],
+      "events": [
+        "2026-10-15T08:49:05Z default/node/kubesolo-rnd InvalidDiskCapacity: invalid capacity 0 on image filesystem",
+        "2026-10-15T08:57:33Z kube-system/pod/coredns-56bf6cfb95-5w2gg Unhealthy: Readiness probe failed: HTTP probe failed with statuscode: 503"
+      ],
+      "host": {
+        "diskUsedPercent": 14,
+        "memoryAvailableMiB": 3190,
+        "uptimeSeconds": 185095
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "firewall",
+      "network",
+      "api"
+    ]
+  },
+  "source": {
+    "fault": "coredns-firewall",
+    "run": 2,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-15T08:59:05.943698809Z",
+      "summary": "CoreDNS is unhealthy due to a 503 readiness probe failure, likely caused by a network connectivity issue or DNS resolution failure.",
+      "cause": "The host's uptime is 185095 seconds (over 5 days), which is not a short boot race, and the recentErrors show the node was not found in the lister, suggesting a network or DNS resolution issue. This matches the 'CoreDNS failing' knowledge entry where the cause is the host firewall blocks pod traffic or the network was not up yet at boot.",
+      "action": "report_only",
+      "actionProbability": 0.7788249838493335,
+      "rating": "medium"
+    }
+  }
+}

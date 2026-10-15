@@ -1,0 +1,65 @@
+{
+  "incident": {
+    "trigger": "KubeSolo did not shut down cleanly (crash, fatal error, kill or power loss)",
+    "time": "2026-10-15T08:48:38.336743434Z",
+    "snapshot": {
+      "recentErrors": [
+        "2026-10-15T08:38:17Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:19Z kine: error while range on /registry/namespaces/ /registry/namespaces0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:19Z kine: Failed to list /registry/namespaces/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:19Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:24Z kine: error while range on /registry/servicecidrs/ /registry/servicecidrs0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:24Z kine: Failed to list /registry/servicecidrs/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:24Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:28Z kine: error while range on /registry/poddisruptionbudgets/ /registry/poddisruptionbudgets0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:28Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:28Z kine: Failed to list /registry/poddisruptionbudgets/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:33Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-15T08:38:33Z apiserver: Timeout or abort while handling",
+        "2026-10-15T08:38:33Z apiserver: Post-timeout activity",
+        "2026-10-15T08:38:33Z apiserver: Unhandled Error: unable to sync kubernetes service: Get \"https://[::1]:6443/apis/discovery.k8s.io/v1/namespaces/default/endpointslices/kubernetes\": stream error: stream ID 1141; INTERNAL_ERROR; received from peer",
+        "2026-10-15T08:38:35Z kine: Failed to list compact_rev_key_apiserver for revision 100729: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:35Z apiserver: etcd: endpoint ([127.0.0.1:2379]): etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:35Z kine: error in compact revision:100729 : rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:35Z apiserver: etcd: endpoint ([127.0.0.1:2379]) compact failed: etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:44Z kine: error while range on /registry/endpointslices/ /registry/endpointslices0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:44Z kine: Failed to list /registry/endpointslices/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:44Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:38:47Z kine: error while range on /registry/priorityclasses/ /registry/priorityclasses0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:47Z kine: Failed to list /registry/priorityclasses/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:38:47Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:39:06Z kine: Failed to list /registry/resourcequotas/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:39:06Z kine: error while range on /registry/resourcequotas/ /registry/resourcequotas0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:39:06Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",
+        "2026-10-15T08:39:08Z kine: Failed to list /registry/networkpolicies/ for revision 100763: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:39:08Z kine: error while range on /registry/networkpolicies/ /registry/networkpolicies0: rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted",
+        "2026-10-15T08:39:08Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old."
+      ],
+      "host": {
+        "diskUsedPercent": 14,
+        "memoryAvailableMiB": 3379,
+        "uptimeSeconds": 184532
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": []
+  },
+  "source": {
+    "fault": "killed",
+    "run": 2,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-15T08:50:44.434333942Z",
+      "summary": "The apiserver failed due to context deadline exceeded errors during etcd cache consistency checks, indicating a slow or unresponsive kine datastore.",
+      "cause": "The kine (SQLite) datastore is too slow or unavailable, causing the apiserver to timeout waiting for etcd responses. This matches the knowledge entry for 'Datastore unreachable or too slow' where 'context deadline exceeded' or 'connection refused' to 127.0.0.1:2379 indicates kine cannot answer in time.",
+      "action": "restart_component",
+      "actionProbability": 0.6674662831314208,
+      "rating": "medium"
+    }
+  }
+}

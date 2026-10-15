@@ -1,0 +1,76 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: apiserver, coredns, kine",
+    "time": "2026-10-15T09:24:13.349813326Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "unexpected status 500",
+        "controller": "ok",
+        "coredns": "Get \"https://10.49.0.6:6443/apis/apps/v1/namespaces/kube-system/deployments/coredns\": context deadline exceeded",
+        "kine": "dial tcp 127.0.0.1:2379: connect: connection refused",
+        "kubelet": "ok",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-15T09:23:59Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-15T09:23:59Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-15T09:23:59Z kubelet: Failed to get status for pod: the server was unable to return a response in the time allotted, but may still be processing the request (get pods unpullable)",
+        "2026-10-15T09:23:59Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-15T09:23:59Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-15T09:23:59Z apiserver: Post-timeout activity",
+        "2026-10-15T09:24:04Z kubelet: Error updating node status, will retry: failed to patch status \"{\\\"status\\\":{\\\"$setElementOrder/conditions\\\":[{\\\"type\\\":\\\"MemoryPressure\\\"},{\\\"type\\\":\\\"DiskPressure\\\"},{\\\"type\\\":\\\"PIDPressure\\\"},{\\\"type\\\":\\\"Ready\\\"}],\\\"conditions\\\":[{\\\"lastHeartbeatTime\\\":\\\"2026-10-15T0",
+        "2026-10-15T09:24:04Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-15T09:24:04Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-15T09:24:04Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 904.574µs, panicked: false, err: context canceled, panic-reason: <nil>",
+        "2026-10-15T09:24:04Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-15T09:24:04Z apiserver: Post-timeout activity",
+        "2026-10-15T09:24:05Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 6.924µs, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
+        "2026-10-15T09:24:05Z kubernetes: Server rejected event (will not retry!): Timeout: request did not complete within requested timeout - context deadline exceeded",
+        "2026-10-15T09:24:07Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-15T09:24:09Z kubernetes: Failed to ensure lease exists, will retry: Get \"https://10.49.0.6:6443/apis/coordination.k8s.io/v1/namespaces/kube-node-lease/leases/kubesolo-rnd?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)",
+        "2026-10-15T09:24:09Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-15T09:24:09Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-15T09:24:09Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-15T09:24:09Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-15T09:24:09Z apiserver: Post-timeout activity",
+        "2026-10-15T09:24:11Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"context canceled\"}: context canceled",
+        "2026-10-15T09:24:11Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-15T09:24:11Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-15T09:24:11Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-15T09:24:11Z apiserver: Post-timeout activity",
+        "2026-10-15T09:24:14Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-15T09:24:14Z apiserver: Timeout or abort while handling",
+        "2026-10-15T09:24:14Z apiserver: Post-timeout activity",
+        "2026-10-15T09:24:14Z kubelet: Error updating node status, will retry: error getting node \"kubesolo-rnd\": Get \"https://10.49.0.6:6443/api/v1/nodes/kubesolo-rnd?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"
+      ],
+      "host": {
+        "diskUsedPercent": 14,
+        "memoryAvailableMiB": 3147,
+        "uptimeSeconds": 186674
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "restart_component"
+    ],
+    "mentions": [
+      "kine"
+    ]
+  },
+  "source": {
+    "fault": "kine-blocked",
+    "run": 3,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-15T09:26:56.296560147Z",
+      "summary": "KubeSolo is unhealthy for 5m0s due to apiserver, coredns, and kine failures caused by slow or unreachable kine storage.",
+      "cause": "kine cannot answer in time: slow storage such as an SD card, a full disk, or a blocked loopback port. This matches the knowledge entry for 'Datastore unreachable or too slow'.",
+      "action": "restart_component",
+      "actionProbability": 0.6045782856181487,
+      "rating": "medium"
+    }
+  }
+}
