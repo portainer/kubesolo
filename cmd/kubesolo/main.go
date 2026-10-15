@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/syslog"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -1063,7 +1064,7 @@ func (s *kubesolo) stopIncidentRecording() {
 // unhealthy. It starts once KubeSolo has come up, so startup is not an outage.
 func (s *kubesolo) watchComponents(ctx context.Context) {
 	collector := &assistant.Collector{
-		Probes:  metrics.Probers(s.embedded),
+		Probes:  s.assistantChecks(),
 		Errors:  s.errorLog.Lines,
 		DataDir: s.cfg.Path,
 	}
@@ -1087,6 +1088,14 @@ func (s *kubesolo) incidentsForAPI() configapi.Incidents {
 	return s.incidents
 }
 
+// assistantChecks are what the assistant watches and reports on: each control
+// plane component's health probe, and the host's disk and memory.
+func (s *kubesolo) assistantChecks() map[string]func(context.Context) error {
+	checks := metrics.Probers(s.embedded)
+	maps.Copy(checks, assistant.HostChecks(s.cfg.Path))
+	return checks
+}
+
 // reporterForAPI writes the assistant's report, or is nil when the assistant
 // is disabled. It must be an untyped nil, which the API reads as disabled.
 func (s *kubesolo) reporterForAPI() configapi.Reporter {
@@ -1094,7 +1103,7 @@ func (s *kubesolo) reporterForAPI() configapi.Reporter {
 		return nil
 	}
 	return &assistant.Reporter{
-		Collector: &assistant.Collector{Probes: metrics.Probers(s.embedded), DataDir: s.cfg.Path},
+		Collector: &assistant.Collector{Probes: s.assistantChecks(), DataDir: s.cfg.Path},
 		Store:     s.incidents,
 	}
 }

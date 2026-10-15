@@ -16,9 +16,7 @@
 #
 # Faults: kubelet-down kine-blocked runtime-unreachable killed disk-full
 #         coredns-firewall db-corrupt
-#
-# disk-full records no incident today: every component stays healthy while
-# the kubelet evicts pods, so the watcher never fires. It is kept to show that.
+
 
 set -euo pipefail
 

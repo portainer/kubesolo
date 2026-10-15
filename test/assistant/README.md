@@ -116,7 +116,7 @@ assistant and the API enabled, and `kubectl` installed.
 | `kine-blocked` | Rejects kine's port for 7 minutes | `restart_component` |
 | `runtime-unreachable` | Moves containerd's socket away for 7 minutes | `restart_component` |
 | `killed` | `kill -9` | `report_only` |
-| `disk-full` | Fills the disk to 32 MiB short of full for 7 minutes, then deletes the pods evicted meanwhile | `free_disk_space`; records no incident yet, see below |
+| `disk-full` | Fills the disk to 32 MiB short of full for 7 minutes, then deletes the pods evicted meanwhile | `free_disk_space` |
 | `coredns-firewall` | Rejects pod traffic to the API server and restarts CoreDNS | `report_only` |
 | `db-corrupt` | Overwrites part of the datastore, lets KubeSolo fail on it, then puts the saved copy back | `repair_database` |
 
@@ -125,11 +125,15 @@ each fault is also seen among unrelated warnings. Each fault starts from a
 node that has been healthy for 90 seconds, so that it is an outage of its own,
 and a fault that produces no incident within 25 minutes is logged and skipped.
 
-`disk-full` shows a gap: every component stays healthy while the disk is full,
-so no incident is recorded, while the kubelet evicts pods and their
-replacements by the thousand. On the test node that left 7,303 failed pods,
-held in the API server's memory (KubeSolo grew to 1.8 GB), until they were
-deleted.
+A full disk once recorded no incident, as every component stayed healthy;
+the watcher now checks the host's disk and memory too. While the disk is full,
+the kubelet evicts pods and their replacements by the thousand: on the test
+node that left 7,303 failed pods, held in the API server's memory (KubeSolo
+grew to 1.8 GB), until they were deleted.
+
+The first `disk-full` case was triaged `prune_images`, rated high (0.85),
+against its label, `free_disk_space`: the snapshot says how full the disk is,
+not what fills it, so the model cannot tell the two apart.
 
 ### First generated batch
 

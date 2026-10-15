@@ -1,0 +1,100 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m30s: disk",
+    "time": "2026-10-15T20:31:00.74871985Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "ok",
+        "disk": "100% used; 90% or more is too full",
+        "kine": "ok",
+        "kubelet": "ok",
+        "memory": "ok",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-15T20:26:09Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:26:19Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:26:29Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:26:39Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:26:49Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:26:59Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:27:09Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:27:19Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:27:29Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:27:35Z kubelet: Image garbage collection failed multiple times in a row: Insufficient free disk space on the node's image filesystem (100% of 76.4 GiB used). Failed to free sufficient space by deleting unused images (freed 0 bytes). Investigate disk usage, as it could be used by active",
+        "2026-10-15T20:27:39Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:27:49Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:27:59Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:28:09Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:28:20Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:28:30Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:28:40Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:28:50Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:29:00Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:29:10Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:29:20Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:29:30Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:29:40Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:29:50Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:30:00Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:30:10Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:30:20Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:30:30Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:30:40Z kubelet: Eviction manager: cannot evict a critical pod",
+        "2026-10-15T20:30:50Z kubelet: Eviction manager: cannot evict a critical pod"
+      ],
+      "events": [
+        "2026-10-15T20:30:56Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-rh629 Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:56Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-d8rzf Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:57Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-mbj6q Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:57Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-kzmb7 Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:57Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-59rrh Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:57Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-cpmdh Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:57Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-swwjf Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:58Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-bh6xd Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:58Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-dgk7q Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:58Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-p8qv4 Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:58Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-j69xm Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:58Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-85sfg Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:59Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-h7zpk Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:59Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-6h85v Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:59Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-4xnzt Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:59Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-6v8b6 Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:59Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-8cqp7 Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:30:59Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-7wpdn Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:31:00Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-6lwll Evicted: The node had condition: [DiskPressure]. ",
+        "2026-10-15T20:31:00Z local-path-storage/pod/local-path-provisioner-84fdc5cd4c-kqsrm Evicted: The node had condition: [DiskPressure]. "
+      ],
+      "host": {
+        "diskUsedPercent": 100,
+        "memoryAvailableMiB": 2625,
+        "uptimeSeconds": 226675
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "free_disk_space"
+    ],
+    "mentions": [
+      "disk"
+    ]
+  },
+  "source": {
+    "fault": "disk-full",
+    "run": 1,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-15T20:35:01.763280989Z",
+      "summary": "KubeSolo is unhealthy for 5m30s due to disk pressure at 100% usage, causing eviction failures and pod eviction.",
+      "cause": "The disk is 100% used, matching the 'disk full' knowledge entry which indicates images, logs or volumes filled the disk. Action: prune_images when image garbage collection failed, otherwise free_disk_space.",
+      "action": "prune_images",
+      "actionProbability": 0.852312399551347,
+      "rating": "high"
+    }
+  }
+}

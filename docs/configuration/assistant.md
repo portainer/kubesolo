@@ -126,7 +126,7 @@ With the assistant enabled, KubeSolo records an **incident** when something goes
 | Trigger | Recorded |
 |---|---|
 | KubeSolo did not shut down cleanly: a crash, a fatal error, a kill or a power loss | On the next start. A crash within 15 minutes of the previous one is part of the same crash loop and is not recorded again |
-| A control plane component (containerd, kine, API server, controller manager, kubelet, webhook, CoreDNS) fails its health check for 5 minutes | Once per outage, however many components it takes down. A new outage needs every component healthy in between |
+| A control plane component (containerd, kine, API server, controller manager, kubelet, webhook, CoreDNS) fails its health check for 5 minutes, or the host does: its disk 90% or more used, or under 200 MiB of memory available | Once per outage, however many components it takes down. A new outage needs every component, and the host, healthy in between |
 
 Each incident carries a snapshot of the node at the time: each component's health, KubeSolo's latest error log lines, recent Kubernetes warning events, and disk and memory use. A snapshot is a few KB, and at most 12 KB. The 100 most recent incidents are kept, under `/var/lib/kubesolo/assistant/incidents/`.
 
