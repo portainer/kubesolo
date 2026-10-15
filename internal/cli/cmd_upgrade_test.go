@@ -69,6 +69,12 @@ func TestContainerUpgradeArgs(t *testing.T) {
 		t.Errorf("config file: args = %v, doc = %s, err = %v", args, doc, err)
 	}
 
+	// A container on a configuration file cannot go to a release that predates
+	// it: that binary would reject --config.
+	if _, _, _, err := containerUpgradeArgs(onFile, &config.Config{Version: "v1.2.0"}); err == nil || !strings.Contains(err.Error(), "predates") {
+		t.Errorf("config file to v1.2.0: err = %v", err)
+	}
+
 	// A target that predates the configuration file keeps the flags.
 	if args, doc, _, err := containerUpgradeArgs(flags, &config.Config{Version: "v1.2.0"}); err != nil || doc != nil || len(args) != len(flags) {
 		t.Errorf("old target: args = %v, doc = %s, err = %v", args, doc, err)

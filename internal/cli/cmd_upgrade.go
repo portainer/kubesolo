@@ -238,18 +238,25 @@ func containerUpgradeImage(current, explicit, version string) (string, error) {
 // container are left out and returned as dropped. A container already on a
 // configuration file keeps it.
 func containerUpgradeArgs(oldArgs []string, cfg *config.Config) (args []string, doc []byte, dropped []string, err error) {
+	// A custom image is not described by --version; it is taken to be current.
+	predatesFile := false
+	if cfg.ContainerImage == "" || cfg.ContainerImage == config.DefaultContainerImage+":"+cfg.Version {
+		cmp, ok := compareVersions(cfg.Version, config.MinConfigFileVersion)
+		predatesFile = ok && cmp < 0
+	}
 	if config.UsesConfigFile(oldArgs) {
+		if predatesFile {
+			return nil, nil, nil, fmt.Errorf("%s predates the configuration file this instance runs with, and would not start; upgrade to %s or later",
+				cfg.Version, config.MinConfigFileVersion)
+		}
 		return oldArgs, nil, nil, nil
 	}
-	// A custom image is not described by --version; it is taken to be current.
-	if cfg.ContainerImage == "" || cfg.ContainerImage == config.DefaultContainerImage+":"+cfg.Version {
-		if cmp, ok := compareVersions(cfg.Version, config.MinConfigFileVersion); ok && cmp < 0 {
-			return oldArgs, nil, nil, nil
-		}
+	if predatesFile {
+		return oldArgs, nil, nil, nil
 	}
 	resolved, _, dropped, _, err := config.ContainerConfig(oldArgs)
 	if err != nil {
-		return nil, nil, dropped, err
+		return nil, nil, dropped, fmt.Errorf("cannot move the instance's flags onto a configuration file: %w", err)
 	}
 	if doc, err = kubesoloconfig.Marshal(resolved); err != nil {
 		return nil, nil, dropped, err
@@ -309,7 +316,7 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions)
 	}
 	newArgs, newDoc, dropped, err := containerUpgradeArgs(oldArgs, cfg)
 	if err != nil {
-		return p.Fail("configuration", fmt.Errorf("cannot move the instance's flags onto a configuration file: %w", err))
+		return p.Fail("configuration", err)
 	}
 	if newDoc != nil {
 		p.Info("Moving the instance's settings from flags onto " + config.ContainerConfigFile)
