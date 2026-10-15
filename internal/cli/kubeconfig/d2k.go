@@ -146,6 +146,11 @@ func RemoveD2KContext(containerName string) bool {
 	if err != nil {
 		return removed
 	}
+	// rm -f succeeds for a context that does not exist, so check first, to
+	// report only what was removed.
+	if exec.Command(dockerPath, "context", "inspect", name).Run() != nil {
+		return removed
+	}
 	out, err := exec.Command(dockerPath, "context", "rm", "-f", name).CombinedOutput()
 	if err != nil {
 		if !strings.Contains(string(out), "not found") {

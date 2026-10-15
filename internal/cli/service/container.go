@@ -525,9 +525,8 @@ func parseVersionOutput(out string) (string, error) {
 
 // RemoveContainerVolume removes the data volume for the named instance.
 // Called during uninstall --purge to delete all cluster state.
-func RemoveContainerVolume(name string) error {
-	_, err := removeVolume(ContainerNameFor(name) + "-data")
-	return err
+func RemoveContainerVolume(name string) (bool, error) {
+	return removeVolume(ContainerNameFor(name) + "-data")
 }
 
 // RemoveContainerConfigVolume removes the configuration volume of the named
@@ -543,7 +542,13 @@ func removeVolume(vname string) (bool, error) {
 	}
 	defer func() { _ = cli.Close() }()
 
-	if err := cli.VolumeRemove(context.Background(), vname, true); err != nil {
+	// Removing with force succeeds for a volume that does not exist, so its
+	// existence is checked first, to report only what was removed.
+	ctx := context.Background()
+	if _, err := cli.VolumeInspect(ctx, vname); cerrdefs.IsNotFound(err) {
+		return false, nil
+	}
+	if err := cli.VolumeRemove(ctx, vname, true); err != nil {
 		if cerrdefs.IsNotFound(err) {
 			return false, nil
 		}

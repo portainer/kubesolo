@@ -201,10 +201,13 @@ func runContainerUninstall(p *ui.Printer, name string, purge, keepConfig bool) e
 	volumeName := cname + "-data"
 	if purge {
 		p.Step("Removing cluster data volume")
-		if err := service.RemoveContainerVolume(name); err != nil {
+		if removed, err := service.RemoveContainerVolume(name); err != nil {
 			p.Warn("could not remove volume: " + err.Error())
-		} else {
+		} else if removed {
 			p.OK("Volume removed", volumeName)
+			exists = true
+		} else {
+			p.Info("No data volume " + volumeName)
 		}
 	} else if exists {
 		p.Info("Cluster data preserved in volume " + volumeName + " (use --purge to remove)")
@@ -238,7 +241,7 @@ func runContainerUninstall(p *ui.Printer, name string, purge, keepConfig bool) e
 	}
 
 	// Only claim an uninstall happened if something was actually actioned.
-	if !exists && !purge && !cleaned {
+	if !exists && !cleaned {
 		p.Done("Nothing to uninstall.")
 	} else {
 		p.Done("KubeSolo uninstalled.")
