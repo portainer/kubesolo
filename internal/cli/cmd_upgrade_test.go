@@ -74,3 +74,16 @@ func TestContainerUpgradeArgs(t *testing.T) {
 		t.Errorf("old target: args = %v, doc = %s, err = %v", args, doc, err)
 	}
 }
+
+// install and upgrade register flags against the same config. Registering a
+// flag stores its default, so upgrade must not register one over a field whose
+// default install takes from the environment.
+func TestUpgradeFlagsKeepInstallEnvironmentDefaults(t *testing.T) {
+	t.Setenv("KUBESOLO_IMAGE", "registry.example.com/kubesolo:dev")
+	var cfg config.Config
+	installCmd(&cfg)
+	upgradeCmd(&cfg)
+	if cfg.ContainerImage != "registry.example.com/kubesolo:dev" {
+		t.Errorf("KUBESOLO_IMAGE lost: ContainerImage = %q", cfg.ContainerImage)
+	}
+}

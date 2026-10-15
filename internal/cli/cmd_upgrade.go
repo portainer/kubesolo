@@ -57,13 +57,16 @@ Examples:
 	f.BoolVar(&opts.detach, "detach", false, "Return once the upgrade has started instead of following it")
 	f.StringVar(&cfg.Name, "name", envOr("KUBESOLO_NAME", config.AppName),
 		"Name of the KubeSolo instance to upgrade (default: kubesolo)")
-	f.StringVar(&cfg.ContainerImage, "image", "",
+	// Not cfg.ContainerImage: install registers that field with a default from
+	// KUBESOLO_IMAGE, and registering it here would overwrite the default.
+	f.StringVar(&opts.image, "image", "",
 		"Container image to upgrade to (container mode; default: portainer/kubesolo:<version>).\n"+
 			"Required when the instance runs an image other than portainer/kubesolo")
 	return cmd
 }
 
 type upgradeOptions struct {
+	image         string
 	sha256        string
 	force         bool
 	healthTimeout time.Duration
@@ -73,6 +76,7 @@ type upgradeOptions struct {
 func runUpgrade(cfg *config.Config, opts upgradeOptions) error {
 	p := ui.New()
 	p.Header("upgrade")
+	cfg.ContainerImage = opts.image
 
 	if containerModeActive(cfg.Name) {
 		return runContainerUpgrade(p, cfg, opts)
