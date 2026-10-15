@@ -95,7 +95,7 @@ func TestAnIncidentIsTriagedWithTheKnowledge(t *testing.T) {
 	tr.triagePending(context.Background(), tr.now())
 
 	got := triageOf(t, tr.Store, inc.ID)
-	if got.Status != TriageDone || got.Action != "repair_database" || got.Confidence != "medium" || got.Summary != "kine is down" {
+	if got.Status != TriageDone || got.Action != "repair_database" || got.Rating != RatingMedium || got.Summary != "kine is down" {
 		t.Errorf("triage = %+v", got)
 	}
 	// repair 0.6 of the 0.9 the six actions hold between them.
@@ -134,7 +134,7 @@ func TestTheActionIsChosenAfterTheCause(t *testing.T) {
 
 	schema := string(requestsMade(t, requests)[0].ResponseFormat.JSONSchema.Schema)
 	last := -1
-	for _, field := range []string{`"summary"`, `"cause"`, `"action"`, `"confidence"`} {
+	for _, field := range []string{`"summary"`, `"cause"`, `"action"`} {
 		i := strings.Index(schema, field)
 		if i <= last {
 			t.Fatalf("%s is out of order in the schema: %s", field, schema)
@@ -359,5 +359,32 @@ func TestActionProbability(t *testing.T) {
 				t.Errorf("got %v, %v; want %v, %v", got, ok, tc.want, tc.ok)
 			}
 		})
+	}
+}
+
+// The rating is read from the action's probability, not written by the model,
+// which rates itself the same whether right or wrong.
+func TestRating(t *testing.T) {
+	for _, tc := range []struct {
+		p    float64
+		want string
+	}{
+		{1, RatingHigh}, {ActionThreshold, RatingHigh}, {0.79, RatingMedium}, {0.5, RatingMedium}, {0.49, RatingLow},
+		{0, RatingLow}, // unknown
+	} {
+		if got := rating(tc.p); got != tc.want {
+			t.Errorf("rating(%v) = %s, want %s", tc.p, got, tc.want)
+		}
+	}
+}
+
+func TestTheModelDoesNotRateItself(t *testing.T) {
+	tr, requests := newTestTriager(t, "diagnose")
+	pendingIncident(t, tr.Store, tr.now(), "kine")
+
+	tr.triagePending(context.Background(), tr.now())
+
+	if raw, _ := os.ReadFile(requests); strings.Contains(string(raw), "confidence") {
+		t.Errorf("the model is still asked for its confidence: %s", raw)
 	}
 }

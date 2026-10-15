@@ -76,9 +76,9 @@ func fakeLlamaServer(mode string) {
 		content := "you asked: " + last.Content
 		switch mode {
 		case "diagnose":
-			content = `{"summary":"kine is down","cause":"the database is locked","action":"repair_database","confidence":"medium"}`
+			content = `{"summary":"kine is down","cause":"the database is locked","action":"repair_database"}`
 		case "off-schema":
-			content = `{"summary":"kine is down","cause":"unknown","action":"reboot_the_node","confidence":"medium"}`
+			content = `{"summary":"kine is down","cause":"unknown","action":"reboot_the_node"}`
 		}
 		choice := map[string]any{"message": map[string]string{"role": "assistant", "content": content}}
 		if mode == "diagnose" {
@@ -103,7 +103,7 @@ var diagnoseLogprobs = map[string]any{"content": []any{
 		map[string]any{"token": "If", "logprob": math.Log(0.05)},
 	}},
 	map[string]any{"token": "_database", "logprob": 0},
-	map[string]any{"token": `","confidence":"medium"}`, "logprob": 0},
+	map[string]any{"token": `"}`, "logprob": 0},
 }}
 
 // newTestAssistant runs this test binary as llama-server in the given mode, and

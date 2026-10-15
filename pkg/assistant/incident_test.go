@@ -126,7 +126,7 @@ func TestUntriagedIncidentsAreNotServed(t *testing.T) {
 		t.Fatalf("pending = %+v, %v", pending, err)
 	}
 
-	older.Triage = &Triage{Status: TriageDone, Diagnosis: Diagnosis{Summary: "kine was down", Action: "report_only", Confidence: "high"}}
+	older.Triage = &Triage{Status: TriageDone, Diagnosis: Diagnosis{Summary: "kine was down", Action: "report_only", Rating: RatingHigh}}
 	if err := s.Save(older); err != nil {
 		t.Fatal(err)
 	}

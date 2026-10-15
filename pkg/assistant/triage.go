@@ -26,7 +26,29 @@ var Actions = []string{
 	"report_only",
 }
 
-var confidences = []string{"low", "medium", "high"}
+// Ratings of an action's probability. An action is trusted enough to act on
+// only at ActionThreshold, the top of the high rating.
+const (
+	RatingHigh   = "high"
+	RatingMedium = "medium"
+	RatingLow    = "low"
+
+	// ActionThreshold is the probability at which an action is rated high. On
+	// the test set no false action reached it.
+	ActionThreshold = 0.8
+)
+
+// rating puts an action's probability in words. An unknown probability, 0,
+// is low.
+func rating(p float64) string {
+	switch {
+	case p >= ActionThreshold:
+		return RatingHigh
+	case p >= 0.5:
+		return RatingMedium
+	}
+	return RatingLow
+}
 
 const (
 	// MaxKnowledgeBytes is the knowledge file's share of the model's prompt:
@@ -60,15 +82,14 @@ const triagePrompt = `You are the KubeSolo assistant. KubeSolo is a single-node 
 Triage the incident you are given, using the knowledge below. Answer with:
 - summary: one sentence on what went wrong;
 - cause: the most likely cause, and the knowledge entry it matches;
-- action: the Action that entry gives for this evidence; report_only when no entry matches or a person must act;
-- confidence: low when the evidence matches nothing in the knowledge.
+- action: the Action that entry gives for this evidence; report_only when no entry matches or a person must act.
 
 # Knowledge
 
 `
 
 // diagnosisFormat constrains the model's answer to a Diagnosis with an action
-// and a confidence from the fixed lists.
+// from the fixed list.
 var diagnosisFormat = map[string]any{
 	"type":        "json_schema",
 	"json_schema": map[string]any{"name": "diagnosis", "schema": diagnosisSchema},
@@ -80,9 +101,8 @@ var diagnosisFormat = map[string]any{
 var diagnosisSchema = json.RawMessage(`{"type":"object","properties":{` +
 	`"summary":{"type":"string","maxLength":400},` +
 	`"cause":{"type":"string","maxLength":400},` +
-	`"action":{"type":"string","enum":` + mustJSON(Actions) + `},` +
-	`"confidence":{"type":"string","enum":` + mustJSON(confidences) + `}},` +
-	`"required":["summary","cause","action","confidence"],"additionalProperties":false}`)
+	`"action":{"type":"string","enum":` + mustJSON(Actions) + `}},` +
+	`"required":["summary","cause","action"],"additionalProperties":false}`)
 
 func mustJSON(v any) string {
 	raw, err := json.Marshal(v)
@@ -147,12 +167,13 @@ func (a *Assistant) Diagnose(ctx context.Context, inc Incident) (Diagnosis, erro
 	}
 	var d Diagnosis
 	if err := json.Unmarshal([]byte(ans.content), &d); err != nil || d.Summary == "" ||
-		!slices.Contains(Actions, d.Action) || !slices.Contains(confidences, d.Confidence) {
+		!slices.Contains(Actions, d.Action) {
 		return Diagnosis{}, fmt.Errorf("the model answered outside the schema: %s", ans.content)
 	}
 	if p, ok := actionProbability(ans.content, d.Action, ans.tokens); ok {
 		d.ActionProbability = p
 	}
+	d.Rating = rating(d.ActionProbability)
 	return d, nil
 }
 

@@ -50,7 +50,7 @@ func TestEvalTriage(t *testing.T) {
 			truncated := !strings.HasSuffix(strings.TrimSpace(d.Summary), ".")
 			right, named, cut = right+b2i(ok), named+b2i(mentioned), cut+b2i(truncated)
 			t.Logf("%-8s %-30s %-5s %-26s p=%.2f %-6s named=%-5v cut=%-5v %3.0fs  %s",
-				split, name, mark(ok), d.Action, d.ActionProbability, d.Confidence, mentioned, truncated, elapsed.Seconds(), d.Summary)
+				split, name, mark(ok), d.Action, d.ActionProbability, d.Rating, mentioned, truncated, elapsed.Seconds(), d.Summary)
 		}
 		t.Logf("%s: actions %d/%d, named %d/%d, summaries cut %d, %.0fs a case",
 			split, right, len(files), named, len(files), cut, took.Seconds()/float64(len(files)))

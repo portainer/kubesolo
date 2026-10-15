@@ -59,7 +59,7 @@ Actions right out of 12:
 | Model | Dev | Held out | Time a case | Peak memory |
 |---|---|---|---|---|
 | 0.8B (before the order fix below) | 6 | 4 | 30 s | — |
-| **2B** (default) | 10 | 11 | 61 s | 2.2 GB |
+| **2B** (default) | 11 | 9 | 59 s | 2.2 GB |
 | 4B | 9 | 10 | 148 s | 3.6 GB |
 
 The 0.8B suggests `restart_component` for nearly everything. The 4B does no
@@ -74,16 +74,21 @@ should hold or raise the held-out score, not just the dev one.
 
 Each diagnosis carries `actionProbability`, the probability the model gave
 its action among the six, read from its token probabilities. The model's own
-`confidence` said `low` for 23 of the 24 cases, right or wrong; the
-probability tells them apart. With the 2B, a non-`report_only` action that is
+rating of itself, which the schema asked for until then, said `low` for 23 of
+the 24 cases, right or wrong; the probability tells them apart. With the 2B, a non-`report_only` action that is
 wrong is a false action:
 
 | Act only at or above | Right actions kept (dev / held out) | False actions |
 |---|---|---|
-| — | 6 / 8 | 2 / 0 |
-| 0.5 | 6 / 6 | 1 / 0 |
+| — | 7 / 6 | 1 / 1 |
+| 0.5 | 7 / 6 | 1 / 0 |
 | 0.8 | 5 / 3 | 0 / 0 |
 | 0.9 | 4 / 2 | 0 / 0 |
 
-The two false actions were `free_disk_space` with the disk 10% used (0.42) and
-`restart_component` for orphaned containers (0.74).
+KubeSolo offers an action only at 0.8. The false actions below it were
+`restart_component` for orphaned containers (0.75) and for a datastore slowed
+by a full disk (0.48).
+
+Small changes to the prompt move borderline cases: dropping the model's rating
+of itself took the 2B from 10 / 11 to 11 / 9, all of the change below 0.8.
+Judge a change by what passes 0.8 as much as by the totals.
