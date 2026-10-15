@@ -1,8 +1,11 @@
 package webhook
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -115,5 +118,31 @@ func TestPodsAreRefusedUnderPressure(t *testing.T) {
 				t.Errorf("want the pod bound: patches %v, error %v", patches, err)
 			}
 		})
+	}
+}
+
+// A refusal must reach the API server as a denial. Answered as an allowed
+// request without the node name, the pod would be created unbound, Pending
+// for good — and its controller, seeing it exist, would never replace it.
+func TestARefusalIsSentAsADenial(t *testing.T) {
+	w := NewService("edge-01", "", "", "", false)
+	w.readNode = func() *corev1.Node { return nodeWith(corev1.NodeDiskPressure) }
+	review := podReview(t, burstablePod())
+	review.Request.UID = "uid-1"
+	body, err := json.Marshal(review)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	w.serveMutate(rec, httptest.NewRequest(http.MethodPost, "/mutate", bytes.NewReader(body)))
+
+	var got admissionv1.AdmissionReview
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %q: %v", rec.Body.String(), err)
+	}
+	r := got.Response
+	if r == nil || r.Allowed || r.UID != "uid-1" || len(r.Patch) != 0 || r.Result == nil || !strings.Contains(r.Result.Message, "DiskPressure") {
+		t.Errorf("response = %+v", r)
 	}
 }

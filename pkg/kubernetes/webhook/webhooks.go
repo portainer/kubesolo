@@ -40,16 +40,17 @@ func (w *Service) serveMutate(resp http.ResponseWriter, req *http.Request) {
 			Err(err).
 			Msg(msg)
 
-		// Send error response
-		admissionResponse := &admissionv1.AdmissionResponse{
+		// Deny the request. It must not go through sendResponse, which would
+		// replace the denial with an allowed response without patches: a pod
+		// would then be created without a node, Pending for good.
+		admissionReview.Response = &admissionv1.AdmissionResponse{
 			UID:     admissionReview.Request.UID,
 			Allowed: false,
 			Result: &metav1.Status{
 				Message: err.Error(),
 			},
 		}
-		admissionReview.Response = admissionResponse
-		w.sendResponse(resp, admissionReview, nil)
+		writeReview(resp, admissionReview)
 		return
 	}
 
@@ -265,9 +266,12 @@ func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionR
 
 // sendResponse sends the response to the admission review
 func (w *Service) sendResponse(resp http.ResponseWriter, admissionReview *admissionv1.AdmissionReview, patches []map[string]any) {
-	admissionResponse := w.createAdmissionResponse(admissionReview, patches)
-	admissionReview.Response = admissionResponse
+	admissionReview.Response = w.createAdmissionResponse(admissionReview, patches)
+	writeReview(resp, admissionReview)
+}
 
+// writeReview writes the admission review with its response.
+func writeReview(resp http.ResponseWriter, admissionReview *admissionv1.AdmissionReview) {
 	resp.Header().Set("Content-Type", "application/json")
 
 	data, err := json.Marshal(admissionReview)
