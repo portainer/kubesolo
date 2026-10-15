@@ -25,15 +25,15 @@ var d2kFiles = []d2kFile{
 }
 
 // FetchD2KFromContainer copies the D2K mTLS credentials out of the named
-// container, writes them to ~/.docker/d2k/<name>/, and creates or updates
-// a Docker context named <name> pointing to tcp://127.0.0.1:<port>.
+// container, writes them to ~/.docker/d2k/<container>/, and creates or updates
+// a Docker context named after the container pointing to tcp://127.0.0.1:<port>.
+// Naming both after the container keeps them from replacing a context of the
+// user's own that happens to share the instance name.
 //
 // port is the host-mapped ephemeral port for the container's 2376/tcp binding,
 // obtained via service.GetContainerD2KPort.
-func FetchD2KFromContainer(containerName, name, socketPath string, port int) error {
-	if name == "" {
-		name = "kubesolo"
-	}
+func FetchD2KFromContainer(containerName, socketPath string, port int) error {
+	name := containerName
 
 	cli, err := newDockerClient(socketPath)
 	if err != nil {
@@ -120,13 +120,12 @@ func createOrUpdateDockerContext(dockerPath, name, endpoint string) error {
 }
 
 // RemoveD2KContext removes the Docker context and credential directory created
-// by `kubesoloctl d2k fetch` for the named instance. It is best-effort and a
-// no-op when the docker CLI is absent or neither artifact exists. It returns
-// true if it removed the context or the credential directory.
-func RemoveD2KContext(name string) bool {
-	if name == "" {
-		name = "kubesolo"
-	}
+// by `kubesoloctl d2k fetch` for the instance running in the named container.
+// It is best-effort and a no-op when the docker CLI is absent or neither
+// artifact exists. It returns true if it removed the context or the credential
+// directory.
+func RemoveD2KContext(containerName string) bool {
+	name := containerName
 	removed := false
 
 	// Remove the credential directory (~/.docker/d2k/<name>/).
@@ -145,6 +144,11 @@ func RemoveD2KContext(name string) bool {
 	// context (Docker then falls back to the default). "not found" is fine.
 	dockerPath, err := exec.LookPath("docker")
 	if err != nil {
+		return removed
+	}
+	// rm -f succeeds for a context that does not exist, so check first, to
+	// report only what was removed.
+	if exec.Command(dockerPath, "context", "inspect", name).Run() != nil {
 		return removed
 	}
 	out, err := exec.Command(dockerPath, "context", "rm", "-f", name).CombinedOutput()

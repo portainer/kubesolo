@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/containerd/containerd/v2/client"
@@ -58,6 +59,28 @@ func (s *service) importImages(ctx context.Context, c *client.Client, isPortaine
 	}
 
 	return nil
+}
+
+// ImportArchive imports the images in an archive in the docker save format, read
+// from r, into the Kubernetes namespace of the containerd listening on socket,
+// and returns their names. Like the embedded images, they are unpacked when a
+// pod first uses them.
+func ImportArchive(ctx context.Context, socket string, r io.Reader) ([]string, error) {
+	c, err := client.New(socket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to containerd at %s — is KubeSolo running? %w", socket, err)
+	}
+	defer func() { _ = c.Close() }()
+
+	imgs, err := c.Import(namespaces.WithNamespace(ctx, types.DefaultK8sNamespace), r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to import images: %w", err)
+	}
+	names := make([]string, 0, len(imgs))
+	for _, img := range imgs {
+		names = append(names, img.Name)
+	}
+	return names, nil
 }
 
 // importImage imports an image into the containerd registry from a local file.

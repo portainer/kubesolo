@@ -21,19 +21,22 @@ KS_CONTEXT="${KS_CONTEXT:-}"   # resolved lazily on first kc() call
 READY_TIMEOUT="${READY_TIMEOUT:-240}"
 
 # _resolve_ctx finds the kube context kubesoloctl merged for this instance.
-# KubeSolo names its context "kubernetes-admin@<name>" (the cluster/user keep the
-# instance name). We prefer that exact name, then fall back to any context whose
-# name ends with "@<name>", then to the bare name. Resolved once, then cached.
+# kubesoloctl names it "kubernetes-admin@<container name>" (kubesolo, or
+# kubesolo-<name>); older releases used "kubernetes-admin@<name>". We prefer
+# those exact names, then fall back to any context whose name ends with
+# "@<name>", then to the bare name. Resolved once, then cached.
 _resolve_ctx() {
   [ -n "$KS_CONTEXT" ] && return
-  local want="kubernetes-admin@$KS_NAME"
-  if "$KUBECTL" config get-contexts -o name 2>/dev/null | grep -qx "$want"; then
-    KS_CONTEXT="$want"
-  else
-    # `|| true`: under `set -euo pipefail`, grep exiting non-zero on no match
-    # would otherwise abort the script before the fallback below runs.
-    KS_CONTEXT="$("$KUBECTL" config get-contexts -o name 2>/dev/null | grep -E "@${KS_NAME}\$" | head -1 || true)"
-  fi
+  local want
+  for want in "kubernetes-admin@$(container_name)" "kubernetes-admin@$KS_NAME"; do
+    if "$KUBECTL" config get-contexts -o name 2>/dev/null | grep -qx "$want"; then
+      KS_CONTEXT="$want"
+      return
+    fi
+  done
+  # `|| true`: under `set -euo pipefail`, grep exiting non-zero on no match
+  # would otherwise abort the script before the fallback below runs.
+  KS_CONTEXT="$("$KUBECTL" config get-contexts -o name 2>/dev/null | grep -E "@${KS_NAME}\$" | head -1 || true)"
   [ -n "$KS_CONTEXT" ] || KS_CONTEXT="$KS_NAME"
 }
 

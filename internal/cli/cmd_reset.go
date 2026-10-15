@@ -94,23 +94,27 @@ func runReset(name, dataPath string, force bool) error {
 }
 
 func runContainerReset(p *ui.Printer, name string) error {
+	unlock, err := service.LockInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	defer unlock()
 	p.Step("Resetting KubeSolo container")
 	if err := service.ResetContainer(name); err != nil {
 		return p.Fail("container reset", err)
 	}
+	apiAddr, data, err := awaitContainer(name)
+	if err != nil {
+		return containerFailed(p, name, err)
+	}
 	p.OK("Fresh container started", name)
 
-	// Update kubeconfig with the new container's ephemeral port.
+	// Update kubeconfig: the fresh cluster has a new CA and admin credentials.
 	p.Step("Updating kubeconfig")
-	cname := service.ContainerNameFor(name)
-	if port, err := service.GetContainerAPIPort(name); err == nil {
-		apiAddr := fmt.Sprintf("127.0.0.1:%d", port)
-		if data, err := kubeconfig.WaitForContainerKubeconfig(cname, ""); err == nil {
-			kubeconfig.MergeContainerKubeconfig(data, name, "https://"+apiAddr)
-		}
-		p.OK("Kubeconfig updated", "https://"+apiAddr)
+	if err := kubeconfig.MergeContainerKubeconfig(data, service.ContainerNameFor(name), "https://"+apiAddr); err != nil {
+		p.Warn("kubeconfig not updated — " + err.Error())
 	} else {
-		p.Warn("could not discover container API port — run: kubesoloctl kubeconfig fetch")
+		p.OK("Kubeconfig updated", "https://"+apiAddr)
 	}
 
 	p.Done("Reset complete — fresh cluster initializing.")

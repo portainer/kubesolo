@@ -3,9 +3,10 @@ package preflight
 import (
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/portainer/kubesolo/internal/cli/dockerhost"
 )
 
 // ContainerSuite returns pre-flight checks for container run mode (macOS,
@@ -17,13 +18,17 @@ func ContainerSuite() []Check {
 	}
 }
 
-// CheckContainerEngine verifies the container engine is reachable. It honours
-// DOCKER_HOST so it matches what the Docker client (client.FromEnv) actually
-// connects to: a unix socket by default, or a TCP endpoint when DOCKER_HOST is
-// set to tcp://. Schemes it cannot cheaply probe (ssh://, npipe://, …) are left
-// to the client at container-create time rather than failed here.
+// CheckContainerEngine verifies the container engine is reachable. It resolves
+// the engine as the Docker client does — DOCKER_HOST, else the active Docker
+// context — so it checks what kubesoloctl actually connects to: a unix socket
+// by default, or a TCP endpoint. Schemes it cannot cheaply probe (ssh://,
+// npipe://, …) are left to the client at container-create time rather than
+// failed here.
 func CheckContainerEngine() error {
-	host := os.Getenv("DOCKER_HOST")
+	host, err := dockerhost.Host()
+	if err != nil {
+		return err
+	}
 	switch {
 	case host == "":
 		return dialEngine("unix", "/var/run/docker.sock")

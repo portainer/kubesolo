@@ -58,6 +58,10 @@ var (
 	// CheckFirewall is the install script's pre-flight check of the host
 	// firewall, run with the release about to be installed.
 	CheckFirewall = Application.Flag("check-firewall", "Check that the host firewall lets pods reach the API server and each other, then exit.").Hidden().Bool()
+	// ImportImages is how kubesoloctl load brings images into a KubeSolo
+	// container: it runs the binary inside the container with an image archive
+	// on standard input.
+	ImportImages = Application.Flag("import-images", "Import an image archive (docker save format) from standard input into the KubeSolo running with the given data directory, then exit.").Hidden().String()
 )
 
 // setByUser records, per flag name, whether the value came from the command line.

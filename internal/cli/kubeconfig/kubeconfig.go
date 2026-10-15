@@ -6,7 +6,6 @@ package kubeconfig
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,79 +14,41 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// HostCluster is the kubeconfig cluster name of a host install.
+const HostCluster = "kubesolo"
+
 // KubeSoloKubeconfigPath returns the default location of the admin kubeconfig
 // that KubeSolo generates during its first startup.
 func KubeSoloKubeconfigPath(dataPath string) string {
 	return filepath.Join(dataPath, "pki", "admin", "admin.kubeconfig")
 }
 
-// RemoveFromUserConfig surgically removes the named KubeSolo context, cluster,
-// and user entries from the real user's ~/.kube/config. name is the instance
-// name used during install (default "kubesolo"). It is a no-op if kubectl is
-// not installed or if no matching entries are present. It returns true if it
-// actually removed entries.
-func RemoveFromUserConfig(name string) bool {
-	if name == "" {
-		name = "kubesolo"
-	}
-	kubectlPath, err := exec.LookPath("kubectl")
-	if err != nil {
-		log.Info().Msgf("kubectl not found — %q kubeconfig entries not removed; delete them from ~/.kube/config manually if needed", name)
-		return false
-	}
-
+// RemoveFromUserConfig surgically removes the context, cluster and user
+// entries of one KubeSolo instance from the real user's kubeconfig. cluster is
+// the instance's cluster name: its container name in container mode, and
+// "kubesolo" for a host install. It returns true if it actually removed
+// entries.
+func RemoveFromUserConfig(cluster string) bool {
 	_, realHome, _, _ := resolveRealUser()
-	kubeconfigFile := filepath.Join(realHome, ".kube", "config")
-	if _, err := os.Stat(kubeconfigFile); err != nil {
-		log.Debug().Msgf("no kubeconfig at %s — nothing to clean up", kubeconfigFile)
+	kubeconfigFile := userKubeconfigPath(realHome)
+
+	removed, err := removeEntries(kubeconfigFile, entryNames(cluster))
+	if err != nil {
+		log.Warn().Err(err).Msgf("could not remove %s entries from %s", cluster, kubeconfigFile)
 		return false
 	}
-
-	env := append(withoutEnv("KUBECONFIG"), "KUBECONFIG="+kubeconfigFile)
-
-	// Check whether the named context actually exists before touching anything.
-	out, err := cmdOutput(kubectlPath, env, "config", "get-contexts", "-o", "name")
-	if err != nil || !strings.Contains(out, name) {
-		log.Debug().Msgf("no %s context found in kubeconfig — nothing to remove", name)
+	if !removed {
+		log.Debug().Msgf("no %s entries in %s — nothing to remove", cluster, kubeconfigFile)
 		return false
 	}
-
-	log.Info().Msgf("removing %s entries from %s...", name, kubeconfigFile)
-
-	run := func(args ...string) {
-		if err := cmdRun(kubectlPath, env, args...); err != nil {
-			log.Debug().Err(err).Msgf("kubectl %s returned non-zero (may already be absent)", strings.Join(args, " "))
-		}
-	}
-	run("config", "delete-context", "kubernetes-admin@"+name)
-	run("config", "delete-context", "admin-token@"+name)
-	run("config", "unset", "clusters."+name)
-	run("config", "unset", "users.kubernetes-admin")
-	run("config", "unset", "users.admin-token")
-
-	log.Info().Msgf("%s kubeconfig entries removed", name)
+	log.Info().Msgf("%s kubeconfig entries removed from %s", cluster, kubeconfigFile)
 
 	// Inform about any backup the install step created so the user can restore it.
-	backups, _ := filepath.Glob(filepath.Join(realHome, ".kube", "config.backup-*"))
+	backups, _ := filepath.Glob(kubeconfigFile + ".backup-*")
 	if len(backups) > 0 {
 		log.Info().Msgf("backup kubeconfig available: %s", backups[len(backups)-1])
 	}
 	return true
-}
-
-// cmdRun executes kubectl with the given env and args, discarding output.
-func cmdRun(kubectlPath string, env []string, args ...string) error {
-	cmd := exec.Command(kubectlPath, args...)
-	cmd.Env = env
-	return cmd.Run()
-}
-
-// cmdOutput executes kubectl and returns combined stdout as a string.
-func cmdOutput(kubectlPath string, env []string, args ...string) (string, error) {
-	cmd := exec.Command(kubectlPath, args...)
-	cmd.Env = env
-	out, err := cmd.Output()
-	return string(out), err
 }
 
 // kubeconfigWaitTimeout bounds how long MergeAfterStartup waits for KubeSolo to
@@ -98,19 +59,26 @@ func cmdOutput(kubectlPath string, env []string, args ...string) (string, error)
 const kubeconfigWaitTimeout = 120 * time.Second
 
 // MergeAfterStartup waits for KubeSolo to generate its admin kubeconfig and
-// then merges it into the real user's ~/.kube/config. It returns an error if
-// kubectl is missing or the kubeconfig never appears, so the caller can report
-// the true outcome instead of claiming success.
+// then merges it into the real user's kubeconfig. It returns an error if the
+// kubeconfig never appears or cannot be merged, so the caller can report the
+// true outcome instead of claiming success.
 func MergeAfterStartup(dataPath string) error {
-	kubectlPath, err := exec.LookPath("kubectl")
-	if err != nil {
-		return fmt.Errorf("kubectl not found — install kubectl, then run: kubesoloctl kubeconfig fetch (kubeconfig at %s)", KubeSoloKubeconfigPath(dataPath))
-	}
-	log.Info().Msgf("detected kubectl at %s", kubectlPath)
-
 	ksKubeconfig := KubeSoloKubeconfigPath(dataPath)
 	if !waitForFile(ksKubeconfig, kubeconfigWaitTimeout) {
 		return fmt.Errorf("timed out after %s waiting for %s — the cluster may still be starting", kubeconfigWaitTimeout.Round(time.Second), ksKubeconfig)
+	}
+	return MergeFromDisk(dataPath)
+}
+
+// MergeFromDisk merges the admin kubeconfig from dataPath into the real user's
+// kubeconfig immediately (no wait loop). Returns an error if the kubeconfig
+// file does not exist. Use this for on-demand operations like `kubesoloctl
+// kubeconfig fetch` on Linux where KubeSolo is already running as a system
+// service.
+func MergeFromDisk(dataPath string) error {
+	ksKubeconfig := KubeSoloKubeconfigPath(dataPath)
+	if _, err := os.Stat(ksKubeconfig); err != nil {
+		return fmt.Errorf("kubeconfig not found at %s — is KubeSolo running?", ksKubeconfig)
 	}
 
 	realUser, realHome, realUID, realGID := resolveRealUser()
@@ -122,112 +90,14 @@ func MergeAfterStartup(dataPath string) error {
 	if realUID > 0 {
 		if err := os.Chown(ksKubeconfig, realUID, realGID); err != nil {
 			log.Warn().Err(err).Msgf("could not chown source kubeconfig to %s", realUser)
-		} else {
-			log.Debug().Msgf("kubeconfig ownership set to %s: %s", realUser, ksKubeconfig)
 		}
 	}
 
-	mergeIntoUserConfig(kubectlPath, realUser, realHome, realUID, realGID, ksKubeconfig)
-
-	// Force-patch the CA cert after the merge so a reinstall's new CA always
-	// overwrites any stale cert the merge may have preserved from a prior install.
-	caPath := filepath.Join(dataPath, "pki", "ca", "ca.crt")
-	if _, err := os.Stat(caPath); err == nil {
-		patchCACert(kubectlPath, filepath.Join(realHome, ".kube", "config"), "kubesolo", caPath)
+	if err := mergeFile(userKubeconfigPath(realHome), ksKubeconfig, HostCluster, realUID, realGID); err != nil {
+		return err
 	}
-
 	log.Info().Msgf("kubeconfig also accessible at: %s", ksKubeconfig)
 	return nil
-}
-
-// MergeFromDisk merges the admin kubeconfig from dataPath into the real user's
-// ~/.kube/config immediately (no wait loop). Returns an error if the kubeconfig
-// file does not exist or kubectl is not installed. Use this for on-demand
-// operations like `kubesoloctl kubeconfig fetch` on Linux where KubeSolo is
-// already running as a system service.
-func MergeFromDisk(dataPath string) error {
-	kubectlPath, err := exec.LookPath("kubectl")
-	if err != nil {
-		return fmt.Errorf("kubectl not found — install kubectl, then run: kubesoloctl kubeconfig fetch")
-	}
-
-	ksKubeconfig := KubeSoloKubeconfigPath(dataPath)
-	if _, err := os.Stat(ksKubeconfig); err != nil {
-		return fmt.Errorf("kubeconfig not found at %s — is KubeSolo running?", ksKubeconfig)
-	}
-
-	realUser, realHome, realUID, realGID := resolveRealUser()
-	log.Info().Msgf("merging kubeconfig for user %s (home: %s)...", realUser, realHome)
-
-	if realUID > 0 {
-		if err := os.Chown(ksKubeconfig, realUID, realGID); err != nil {
-			log.Warn().Err(err).Msgf("could not chown source kubeconfig to %s", realUser)
-		}
-	}
-
-	mergeIntoUserConfig(kubectlPath, realUser, realHome, realUID, realGID, ksKubeconfig)
-
-	caPath := filepath.Join(dataPath, "pki", "ca", "ca.crt")
-	if _, err := os.Stat(caPath); err == nil {
-		patchCACert(kubectlPath, filepath.Join(realHome, ".kube", "config"), "kubesolo", caPath)
-	}
-	return nil
-}
-
-// mergeIntoUserConfig merges newKubeconfigPath into the real user's
-// ~/.kube/config using `kubectl config view --flatten`. It creates the .kube
-// directory if needed, backs up any existing config, and corrects ownership of
-// the entire ~/.kube tree so the real user owns the result.
-func mergeIntoUserConfig(kubectlPath, realUser, realHome string, realUID, realGID int, newKubeconfigPath string) {
-	dotKube := filepath.Join(realHome, ".kube")
-	if err := os.MkdirAll(dotKube, 0o700); err != nil {
-		log.Warn().Err(err).Msgf("failed to create %s", dotKube)
-		return
-	}
-
-	existingConfig := filepath.Join(dotKube, "config")
-	if _, err := os.Stat(existingConfig); err == nil {
-		// Copy (not rename) so existingConfig stays in place for the merge step.
-		backup := existingConfig + ".backup-" + time.Now().Format("20060102150405")
-		if err := copyFile(existingConfig, backup); err != nil {
-			log.Warn().Err(err).Msgf("failed to back up existing kubeconfig to %s", backup)
-		} else {
-			log.Info().Msgf("backed up existing kubeconfig to %s", backup)
-		}
-	}
-
-	mergedTemp := existingConfig + ".tmp"
-	// New config first so its CA cert / credentials win over any stale existing entry.
-	mergeEnv := append(withoutEnv("KUBECONFIG"), fmt.Sprintf("KUBECONFIG=%s:%s", newKubeconfigPath, existingConfig))
-	cmd := exec.Command(kubectlPath, "config", "view", "--flatten")
-	cmd.Env = mergeEnv
-
-	out, err := cmd.Output()
-	if err != nil {
-		log.Warn().Err(err).Msg("kubectl config view failed — copying KubeSolo config as default")
-		if err2 := copyFile(newKubeconfigPath, existingConfig); err2 != nil {
-			log.Warn().Err(err2).Msg("failed to copy KubeSolo kubeconfig")
-			return
-		}
-	} else {
-		if err := os.WriteFile(mergedTemp, out, 0o600); err != nil {
-			log.Warn().Err(err).Msg("failed to write merged kubeconfig")
-			return
-		}
-		if err := os.Rename(mergedTemp, existingConfig); err != nil {
-			log.Warn().Err(err).Msg("failed to move merged kubeconfig into place")
-			_ = os.Remove(mergedTemp)
-			return
-		}
-	}
-
-	if realUID > 0 {
-		if err := chownRecursive(dotKube, realUID, realGID); err != nil {
-			log.Warn().Err(err).Msgf("could not fix kubeconfig ownership for %s", realUser)
-		}
-	}
-
-	log.Info().Msgf("kubeconfig merged successfully: %s", existingConfig)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -331,15 +201,6 @@ func waitForFile(path string, timeout time.Duration) bool {
 	return false
 }
 
-// copyFile copies src to dst.
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o600)
-}
-
 // chownRecursive changes ownership of path and everything under it.
 func chownRecursive(path string, uid, gid int) error {
 	return filepath.Walk(path, func(p string, _ os.FileInfo, err error) error {
@@ -348,43 +209,4 @@ func chownRecursive(path string, uid, gid int) error {
 		}
 		return os.Lchown(p, uid, gid)
 	})
-}
-
-// withoutEnv returns a copy of os.Environ() with any entries whose key matches
-// one of the given names removed. Use it before appending overrides so that the
-// new value is the only occurrence — on Linux execve uses the first match, so a
-// duplicate appended at the end would silently be ignored.
-func withoutEnv(keys ...string) []string {
-	env := os.Environ()
-	out := make([]string, 0, len(env))
-	for _, e := range env {
-		keep := true
-		for _, k := range keys {
-			if strings.HasPrefix(e, k+"=") {
-				keep = false
-				break
-			}
-		}
-		if keep {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
-// patchCACert embeds the CA cert at caPath into the named cluster entry of
-// kubeconfigFile. Called after mergeIntoUserConfig to ensure a fresh install's
-// CA cert always overwrites any stale cert that the merge may have preserved
-// from a previous installation.
-func patchCACert(kubectlPath, kubeconfigFile, clusterName, caPath string) {
-	cmd := exec.Command(kubectlPath, "config", "set-cluster", clusterName,
-		"--certificate-authority="+caPath,
-		"--embed-certs=true",
-		"--kubeconfig="+kubeconfigFile)
-	cmd.Env = append(withoutEnv("KUBECONFIG"), "KUBECONFIG="+kubeconfigFile)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		log.Debug().Msgf("CA cert patch: %v: %s", err, strings.TrimSpace(string(out)))
-	} else {
-		log.Debug().Msg("CA cert refreshed in merged kubeconfig")
-	}
 }

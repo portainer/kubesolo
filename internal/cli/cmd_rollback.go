@@ -9,8 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/detect"
+	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
+	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/spf13/cobra"
@@ -18,6 +21,7 @@ import (
 
 func rollbackCmd() *cobra.Command {
 	var (
+		name          string
 		yes           bool
 		detach        bool
 		healthTimeout time.Duration
@@ -34,7 +38,7 @@ created or changed, secrets, the lot. Workloads are restarted.
 A rollback is only possible to the version immediately before the running one,
 and only until the next upgrade replaces the backup.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRollback(yes, detach, healthTimeout)
+			return runRollback(name, yes, detach, healthTimeout)
 		},
 	}
 	f := cmd.Flags()
@@ -42,15 +46,23 @@ and only until the next upgrade replaces the backup.`,
 	f.BoolVar(&detach, "detach", false, "Return once the rollback has started instead of following it")
 	f.DurationVar(&healthTimeout, "health-timeout", upgrade.DefaultHealthTimeout,
 		"How long the restored version has to become healthy")
+	f.StringVar(&name, "name", envOr("KUBESOLO_NAME", config.AppName),
+		"Name of the KubeSolo instance to roll back (container mode)")
 	return cmd
 }
 
-func runRollback(yes, detach bool, healthTimeout time.Duration) error {
+func runRollback(name string, yes, detach bool, healthTimeout time.Duration) error {
 	p := ui.New()
 	p.Header("rollback")
 
 	if err := upgrade.ValidateHealthTimeout(int(healthTimeout / time.Second)); err != nil {
 		return p.Fail("--health-timeout", err)
+	}
+	if containerModeActive(name) {
+		if detach {
+			return p.Fail("rollback", fmt.Errorf("--detach applies to host installs only"))
+		}
+		return runContainerRollback(p, name, yes, healthTimeout)
 	}
 	if err := preflight.CheckRoot(); err != nil {
 		return p.Fail("root check", err)
@@ -121,6 +133,72 @@ func runRollback(yes, detach bool, healthTimeout time.Duration) error {
 	return nil
 }
 
+// runContainerRollback restores the container and datastore the last upgrade of
+// a container instance replaced.
+func runContainerRollback(p *ui.Printer, name string, yes bool, healthTimeout time.Duration) error {
+	unlock, err := service.LockInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	defer unlock()
+	prev, err := service.InspectInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", service.ContainerNameFor(name), err))
+	}
+	target, err := service.ReadRollbackTarget(name)
+	if err != nil {
+		return p.Fail("rollback", err)
+	}
+	if target == nil {
+		return p.Fail("rollback", fmt.Errorf("there is no upgrade to roll back: %s has not been upgraded since it was installed or reset", service.ContainerNameFor(name)))
+	}
+
+	from := target.Image
+	if target.Version != "" {
+		from = target.Version + " (" + target.Image + ")"
+	}
+	p.Warn(fmt.Sprintf("this restores %s and the datastore as it was at %s, when %s was installed",
+		from, target.Created.Local().Format(time.RFC1123), prev.Config.Image))
+	p.Warn("every change made to the cluster since then is lost")
+	if !yes && !confirm("Roll back?") {
+		p.Info("rollback cancelled")
+		return nil
+	}
+
+	p.Step("Rolling back to " + from)
+	img, err := service.RollbackImage(*target)
+	if err != nil {
+		p.Warn("nothing was changed")
+		return p.Fail("image", err)
+	}
+	if err := service.StopContainer(name); err != nil {
+		return p.Fail("rollback", err)
+	}
+	if err := service.RestoreDatastore(name, img); err != nil {
+		if startErr := service.StartContainer(name); startErr == nil {
+			p.Warn("nothing was changed: the container was started again")
+		}
+		return p.Fail("datastore restore", err)
+	}
+	if err := service.ReplaceContainer(name, &config.Config{Name: name, ContainerImage: img}, target.Args, nil, prev); err != nil {
+		return p.Fail("rollback", err)
+	}
+	apiAddr, data, err := awaitHealthy(name, healthTimeout)
+	if err != nil {
+		p.Info("The backup is kept; run the rollback again once the cause is fixed")
+		return containerFailed(p, name, err)
+	}
+	if err := service.FinishRestore(name, img, false); err != nil {
+		p.Warn("could not drop the backup this rollback restored: " + err.Error())
+	}
+	p.OK("Node ready", "https://"+apiAddr)
+	if err := kubeconfig.MergeContainerKubeconfig(data, service.ContainerNameFor(name), "https://"+apiAddr); err != nil {
+		p.Warn("kubeconfig not updated — " + err.Error())
+	}
+	p.Done("KubeSolo rolled back to " + from)
+	return nil
+}
+
 func confirm(question string) bool {
 	fmt.Printf("  %s [y/N] ", question)
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -130,15 +208,104 @@ func confirm(question string) bool {
 
 func statusCmd() *cobra.Command {
 	var asJSON bool
+	var name string
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show the running version, health, and the last upgrade or rollback",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if containerModeActive(name) {
+				return runContainerStatus(name, asJSON)
+			}
 			return runStatus(asJSON)
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the status as JSON")
+	cmd.Flags().StringVar(&name, "name", envOr("KUBESOLO_NAME", config.AppName),
+		"Name of the KubeSolo instance (container mode)")
 	return cmd
+}
+
+// containerStatus is the status of a container instance.
+type containerStatus struct {
+	Container      string                  `json:"container"`
+	Image          string                  `json:"image"`
+	Version        string                  `json:"version,omitempty"`
+	State          string                  `json:"state"`
+	Restarts       int                     `json:"restarts"`
+	APIServer      string                  `json:"apiServer,omitempty"`
+	Healthy        bool                    `json:"healthy"`
+	Health         string                  `json:"health"`
+	RollbackTarget *service.RollbackTarget `json:"rollbackTarget,omitempty"`
+}
+
+func runContainerStatus(name string, asJSON bool) error {
+	p := ui.New()
+	cname := service.ContainerNameFor(name)
+	insp, err := service.InspectInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", fmt.Errorf("container %q not found — is KubeSolo installed? (%w)", cname, err))
+	}
+
+	st := containerStatus{Container: cname, Image: insp.Config.Image, State: insp.State.Status, Restarts: insp.RestartCount}
+	st.Health = "unknown — the container is not running"
+	if insp.State.Running {
+		if v, err := service.ContainerVersion(name); err == nil {
+			st.Version = v
+		}
+		port, err := service.GetContainerAPIPort(name)
+		var kc []byte
+		if err == nil {
+			st.APIServer = fmt.Sprintf("https://127.0.0.1:%d", port)
+			kc, err = kubeconfig.GetFromContainer(cname, "")
+		}
+		var ready bool
+		if err == nil {
+			ready, err = kubeconfig.NodeReady(kc, fmt.Sprintf("127.0.0.1:%d", port))
+		}
+		switch {
+		case err != nil:
+			st.Health = "unknown — " + err.Error()
+		case ready:
+			st.Healthy, st.Health = true, "healthy"
+		default:
+			st.Health = "unhealthy — the node is not Ready"
+		}
+	}
+	if st.RollbackTarget, err = service.ReadRollbackTarget(name); err != nil {
+		return p.Fail("rollback target", err)
+	}
+
+	if asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(st)
+	}
+
+	p.Header("status")
+	p.Label("Instance", cname)
+	if st.Version != "" {
+		p.Label("Version", st.Version)
+	}
+	p.Label("Image", st.Image)
+	state := st.State
+	if st.Restarts > 0 {
+		state = fmt.Sprintf("%s (%d restarts)", st.State, st.Restarts)
+	}
+	p.Label("Container", state)
+	if st.APIServer != "" {
+		p.Label("API server", st.APIServer)
+	}
+	p.Label("Health", st.Health)
+	if t := st.RollbackTarget; t != nil {
+		to := t.Image
+		if t.Version != "" {
+			to = t.Version + " (" + t.Image + ")"
+		}
+		p.Label("Rollback to", fmt.Sprintf("%s (backup of %s)", to, t.Created.Local().Format(time.RFC1123)))
+	} else {
+		p.Label("Rollback to", "none — no upgrade since the instance was installed or reset")
+	}
+	return nil
 }
 
 func runStatus(asJSON bool) error {

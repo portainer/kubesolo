@@ -53,8 +53,11 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	p := ui.New()
 	p.Header("uninstall")
 
-	if containerModeActive(name) {
-		return runContainerUninstall(p, name, purge, removeKubeconfig)
+	// What is left of a container instance whose container is gone, its
+	// network and volumes, is cleaned up too, unless a host install is what
+	// this host runs: leftovers must not hide it.
+	if containerModeActive(name) || (!hostInstalled() && service.InstanceExists(name)) {
+		return runContainerUninstall(p, name, purge, keepConfig)
 	}
 
 	if err := preflight.CheckRoot(); err != nil {
@@ -69,10 +72,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	// The binary and data directory are the canonical artifacts of a host
 	// install. If neither is present there is nothing to uninstall — report that
 	// honestly instead of claiming success for steps that did nothing.
-	_, binErr := os.Stat(config.DefaultInstallPath)
-	binaryExists := binErr == nil
-	_, dataErr := os.Stat(config.DefaultPath)
-	installed := binaryExists || dataErr == nil
+	installed := hostInstalled()
 
 	if !installed {
 		p.Warn("KubeSolo is not installed as a host service — nothing to remove")
@@ -81,7 +81,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 		removeSELinuxPolicy()
 		if removeKubeconfig {
 			p.Step("Cleaning kubeconfig")
-			kubeconfig.RemoveFromUserConfig(name)
+			kubeconfig.RemoveFromUserConfig(kubeconfig.HostCluster)
 			p.OK("Kubeconfig entries removed", "")
 			p.Done("KubeSolo uninstalled.")
 			return nil
@@ -158,7 +158,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	// ── Clean kubeconfig ──────────────────────────────────────────────────────
 	if removeKubeconfig {
 		p.Step("Cleaning kubeconfig")
-		kubeconfig.RemoveFromUserConfig(name)
+		kubeconfig.RemoveFromUserConfig(kubeconfig.HostCluster)
 		p.OK("Kubeconfig entries removed", "")
 	}
 
@@ -166,7 +166,20 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	return nil
 }
 
-func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig bool) error {
+// hostInstalled reports whether this host has a host install of KubeSolo: its
+// binary or its data directory, the canonical artifacts of one.
+func hostInstalled() bool {
+	_, binErr := os.Stat(config.DefaultInstallPath)
+	_, dataErr := os.Stat(config.DefaultPath)
+	return binErr == nil || dataErr == nil
+}
+
+func runContainerUninstall(p *ui.Printer, name string, purge, keepConfig bool) error {
+	unlock, err := service.LockInstance(name)
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	defer unlock()
 	info, err := detect.Detect()
 	if err != nil {
 		return p.Fail("system detection", err)
@@ -178,7 +191,14 @@ func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig b
 	// ── Stop and remove container ─────────────────────────────────────────────
 	p.Step("Removing KubeSolo container")
 	if !exists {
-		p.Warn(fmt.Sprintf("no KubeSolo container %q found — nothing to remove", cname))
+		p.Warn(fmt.Sprintf("no KubeSolo container %q found", cname))
+		// The network outlives a container removed by hand.
+		if removed, err := service.RemoveContainerNetwork(name); err != nil {
+			p.Warn(err.Error())
+		} else if removed {
+			p.OK("Network removed", cname+"-net")
+			exists = true
+		}
 	} else {
 		mgr, err := service.New(info, config.RunModeContainer, name)
 		if err != nil {
@@ -194,13 +214,28 @@ func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig b
 	volumeName := cname + "-data"
 	if purge {
 		p.Step("Removing cluster data volume")
-		if err := service.RemoveContainerVolume(name); err != nil {
+		if removed, err := service.RemoveContainerVolume(name); err != nil {
 			p.Warn("could not remove volume: " + err.Error())
-		} else {
+		} else if removed {
 			p.OK("Volume removed", volumeName)
+			exists = true
+		} else {
+			p.Info("No data volume " + volumeName)
 		}
 	} else if exists {
 		p.Info("Cluster data preserved in volume " + volumeName + " (use --purge to remove)")
+	}
+
+	// ── Remove configuration ──────────────────────────────────────────────────
+	// As on a host, removed even without --purge: it holds no cluster state,
+	// and a stale one would silently configure a later reinstall.
+	if keepConfig {
+		p.Info("Configuration preserved in volume " + cname + "-config")
+	} else if removed, err := service.RemoveContainerConfigVolume(name); err != nil {
+		p.Warn("could not remove the configuration volume: " + err.Error())
+	} else if removed {
+		p.OK("Configuration removed", cname+"-config")
+		exists = true
 	}
 
 	// ── Clean kubeconfig + Docker context ─────────────────────────────────────
@@ -208,18 +243,18 @@ func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig b
 	// point at the container's ephemeral host ports, which die with it — so they
 	// are always cleaned up, regardless of --remove-kubeconfig.
 	p.Step("Cleaning kubeconfig and Docker context")
-	cleaned := kubeconfig.RemoveFromUserConfig(name)
-	if kubeconfig.RemoveD2KContext(name) {
+	cleaned := kubeconfig.RemoveFromUserConfig(cname)
+	if kubeconfig.RemoveD2KContext(cname) {
 		cleaned = true
 	}
 	if cleaned {
-		p.OK("Kubeconfig and Docker context cleaned", name)
+		p.OK("Kubeconfig and Docker context cleaned", cname)
 	} else {
 		p.Info("No kubeconfig or Docker context entries to clean")
 	}
 
 	// Only claim an uninstall happened if something was actually actioned.
-	if !exists && !purge && !cleaned {
+	if !exists && !cleaned {
 		p.Done("Nothing to uninstall.")
 	} else {
 		p.Done("KubeSolo uninstalled.")

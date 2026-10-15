@@ -119,20 +119,9 @@ func unmarshal(raw []byte, source string, cfg *types.Config) ([]Warning, error) 
 // The previous file is copied — not moved — to path + ".bak" beforehand, so the
 // original stays readable right up to the instant it is replaced.
 func Write(path string, cfg *types.Config) error {
-	// A document that does not declare its schema reads back with a warning, so
-	// the fields are filled in here rather than trusted to the caller. cfg itself
-	// is left alone.
-	doc := *cfg
-	if doc.APIVersion == "" {
-		doc.APIVersion = types.ConfigAPIVersion
-	}
-	if doc.Kind == "" {
-		doc.Kind = types.ConfigKind
-	}
-
-	raw, err := yaml.Marshal(doc)
+	raw, err := Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("serialise config: %w", err)
+		return err
 	}
 
 	dir := filepath.Dir(path)
@@ -163,6 +152,26 @@ func Write(path string, cfg *types.Config) error {
 	}
 
 	return nil
+}
+
+// Marshal serialises cfg as a configuration document.
+func Marshal(cfg *types.Config) ([]byte, error) {
+	// A document that does not declare its schema reads back with a warning, so
+	// the fields are filled in here rather than trusted to the caller. cfg itself
+	// is left alone.
+	doc := *cfg
+	if doc.APIVersion == "" {
+		doc.APIVersion = types.ConfigAPIVersion
+	}
+	if doc.Kind == "" {
+		doc.Kind = types.ConfigKind
+	}
+
+	raw, err := yaml.Marshal(doc)
+	if err != nil {
+		return nil, fmt.Errorf("serialise config: %w", err)
+	}
+	return raw, nil
 }
 
 // writeAndClose writes raw to f, sets its mode and flushes it to disk. Without
