@@ -139,18 +139,19 @@ func (a *Assistant) Ask(ctx context.Context, question string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return a.run(ctx, model, chatRequest{Messages: []message{
+	ans, err := a.run(ctx, model, chatRequest{Messages: []message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: question},
 	}})
+	return ans.content, err
 }
 
 // run starts llama-server with the model, sends it the request, and stops it
 // again, whether or not it answered. The caller holds a.mu.
-func (a *Assistant) run(ctx context.Context, model string, req chatRequest) (string, error) {
+func (a *Assistant) run(ctx context.Context, model string, req chatRequest) (answer, error) {
 	port, err := freePort()
 	if err != nil {
-		return "", fmt.Errorf("find a port for llama-server: %w", err)
+		return answer{}, fmt.Errorf("find a port for llama-server: %w", err)
 	}
 
 	cmd := exec.Command(a.cfg.Binary,
@@ -170,7 +171,7 @@ func (a *Assistant) run(ctx context.Context, model string, req chatRequest) (str
 
 	log.Info().Str("component", "assistant").Str("model", model).Msg("starting llama-server...")
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("start llama-server: %w", err)
+		return answer{}, fmt.Errorf("start llama-server: %w", err)
 	}
 	proc := &process{cmd: cmd, exited: make(chan struct{})}
 	go func() {
@@ -181,7 +182,7 @@ func (a *Assistant) run(ctx context.Context, model string, req chatRequest) (str
 
 	base := "http://127.0.0.1:" + strconv.Itoa(port)
 	if err := waitReady(ctx, base, proc, a.cfg.StartTimeout); err != nil {
-		return "", err
+		return answer{}, err
 	}
 	return complete(ctx, base, req)
 }
@@ -241,41 +242,66 @@ type chatRequest struct {
 
 	// Temperature, when set, replaces llama-server's sampling temperature.
 	Temperature *float64 `json:"temperature,omitempty"`
+
+	// Logprobs asks for each token's log probability, and TopLogprobs for
+	// that many alternatives the model weighed at each.
+	Logprobs    bool `json:"logprobs,omitempty"`
+	TopLogprobs int  `json:"top_logprobs,omitempty"`
 }
 
-func complete(ctx context.Context, base string, req chatRequest) (string, error) {
+// answer is what the model wrote, and the probabilities of its tokens when
+// they were asked for.
+type answer struct {
+	content string
+	tokens  []tokenLogprob
+}
+
+// tokenLogprob is a token of an answer with its log probability and, when
+// asked for, the alternatives the model weighed. llama-server reports them
+// before a response format constrains the choice, so they are the model's own
+// beliefs.
+type tokenLogprob struct {
+	Token       string         `json:"token"`
+	Logprob     float64        `json:"logprob"`
+	TopLogprobs []tokenLogprob `json:"top_logprobs,omitempty"`
+}
+
+func complete(ctx context.Context, base string, req chatRequest) (answer, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
-		return "", err
+		return answer{}, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return answer{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("ask llama-server: %w", err)
+		return answer{}, fmt.Errorf("ask llama-server: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", fmt.Errorf("llama-server answered %s: %s", resp.Status, bytes.TrimSpace(msg))
+		return answer{}, fmt.Errorf("llama-server answered %s: %s", resp.Status, bytes.TrimSpace(msg))
 	}
 
 	var out struct {
 		Choices []struct {
-			Message message `json:"message"`
+			Message  message `json:"message"`
+			Logprobs struct {
+				Content []tokenLogprob `json:"content"`
+			} `json:"logprobs"`
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("decode llama-server answer: %w", err)
+		return answer{}, fmt.Errorf("decode llama-server answer: %w", err)
 	}
 	if len(out.Choices) == 0 {
-		return "", errors.New("llama-server returned no answer")
+		return answer{}, errors.New("llama-server returned no answer")
 	}
-	return out.Choices[0].Message.Content, nil
+	return answer{content: out.Choices[0].Message.Content, tokens: out.Choices[0].Logprobs.Content}, nil
 }
 
 // process is a running llama-server. exited is closed once it has been

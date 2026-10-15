@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"slices"
@@ -47,6 +48,11 @@ const (
 
 	// maxDiagnosisTokens bounds the answer, which is a few sentences.
 	maxDiagnosisTokens = 512
+
+	// actionAlternatives is how many alternatives llama-server reports at each
+	// token: enough to cover the six actions and the words that compete with
+	// them.
+	actionAlternatives = 10
 )
 
 const triagePrompt = `You are the KubeSolo assistant. KubeSolo is a single-node Kubernetes distribution for edge devices: one binary running containerd, kine (SQLite in place of etcd), the API server, the controller manager, the scheduler, the kubelet and CoreDNS.
@@ -124,7 +130,7 @@ func (a *Assistant) Diagnose(ctx context.Context, inc Incident) (Diagnosis, erro
 		return Diagnosis{}, err
 	}
 
-	answer, err := a.run(ctx, model, chatRequest{
+	ans, err := a.run(ctx, model, chatRequest{
 		Messages: []message{
 			{Role: "system", Content: triagePrompt + string(knowledge)},
 			{Role: "user", Content: string(evidence)},
@@ -133,16 +139,80 @@ func (a *Assistant) Diagnose(ctx context.Context, inc Incident) (Diagnosis, erro
 		MaxTokens:      maxDiagnosisTokens,
 		// The same incident should get the same diagnosis.
 		Temperature: new(float64),
+		Logprobs:    true,
+		TopLogprobs: actionAlternatives,
 	})
 	if err != nil {
 		return Diagnosis{}, err
 	}
 	var d Diagnosis
-	if err := json.Unmarshal([]byte(answer), &d); err != nil || d.Summary == "" ||
+	if err := json.Unmarshal([]byte(ans.content), &d); err != nil || d.Summary == "" ||
 		!slices.Contains(Actions, d.Action) || !slices.Contains(confidences, d.Confidence) {
-		return Diagnosis{}, fmt.Errorf("the model answered outside the schema: %s", answer)
+		return Diagnosis{}, fmt.Errorf("the model answered outside the schema: %s", ans.content)
+	}
+	if p, ok := actionProbability(ans.content, d.Action, ans.tokens); ok {
+		d.ActionProbability = p
 	}
 	return d, nil
+}
+
+// actionProbability returns the probability the model gave action among the
+// six, read from the alternatives it weighed where the action starts. Each
+// action begins with a different token; an alternative that could begin
+// several is not counted. It reports false when the tokens do not contain the
+// answer or name none of the actions.
+func actionProbability(content, action string, tokens []tokenLogprob) (float64, bool) {
+	var b strings.Builder
+	for _, t := range tokens {
+		b.WriteString(t.Token)
+	}
+	// The tokens can carry more than the message, such as an empty reasoning
+	// block before it.
+	base := strings.Index(b.String(), content)
+	key := strings.Index(content, `"action"`)
+	if base < 0 || key < 0 {
+		return 0, false
+	}
+	open := strings.IndexByte(content[key+len(`"action"`):], '"')
+	if open < 0 {
+		return 0, false
+	}
+	start := base + key + len(`"action"`) + open + 1
+
+	offset := 0
+	for _, t := range tokens {
+		end := offset + len(t.Token)
+		if end <= start {
+			offset = end
+			continue
+		}
+		// This token starts the action, after text every alternative shares.
+		shared := b.String()[offset:start]
+		mass := map[string]float64{}
+		var total float64
+		for _, alt := range t.TopLogprobs {
+			rest, ok := strings.CutPrefix(alt.Token, shared)
+			if !ok || rest == "" {
+				continue
+			}
+			var begins []string
+			for _, a := range Actions {
+				if strings.HasPrefix(a, rest) || strings.HasPrefix(rest, a) {
+					begins = append(begins, a)
+				}
+			}
+			if len(begins) == 1 {
+				p := math.Exp(alt.Logprob)
+				mass[begins[0]] += p
+				total += p
+			}
+		}
+		if mass[action] == 0 {
+			return 0, false
+		}
+		return mass[action] / total, true
+	}
+	return 0, false
 }
 
 // harmlessSection is the knowledge's heading for lines that never show a

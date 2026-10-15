@@ -69,3 +69,21 @@ Before the schema listed the action after the summary and the cause, the 2B
 scored 9 and 8: the model chose the action first and reasoned after it. Twelve
 held-out cases are few — one case is 8 points — so a change to the knowledge
 should hold or raise the held-out score, not just the dev one.
+
+### When to act
+
+Each diagnosis carries `actionProbability`, the probability the model gave
+its action among the six, read from its token probabilities. The model's own
+`confidence` said `low` for 23 of the 24 cases, right or wrong; the
+probability tells them apart. With the 2B, a non-`report_only` action that is
+wrong is a false action:
+
+| Act only at or above | Right actions kept (dev / held out) | False actions |
+|---|---|---|
+| — | 6 / 8 | 2 / 0 |
+| 0.5 | 6 / 6 | 1 / 0 |
+| 0.8 | 5 / 3 | 0 / 0 |
+| 0.9 | 4 / 2 | 0 / 0 |
+
+The two false actions were `free_disk_space` with the disk 10% used (0.42) and
+`restart_component` for orphaned containers (0.74).

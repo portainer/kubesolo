@@ -76,6 +76,11 @@ type Diagnosis struct {
 	// Action is one of Actions. It is only suggested; nothing acts on it.
 	Action     string `json:"action,omitempty"`
 	Confidence string `json:"confidence,omitempty"`
+
+	// ActionProbability is the probability the model gave Action among the
+	// six, from its token probabilities rather than its own say; 0 when
+	// unknown.
+	ActionProbability float64 `json:"actionProbability,omitempty"`
 }
 
 func newIncidentID(t time.Time) string {

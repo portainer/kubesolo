@@ -25,6 +25,7 @@ func TestEvalTriage(t *testing.T) {
 	cases := envOr("ASSISTANT_EVAL_CASES", "../../test/assistant/cases")
 
 	a := New(Config{Binary: server, Model: model, Knowledge: knowledge, ContextSize: 8192, StartTimeout: 5 * time.Minute})
+	var all []outcome
 	for _, split := range []string{"dev", "heldout"} {
 		files, err := filepath.Glob(filepath.Join(cases, split, "*.json"))
 		if err != nil || len(files) == 0 {
@@ -44,14 +45,50 @@ func TestEvalTriage(t *testing.T) {
 				continue
 			}
 			ok := slices.Contains(c.Expect.Actions, d.Action)
+			all = append(all, outcome{split: split, action: d.Action, right: ok, probability: d.ActionProbability})
 			mentioned := mentions(d, c.Expect.Mentions)
 			truncated := !strings.HasSuffix(strings.TrimSpace(d.Summary), ".")
 			right, named, cut = right+b2i(ok), named+b2i(mentioned), cut+b2i(truncated)
-			t.Logf("%-8s %-30s %-5s %-26s %-6s named=%-5v cut=%-5v %3.0fs  %s",
-				split, name, mark(ok), d.Action, d.Confidence, mentioned, truncated, elapsed.Seconds(), d.Summary)
+			t.Logf("%-8s %-30s %-5s %-26s p=%.2f %-6s named=%-5v cut=%-5v %3.0fs  %s",
+				split, name, mark(ok), d.Action, d.ActionProbability, d.Confidence, mentioned, truncated, elapsed.Seconds(), d.Summary)
 		}
 		t.Logf("%s: actions %d/%d, named %d/%d, summaries cut %d, %.0fs a case",
 			split, right, len(files), named, len(files), cut, took.Seconds()/float64(len(files)))
+	}
+	logThresholds(t, all)
+}
+
+// outcome is one case's result, for weighing thresholds.
+type outcome struct {
+	split       string
+	action      string
+	right       bool
+	probability float64
+}
+
+// logThresholds shows, for each threshold on the action's probability, what
+// acting only above it would do: a right action kept, a wrong one let through
+// (a false action), or either one turned into report_only. report_only is
+// never a false action: at worst it misses a fix.
+func logThresholds(t *testing.T, all []outcome) {
+	t.Logf("threshold  acted right  false actions  (dev / heldout)")
+	for _, threshold := range []float64{0, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95} {
+		count := func(split string) (right, wrong int) {
+			for _, o := range all {
+				if o.split != split || o.action == "report_only" || o.probability < threshold {
+					continue
+				}
+				if o.right {
+					right++
+				} else {
+					wrong++
+				}
+			}
+			return right, wrong
+		}
+		dr, dw := count("dev")
+		hr, hw := count("heldout")
+		t.Logf("%9.2f  %5d / %-5d  %6d / %-6d", threshold, dr, hr, dw, hw)
 	}
 }
 

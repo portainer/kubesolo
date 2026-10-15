@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -79,12 +80,31 @@ func fakeLlamaServer(mode string) {
 		case "off-schema":
 			content = `{"summary":"kine is down","cause":"unknown","action":"reboot_the_node","confidence":"medium"}`
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": content}}},
-		})
+		choice := map[string]any{"message": map[string]string{"role": "assistant", "content": content}}
+		if mode == "diagnose" {
+			choice["logprobs"] = diagnoseLogprobs
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{choice}})
 	})
 	_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", *port), mux)
 }
+
+// diagnoseLogprobs are the token probabilities of the "diagnose" answer, as
+// llama-server reports them: where the action starts, the model gave repair
+// 0.6, restart 0.2 and report 0.1; "re" could begin three actions and "If"
+// none.
+var diagnoseLogprobs = map[string]any{"content": []any{
+	map[string]any{"token": `{"summary":"kine is down","cause":"the database is locked","action":"`, "logprob": 0},
+	map[string]any{"token": "repair", "logprob": math.Log(0.6), "top_logprobs": []any{
+		map[string]any{"token": "repair", "logprob": math.Log(0.6)},
+		map[string]any{"token": "restart", "logprob": math.Log(0.2)},
+		map[string]any{"token": "report", "logprob": math.Log(0.1)},
+		map[string]any{"token": "re", "logprob": math.Log(0.05)},
+		map[string]any{"token": "If", "logprob": math.Log(0.05)},
+	}},
+	map[string]any{"token": "_database", "logprob": 0},
+	map[string]any{"token": `","confidence":"medium"}`, "logprob": 0},
+}}
 
 // newTestAssistant runs this test binary as llama-server in the given mode, and
 // returns the file it records its pid and arguments to.

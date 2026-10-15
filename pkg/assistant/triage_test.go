@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,6 +97,10 @@ func TestAnIncidentIsTriagedWithTheKnowledge(t *testing.T) {
 	got := triageOf(t, tr.Store, inc.ID)
 	if got.Status != TriageDone || got.Action != "repair_database" || got.Confidence != "medium" || got.Summary != "kine is down" {
 		t.Errorf("triage = %+v", got)
+	}
+	// repair 0.6 of the 0.9 the six actions hold between them.
+	if p := got.ActionProbability; p < 0.666 || p > 0.667 {
+		t.Errorf("action probability = %v, want 2/3", p)
 	}
 	reqs := requestsMade(t, requests)
 	if len(reqs) != 1 {
@@ -313,5 +318,46 @@ func TestTriageIsDeterministic(t *testing.T) {
 	raw, _ := os.ReadFile(requests)
 	if !strings.Contains(string(raw), `"temperature":0`) {
 		t.Errorf("triage should not sample: %s", raw)
+	}
+}
+
+func TestActionProbability(t *testing.T) {
+	tok := func(text string, alts ...any) tokenLogprob {
+		tl := tokenLogprob{Token: text}
+		for i := 0; i < len(alts); i += 2 {
+			tl.TopLogprobs = append(tl.TopLogprobs, tokenLogprob{Token: alts[i].(string), Logprob: math.Log(alts[i+1].(float64))})
+		}
+		return tl
+	}
+	for _, tc := range []struct {
+		name    string
+		content string
+		tokens  []tokenLogprob
+		want    float64
+		ok      bool
+	}{
+		{"the action starts a token", `{"action":"prune_images"}`,
+			[]tokenLogprob{tok(`{"action":"`), tok("pr", "pr", 0.3, "free", 0.3, "clean", 0.2, "The", 0.2), tok(`une_images"}`)}, 0.375, true},
+		// The token that starts the action also carries text before it, which
+		// every alternative shares.
+		{"the action starts inside a token", `{"action": "free_disk_space"}`,
+			[]tokenLogprob{tok(`{"action":`), tok(` "free`, ` "free`, 0.5, ` "prune`, 0.25, ` "x`, 0.25), tok(`_disk_space"}`)}, 2.0 / 3, true},
+		// Qwen3.5 opens and closes an empty reasoning block, which llama-server
+		// leaves out of the message but not out of the tokens.
+		{"tokens before the message", `{"action":"prune_images"}`,
+			[]tokenLogprob{tok("</think>\n\n"), tok(`{"action":"`), tok("pr", "pr", 0.3, "free", 0.3, "clean", 0.2, "The", 0.2), tok(`une_images"}`)}, 0.375, true},
+		{"no action among the alternatives", `{"action":"report_only"}`,
+			[]tokenLogprob{tok(`{"action":"`), tok("report", "If", 0.9)}, 0, false},
+		{"tokens that do not spell the answer", `{"action":"report_only"}`,
+			[]tokenLogprob{tok("something else")}, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var action string
+			_ = json.Unmarshal([]byte(tc.content), &struct{ Action *string }{&action})
+			got, ok := actionProbability(tc.content, action, tc.tokens)
+			if ok != tc.ok || math.Abs(got-tc.want) > 1e-9 {
+				t.Errorf("got %v, %v; want %v, %v", got, ok, tc.want, tc.ok)
+			}
+		})
 	}
 }

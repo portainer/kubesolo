@@ -141,7 +141,8 @@ Every incident is triaged as soon as it is recorded: the model reads the [knowle
   "summary": "The kubelet stopped answering its health check for 5 minutes.",
   "cause": "The kubelet is stuck or has stopped.",
   "action": "restart_component",
-  "confidence": "medium"
+  "confidence": "medium",
+  "actionProbability": 0.97
 }
 ```
 
@@ -151,7 +152,7 @@ Every incident is triaged as soon as it is recorded: the model reads the [knowle
 | `failed` | The model ran but gave no usable diagnosis; `reason` says why |
 | `skipped` | The model was not run; `reason` says why: less than 2.5 GiB of memory was available, or the model or knowledge could not be used, or was still not fetched after an hour |
 
-`action` is one of `restart_component`, `repair_database`, `prune_images`, `clean_orphaned_containers`, `free_disk_space` and `report_only`. It is only a suggestion: KubeSolo takes no action. On two CPUs a triage takes a few minutes, mostly reading the prompt.
+`action` is one of `restart_component`, `repair_database`, `prune_images`, `clean_orphaned_containers`, `free_disk_space` and `report_only`. It is only a suggestion: KubeSolo takes no action. `actionProbability` is the probability the model gave that action among the six, read from its own token probabilities; it is a better guide to trusting the suggestion than `confidence`, which the model writes about itself. On two CPUs a triage takes a few minutes, mostly reading the prompt.
 
 An incident from a crash is triaged once KubeSolo has started. In a crash loop, KubeSolo does not stay up long enough for that, so the incident is triaged on the first run that does.
 
