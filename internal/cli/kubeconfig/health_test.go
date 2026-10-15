@@ -18,3 +18,17 @@ func TestNodesReady(t *testing.T) {
 		}
 	}
 }
+
+func TestNodeNameAndLeaseRenewal(t *testing.T) {
+	nodes := `{"items":[{"metadata":{"name":"kubesolo-dev"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}`
+	if got := nodeName([]byte(nodes)); got != "kubesolo-dev" {
+		t.Errorf("nodeName = %q", got)
+	}
+	lease := `{"spec":{"holderIdentity":"kubesolo-dev","renewTime":"2026-10-15T03:04:05.123456Z"}}`
+	if got := renewTime([]byte(lease)); got != "2026-10-15T03:04:05.123456Z" {
+		t.Errorf("renewTime = %q", got)
+	}
+	if renewTime([]byte(`{"spec":{}}`)) != "" {
+		t.Error("a lease never renewed has no renew time")
+	}
+}
