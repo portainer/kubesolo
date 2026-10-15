@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/rs/zerolog/log"
 )
 
 // A container upgrade keeps one backup in the data volume, as a host upgrade
@@ -30,10 +31,47 @@ const (
 // RollbackTarget is what a container upgrade replaced, and what a rollback
 // restores.
 type RollbackTarget struct {
-	Image   string    `json:"image"`
+	Image string `json:"image"`
+	// ImageID is the image that ran, which a tag such as :develop can stop
+	// naming when the upgrade pulls it again.
+	ImageID string    `json:"imageID,omitempty"`
 	Args    []string  `json:"args"`
 	Version string    `json:"version,omitempty"`
 	Created time.Time `json:"created"`
+}
+
+// RollbackImage returns the image a rollback to t restores: its tag while the
+// tag still names the image that ran before the upgrade, so the restored
+// container looks as it did, and otherwise that image by its ID. A target
+// recorded without an ID only has its tag.
+func RollbackImage(t RollbackTarget) (string, error) {
+	if t.ImageID == "" {
+		return t.Image, nil
+	}
+	cli, err := newContainerClient()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = cli.Close() }()
+
+	ctx := context.Background()
+	tagged := func() bool {
+		insp, err := cli.ImageInspect(ctx, t.Image)
+		return err == nil && insp.ID == t.ImageID
+	}
+	if tagged() {
+		return t.Image, nil
+	}
+	if _, err := cli.ImageInspect(ctx, t.ImageID); err == nil {
+		log.Warn().Msgf("%s no longer names the image that ran before the upgrade; restoring that image by its ID, %.19s", t.Image, t.ImageID)
+		return t.ImageID, nil
+	}
+	// Removed from the engine since: a pull of the tag restores it only if
+	// the tag still names it, as a release tag does.
+	if err := pullImage(ctx, cli, t.Image); err == nil && tagged() {
+		return t.Image, nil
+	}
+	return "", fmt.Errorf("the image that ran before the upgrade, %s (%.19s), is no longer on the engine, and %s now names another image", t.Image, t.ImageID, t.Image)
 }
 
 // StopContainer stops the named instance's container, giving KubeSolo time to

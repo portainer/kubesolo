@@ -161,20 +161,21 @@ func runContainerRollback(p *ui.Printer, name string, yes bool, healthTimeout ti
 	}
 
 	p.Step("Rolling back to " + from)
-	if err := service.PullImage(target.Image); err != nil {
+	img, err := service.RollbackImage(*target)
+	if err != nil {
 		p.Warn("nothing was changed")
 		return p.Fail("image", err)
 	}
 	if err := service.StopContainer(name); err != nil {
 		return p.Fail("rollback", err)
 	}
-	if err := service.RestoreDatastore(name, target.Image); err != nil {
+	if err := service.RestoreDatastore(name, img); err != nil {
 		if startErr := service.StartContainer(name); startErr == nil {
 			p.Warn("nothing was changed: the container was started again")
 		}
 		return p.Fail("datastore restore", err)
 	}
-	if err := service.ReplaceContainer(name, &config.Config{Name: name, ContainerImage: target.Image}, target.Args, nil, prev); err != nil {
+	if err := service.ReplaceContainer(name, &config.Config{Name: name, ContainerImage: img}, target.Args, nil, prev); err != nil {
 		return p.Fail("rollback", err)
 	}
 	apiAddr, data, err := awaitHealthy(name, healthTimeout)
@@ -182,7 +183,7 @@ func runContainerRollback(p *ui.Printer, name string, yes bool, healthTimeout ti
 		p.Info("The backup is kept; run the rollback again once the cause is fixed")
 		return containerFailed(p, name, err)
 	}
-	if err := service.FinishRestore(name, target.Image, false); err != nil {
+	if err := service.FinishRestore(name, img, false); err != nil {
 		p.Warn("could not drop the backup this rollback restored: " + err.Error())
 	}
 	p.OK("Node ready", "https://"+apiAddr)

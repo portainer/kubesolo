@@ -814,6 +814,11 @@ func pullImage(ctx context.Context, cli *client.Client, img string) error {
 	if pulled[img] {
 		return nil
 	}
+	// An image given by its ID, as a rollback may give it, has nothing to pull.
+	if strings.HasPrefix(img, "sha256:") {
+		_, err := cli.ImageInspect(ctx, img)
+		return err
+	}
 	defer func() { pulled[img] = true }()
 	log.Info().Msgf("pulling %s...", img)
 	rc, err := cli.ImagePull(ctx, img, image.PullOptions{})

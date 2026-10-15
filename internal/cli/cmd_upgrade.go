@@ -330,8 +330,8 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions)
 	if err := service.StopContainer(cfg.Name); err != nil {
 		return p.Fail("container upgrade", err)
 	}
-	target := service.RollbackTarget{Image: current, Args: oldArgs, Version: running, Created: time.Now().UTC()}
-	if err := service.BackupDatastore(cfg.Name, current, target); err != nil {
+	target := service.RollbackTarget{Image: current, ImageID: prev.Image, Args: oldArgs, Version: running, Created: time.Now().UTC()}
+	if err := service.BackupDatastore(cfg.Name, prev.Image, target); err != nil {
 		if startErr := service.StartContainer(cfg.Name); startErr == nil {
 			p.Warn("nothing was changed: the previous container was started again")
 		}
@@ -381,11 +381,15 @@ func rollBackContainerUpgrade(p *ui.Printer, name string, prev *container.Inspec
 	}
 
 	p.Step("Rolling back to " + target.Image)
+	img, err := service.RollbackImage(target)
+	if err != nil {
+		return p.Fail("rollback", err)
+	}
 	_ = service.StopContainer(name)
-	if err := service.RestoreDatastore(name, target.Image); err != nil {
+	if err := service.RestoreDatastore(name, img); err != nil {
 		return p.Fail("rollback", fmt.Errorf("could not restore the datastore, which is kept in the %s volume under upgrade/container-backup: %w", service.ContainerNameFor(name)+"-data", err))
 	}
-	restore := &config.Config{Name: name, ContainerImage: target.Image}
+	restore := &config.Config{Name: name, ContainerImage: img}
 	if err := service.ReplaceContainer(name, restore, target.Args, nil, prev); err != nil {
 		return p.Fail("rollback", err)
 	}
@@ -394,7 +398,7 @@ func rollBackContainerUpgrade(p *ui.Printer, name string, prev *container.Inspec
 		p.Info("The backup is kept; retry with: kubesoloctl rollback --name " + name)
 		return containerFailed(p, name, fmt.Errorf("the restored version did not become healthy either: %w", err))
 	}
-	if err := service.FinishRestore(name, target.Image, true); err != nil {
+	if err := service.FinishRestore(name, img, true); err != nil {
 		p.Warn("could not put the earlier rollback target back: " + err.Error())
 	}
 	if err := kubeconfig.MergeContainerKubeconfig(data, service.ContainerNameFor(name), "https://"+apiAddr); err != nil {
