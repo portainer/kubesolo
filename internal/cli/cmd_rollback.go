@@ -168,7 +168,7 @@ func runContainerRollback(p *ui.Printer, name string, yes bool, healthTimeout ti
 	if err := service.StopContainer(name); err != nil {
 		return p.Fail("rollback", err)
 	}
-	if err := service.RestoreDatastore(name, target.Image, false); err != nil {
+	if err := service.RestoreDatastore(name, target.Image); err != nil {
 		if startErr := service.StartContainer(name); startErr == nil {
 			p.Warn("nothing was changed: the container was started again")
 		}
@@ -179,7 +179,11 @@ func runContainerRollback(p *ui.Printer, name string, yes bool, healthTimeout ti
 	}
 	apiAddr, data, err := awaitHealthy(name, healthTimeout)
 	if err != nil {
+		p.Info("The backup is kept; run the rollback again once the cause is fixed")
 		return containerFailed(p, name, err)
+	}
+	if err := service.FinishRestore(name, target.Image, false); err != nil {
+		p.Warn("could not drop the backup this rollback restored: " + err.Error())
 	}
 	p.OK("Node ready", "https://"+apiAddr)
 	if err := kubeconfig.MergeContainerKubeconfig(data, service.ContainerNameFor(name), "https://"+apiAddr); err != nil {

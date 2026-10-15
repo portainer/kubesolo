@@ -382,7 +382,7 @@ func rollBackContainerUpgrade(p *ui.Printer, name string, prev *container.Inspec
 
 	p.Step("Rolling back to " + target.Image)
 	_ = service.StopContainer(name)
-	if err := service.RestoreDatastore(name, target.Image, true); err != nil {
+	if err := service.RestoreDatastore(name, target.Image); err != nil {
 		return p.Fail("rollback", fmt.Errorf("could not restore the datastore, which is kept in the %s volume under upgrade/container-backup: %w", service.ContainerNameFor(name)+"-data", err))
 	}
 	restore := &config.Config{Name: name, ContainerImage: target.Image}
@@ -391,7 +391,11 @@ func rollBackContainerUpgrade(p *ui.Printer, name string, prev *container.Inspec
 	}
 	apiAddr, data, err := awaitHealthy(name, timeout)
 	if err != nil {
+		p.Info("The backup is kept; retry with: kubesoloctl rollback --name " + name)
 		return containerFailed(p, name, fmt.Errorf("the restored version did not become healthy either: %w", err))
+	}
+	if err := service.FinishRestore(name, target.Image, true); err != nil {
+		p.Warn("could not put the earlier rollback target back: " + err.Error())
 	}
 	if err := kubeconfig.MergeContainerKubeconfig(data, service.ContainerNameFor(name), "https://"+apiAddr); err != nil {
 		p.Warn("kubeconfig not updated — " + err.Error())

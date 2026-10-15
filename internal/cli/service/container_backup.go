@@ -79,16 +79,24 @@ if [ -d "$b" ]; then mv "$b" "$b.prev"; fi
 mv "$b.new" "$b"`, "TARGET="+string(data))
 }
 
-// RestoreDatastore puts the backup's datastore back in place of the named
-// instance's, whose container must be stopped, and then drops the backup, which
-// is now what runs. undo is true when the upgrade that took the backup failed:
-// the backup it replaced becomes the rollback target again.
-func RestoreDatastore(name, image string, undo bool) error {
+// RestoreDatastore puts a copy of the backup's datastore in place of the named
+// instance's, whose container must be stopped. The backup itself is kept, so
+// that a restored container which fails to come up can be rolled back again;
+// FinishRestore drops it once the restored container is healthy.
+func RestoreDatastore(name, image string) error {
+	return runInVolume(name, image, `set -e
+b=`+backupDir+`
+test -f "$b/kine/db/state.db"
+rm -rf `+containerDataDir+`/kine
+cp -a "$b/kine" `+containerDataDir+`/kine`)
+}
+
+// FinishRestore drops the backup a healthy restored container now runs. undo
+// is true when the upgrade that took the backup failed: the backup it replaced
+// becomes the rollback target again.
+func FinishRestore(name, image string, undo bool) error {
 	script := `set -e
 b=` + backupDir + `
-test -f "$b/kine/db/state.db"
-rm -rf ` + containerDataDir + `/kine
-cp -a "$b/kine" ` + containerDataDir + `/kine
 rm -rf "$b"
 `
 	if undo {
