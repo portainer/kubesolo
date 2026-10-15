@@ -189,8 +189,12 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	// ── CPU pinning ─────────────────────────────────────────────────────────────
 	// Validated here with the same parser the kubesolo binary uses, so a bad flag
 	// fails before a service unit is written rather than crash-looping afterwards.
-	if _, _, err := cpumanager.Parse(cfg.CPUManagerPolicy, cfg.CPUManagerPolicyOptions, cfg.ReservedCPUs, cfg.SystemReserved, runtime.NumCPU()); err != nil {
-		return p.Fail("cpu pinning", err)
+	// Container mode ignores the CPU manager, and validates what it keeps, the
+	// reserved resources among it, in containerSettings.
+	if !containerMode {
+		if _, _, err := cpumanager.Parse(cfg.CPUManagerPolicy, cfg.CPUManagerPolicyOptions, cfg.ReservedCPUs, cfg.SystemReserved, runtime.NumCPU()); err != nil {
+			return p.Fail("cpu pinning", err)
+		}
 	}
 
 	// ── Container port mappings ─────────────────────────────────────────────────
