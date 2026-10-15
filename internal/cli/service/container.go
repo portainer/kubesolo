@@ -1,6 +1,7 @@
 package service
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
 	"context"
@@ -9,9 +10,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
@@ -129,7 +132,7 @@ func (m *containerManager) Install(cfg *config.Config, cmdArgs []string) error {
 	if err != nil && !cerrdefs.IsNotFound(err) {
 		return err
 	}
-	return ReplaceContainer(m.name, cfg, cmdArgs, prev)
+	return ReplaceContainer(m.name, cfg, cmdArgs, nil, prev)
 }
 
 // InspectInstance returns the named instance's container as the engine
@@ -149,12 +152,13 @@ func InspectInstance(name string) (*container.InspectResponse, error) {
 }
 
 // ReplaceContainer replaces the named instance's container, if it has one, with
-// a new one running cfg's image with cmdArgs. The hostname, host ports and proxy
-// carry over from prev, the container being replaced as it was before anything
-// changed; nil means there is none. An upgrade passes the snapshot it took
-// before stopping the container, so a rollback restores them even when the new
-// container could not be created.
-func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, prev *container.InspectResponse) error {
+// a new one running cfg's image with cmdArgs. A non-nil configDoc becomes its
+// configuration file; nil keeps the one in its configuration volume. The
+// hostname, host ports and proxy carry over from prev, the container being
+// replaced as it was before anything changed; nil means there is none. An
+// upgrade passes the snapshot it took before stopping the container, so a
+// rollback restores them even when the new container could not be created.
+func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, configDoc []byte, prev *container.InspectResponse) error {
 	m := &containerManager{name: name}
 	img := cfg.ContainerImage
 	if img == "" {
@@ -226,7 +230,7 @@ func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, prev *c
 		"6443/tcp": []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: apiPort}},
 	}
 	exposedPorts := nat.PortSet{"6443/tcp": struct{}{}}
-	if publishD2K(cfg, cmdArgs) {
+	if publishD2K(cfg, cmdArgs, prev) {
 		d2kPort, err := hostPortFor(prev, "2376/tcp")
 		if err != nil {
 			return err
@@ -292,6 +296,11 @@ func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, prev *c
 		return fmt.Errorf("failed to create container: %w", err)
 	}
 
+	if configDoc != nil {
+		if err := writeContainerConfig(ctx, cli, resp.ID, configDoc); err != nil {
+			return err
+		}
+	}
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
@@ -361,21 +370,55 @@ func proxyEnv(proxy string, subnets []string) []string {
 }
 
 // containerBinds returns the mounts of the named instance's container: its data
-// volume, the kernel modules of the engine's host, read-only, as kind mounts
-// them, so that KubeSolo can load the netfilter modules it needs on a host that
-// has not loaded them yet, and the user's own mounts.
+// volume, its configuration volume, the kernel modules of the engine's host,
+// read-only, as kind mounts them, so that KubeSolo can load the netfilter
+// modules it needs on a host that has not loaded them yet, and the user's own
+// mounts.
 func containerBinds(name string, mounts []string) []string {
 	return append([]string{
 		ContainerNameFor(name) + "-data:" + containerDataDir,
+		ContainerNameFor(name) + "-config:" + containerConfigDir,
 		"/lib/modules:/lib/modules:ro",
 	}, mounts...)
 }
 
+// containerConfigDir holds the configuration file of a KubeSolo container.
+var containerConfigDir = path.Dir(config.ContainerConfigFile)
+
+// writeContainerConfig puts the configuration file doc into the configuration
+// volume of the created, not yet started, container id.
+func writeContainerConfig(ctx context.Context, cli *client.Client, id string, doc []byte) error {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    path.Base(config.ContainerConfigFile),
+		Mode:    0o600,
+		Size:    int64(len(doc)),
+		ModTime: time.Now(),
+	}); err != nil {
+		return err
+	}
+	if _, err := tw.Write(doc); err != nil {
+		return err
+	}
+	if err := tw.Close(); err != nil {
+		return err
+	}
+	if err := cli.CopyToContainer(ctx, id, containerConfigDir, &buf, container.CopyToContainerOptions{}); err != nil {
+		return fmt.Errorf("failed to write %s: %w", config.ContainerConfigFile, err)
+	}
+	return nil
+}
+
 // publishD2K reports whether the container needs the d2k port published. An
 // upgrade passes the previous container's command line with a config that does
-// not set D2K, so the command line decides as well as the flag.
-func publishD2K(cfg *config.Config, cmdArgs []string) bool {
-	return cfg.D2K || slices.Contains(cmdArgs, "--d2k")
+// not set D2K: a container configured by flags names --d2k there, and one with
+// a configuration file published the port.
+func publishD2K(cfg *config.Config, cmdArgs []string, prev *container.InspectResponse) bool {
+	if cfg.D2K || slices.Contains(cmdArgs, "--d2k") {
+		return true
+	}
+	return prev != nil && prev.HostConfig != nil && len(prev.HostConfig.PortBindings["2376/tcp"]) > 0
 }
 
 func (m *containerManager) Uninstall() error {
@@ -450,18 +493,31 @@ func parseVersionOutput(out string) (string, error) {
 // RemoveContainerVolume removes the data volume for the named instance.
 // Called during uninstall --purge to delete all cluster state.
 func RemoveContainerVolume(name string) error {
+	_, err := removeVolume(ContainerNameFor(name) + "-data")
+	return err
+}
+
+// RemoveContainerConfigVolume removes the configuration volume of the named
+// instance, reporting whether there was one.
+func RemoveContainerConfigVolume(name string) (bool, error) {
+	return removeVolume(ContainerNameFor(name) + "-config")
+}
+
+func removeVolume(vname string) (bool, error) {
 	cli, err := newContainerClient()
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() { _ = cli.Close() }()
 
-	vname := ContainerNameFor(name) + "-data"
-	if err := cli.VolumeRemove(context.Background(), vname, true); err != nil && !cerrdefs.IsNotFound(err) {
-		return fmt.Errorf("failed to remove volume %s: %w", vname, err)
+	if err := cli.VolumeRemove(context.Background(), vname, true); err != nil {
+		if cerrdefs.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to remove volume %s: %w", vname, err)
 	}
 	log.Info().Msgf("volume %s removed", vname)
-	return nil
+	return true, nil
 }
 
 // ResetContainer wipes cluster state and starts fresh: it captures the existing
@@ -648,7 +704,7 @@ func ContainerExists(name string) bool {
 }
 
 // InstanceExists reports whether anything of the named container instance is
-// left: its container, network or data volume. A container removed by hand
+// left: its container, network, data volume or configuration volume. A container removed by hand
 // leaves the other two behind, and uninstall must still find them.
 func InstanceExists(name string) bool {
 	cli, err := newContainerClient()
@@ -664,8 +720,12 @@ func InstanceExists(name string) bool {
 	if _, err := cli.NetworkInspect(ctx, networkNameFor(name), network.InspectOptions{}); err == nil {
 		return true
 	}
-	_, err = cli.VolumeInspect(ctx, ContainerNameFor(name)+"-data")
-	return err == nil
+	for _, v := range []string{"-data", "-config"} {
+		if _, err := cli.VolumeInspect(ctx, ContainerNameFor(name)+v); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoveContainerNetwork removes the named instance's network, reporting

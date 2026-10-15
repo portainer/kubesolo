@@ -102,7 +102,7 @@ Common flags:
 | Flag | Env var | Default | Description |
 |---|---|---|---|
 | `--version` | `KUBESOLO_VERSION` | matched to the CLI build | KubeSolo version to install |
-| `--path` | `KUBESOLO_PATH` | `/var/lib/kubesolo` | Data directory (host mode only; container mode keeps state in a volume) |
+| `--path` | `KUBESOLO_PATH` | `/var/lib/kubesolo` | Data directory (ignored in container mode, which keeps state in a volume) |
 | `--run-mode` | `KUBESOLO_RUN_MODE` | `service` | `service`, `daemon`, `foreground`, or `container` |
 | `--name` | `KUBESOLO_NAME` | `kubesolo` | Instance name (container name + kubeconfig context) |
 | `--image` | `KUBESOLO_IMAGE` | `portainer/kubesolo:<version>` | Container image (container mode). It is pulled first; an image the engine already has but cannot pull, such as one built locally or loaded with `docker load` for an offline install, is used as it is |
@@ -111,18 +111,20 @@ Common flags:
 | `--d2k` | `KUBESOLO_D2K` | `false` | Enable the Docker-compatible API translator |
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | on (see below) | Enable the local-path storage provisioner |
 | `--node-ip` | `KUBESOLO_NODE_IP` | _(auto-detect)_ | Override the detected node IP |
-| `--mtu` | `KUBESOLO_MTU` | _(auto-detect)_ | Override the detected MTU; in container mode also sizes the outer Docker network |
+| `--mtu` | `KUBESOLO_MTU` | _(auto-detect)_ | Override the detected MTU (ignored in container mode) |
 | `--portainer-edge-image` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | `docker.io/portainer/agent:lts` | Image deployed for the Portainer edge agent |
 | `--offline-install` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ | Install from a local tarball/binary instead of downloading (host mode only) |
 | `--proxy` | `KUBESOLO_PROXY` | _(none)_ | HTTP/HTTPS proxy injected into the service environment, or the container's in container mode (kept across `upgrade` and `reset`) |
-| `--cpu-manager-policy` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` | `static` gives Guaranteed-QoS pods exclusive cores (not supported in container mode) |
+| `--cpu-manager-policy` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` | `static` gives Guaranteed-QoS pods exclusive cores (ignored in container mode) |
 | `--cpu-manager-policy-options` | `KUBESOLO_CPU_MANAGER_POLICY_OPTIONS` | _(none)_ | Comma-separated `key=value` options for the static policy |
 | `--reserved-cpus` | `KUBESOLO_RESERVED_CPUS` | `0` when the static policy is used | Cpuset reserved for the host and KubeSolo itself |
 | `--system-reserved` | `KUBESOLO_SYSTEM_RESERVED` | _(none)_ | Resources withheld from allocatable, e.g. `cpu=1,memory=500Mi` |
 
 `--local-storage` can only turn the provisioner on, and it is already on by default in KubeSolo, so the local-path provisioner is installed either way. `--local-storage=false` does not disable it. On a host install, disable it afterwards with `sudo kubesoloctl config set storage.localPath.enabled false` and restart KubeSolo. That only stops it being deployed on later starts; the existing provisioner keeps running until you remove it with `kubectl delete namespace local-path-storage` and `kubectl delete storageclass local-path`.
 
-On a host install of KubeSolo v1.2.1 or later, `install` writes the settings to `/etc/kubesolo/config.yaml` and the service runs with `--config` only. Unlike the shell installer, it does not fold `KUBESOLO_*` variables for settings it has no flag for into that file. Container mode keeps passing flags to the container. See [Configuration file](../configuration/config-file.md).
+On a host install of KubeSolo v1.2.1 or later, `install` writes the settings to `/etc/kubesolo/config.yaml` and the service runs with `--config` only. Unlike the shell installer, it does not fold `KUBESOLO_*` variables for settings it has no flag for into that file. See [Configuration file](../configuration/config-file.md).
+
+In container mode, `install` writes the configuration file into a `kubesolo-<name>-config` volume mounted at `/etc/kubesolo`, and the container runs with `--config` only. Settings that mean nothing inside a container are left out of it, and `install` reports them as ignored: `--path`, `--node-ip`, `--mtu`, `--cpu-manager-policy`, `--cpu-manager-policy-options` and `--reserved-cpus` — kubesoloctl or the container decides these (the data volume, the container's address and network, its cpuset) — as well as the LoadBalancer IP, node name, runtime endpoint and API settings of the file. The configuration volume survives `reset`; `uninstall` removes it unless `--keep-config` is given.
 
 In container mode, settings are validated the same way before the image is pulled or a running container is replaced, so a bad value fails the install instead of leaving a container that restarts forever.
 

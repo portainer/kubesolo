@@ -174,7 +174,7 @@ func runContainerRollback(p *ui.Printer, name string, yes bool, healthTimeout ti
 		}
 		return p.Fail("datastore restore", err)
 	}
-	if err := service.ReplaceContainer(name, &config.Config{Name: name, ContainerImage: target.Image}, target.Args, prev); err != nil {
+	if err := service.ReplaceContainer(name, &config.Config{Name: name, ContainerImage: target.Image}, target.Args, nil, prev); err != nil {
 		return p.Fail("rollback", err)
 	}
 	apiAddr, data, err := awaitHealthy(name, healthTimeout)

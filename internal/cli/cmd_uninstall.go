@@ -54,7 +54,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	p.Header("uninstall")
 
 	if containerModeActive(name) {
-		return runContainerUninstall(p, name, purge, removeKubeconfig)
+		return runContainerUninstall(p, name, purge, keepConfig)
 	}
 
 	if err := preflight.CheckRoot(); err != nil {
@@ -166,7 +166,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	return nil
 }
 
-func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig bool) error {
+func runContainerUninstall(p *ui.Printer, name string, purge, keepConfig bool) error {
 	info, err := detect.Detect()
 	if err != nil {
 		return p.Fail("system detection", err)
@@ -208,6 +208,18 @@ func runContainerUninstall(p *ui.Printer, name string, purge, removeKubeconfig b
 		}
 	} else if exists {
 		p.Info("Cluster data preserved in volume " + volumeName + " (use --purge to remove)")
+	}
+
+	// ── Remove configuration ──────────────────────────────────────────────────
+	// As on a host, removed even without --purge: it holds no cluster state,
+	// and a stale one would silently configure a later reinstall.
+	if keepConfig {
+		p.Info("Configuration preserved in volume " + cname + "-config")
+	} else if removed, err := service.RemoveContainerConfigVolume(name); err != nil {
+		p.Warn("could not remove the configuration volume: " + err.Error())
+	} else if removed {
+		p.OK("Configuration removed", cname+"-config")
+		exists = true
 	}
 
 	// ── Clean kubeconfig + Docker context ─────────────────────────────────────

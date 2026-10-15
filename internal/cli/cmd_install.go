@@ -59,7 +59,7 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 	f.StringVar(&cfg.MTU, "mtu",
 		os.Getenv("KUBESOLO_MTU"),
 		"Override the auto-detected network MTU for the embedded CNI bridge (e.g. 1400 for VPN/tunnel interfaces).\n"+
-			"In container mode this also sizes the outer Docker network the KubeSolo container runs on.\n"+
+			"Ignored in container mode, where the container's network decides it.\n"+
 			"Defaults to auto-detection")
 
 	f.StringVar(&cfg.PortainerEdgeID, "portainer-edge-id",
@@ -120,7 +120,7 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 		envOr("KUBESOLO_CPU_MANAGER_POLICY", config.CPUManagerPolicyNone),
 		"CPU manager policy: none (default) or static. The static policy gives Guaranteed-QoS pods\n"+
 			"that request whole CPUs exclusive cores, for latency-sensitive workloads.\n"+
-			"Not supported in container run mode")
+			"Ignored in container run mode")
 
 	f.StringVar(&cfg.CPUManagerPolicyOptions, "cpu-manager-policy-options",
 		os.Getenv("KUBESOLO_CPU_MANAGER_POLICY_OPTIONS"),
@@ -189,11 +189,6 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	// ── CPU pinning ─────────────────────────────────────────────────────────────
 	// Validated here with the same parser the kubesolo binary uses, so a bad flag
 	// fails before a service unit is written rather than crash-looping afterwards.
-	if containerMode && cfg.CPUManagerPolicy != "" && cfg.CPUManagerPolicy != config.CPUManagerPolicyNone {
-		return p.Fail("cpu pinning", fmt.Errorf(
-			"--cpu-manager-policy=%s is not supported in container run mode: exclusive cores are bounded by the container's own cpuset, which KubeSolo does not control",
-			cfg.CPUManagerPolicy))
-	}
 	if _, _, err := cpumanager.Parse(cfg.CPUManagerPolicy, cfg.CPUManagerPolicyOptions, cfg.ReservedCPUs, cfg.SystemReserved, runtime.NumCPU()); err != nil {
 		return p.Fail("cpu pinning", err)
 	}
@@ -224,10 +219,18 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	// ── Container settings ────────────────────────────────────────────────────
 	// Checked before the image is pulled or a running container replaced: a
 	// setting KubeSolo rejects would otherwise only show as a crash loop.
+	var containerArgs []string
+	var containerDoc []byte
 	if containerMode {
-		warnings, err := checkContainerSettings(cfg)
+		var dropped []string
+		var warnings []kubesoloconfig.Warning
+		var err error
+		containerArgs, containerDoc, dropped, warnings, err = containerSettings(cfg)
 		if err != nil {
 			return p.Fail("configuration", err)
+		}
+		for _, f := range dropped {
+			p.Warn(f + " is ignored in container mode: kubesoloctl or the container decides it")
 		}
 		for _, w := range warnings {
 			p.Warn(w.String())
@@ -341,7 +344,13 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		return p.Fail("configuration", err)
 	}
 
-	if err := mgr.Install(cfg, cfg.CmdArgs()); err != nil {
+	if containerMode {
+		// A first install has no container to carry anything over from.
+		prev, _ := service.InspectInstance(cfg.Name)
+		if err := service.ReplaceContainer(cfg.Name, cfg, containerArgs, containerDoc, prev); err != nil {
+			return p.Fail("service setup", err)
+		}
+	} else if err := mgr.Install(cfg, cfg.CmdArgs()); err != nil {
 		return p.Fail("service setup", err)
 	}
 
@@ -421,18 +430,29 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	return nil
 }
 
-// checkContainerSettings rejects settings that cannot work in container mode
-// and validates the rest the way KubeSolo will, returning its warnings.
-func checkContainerSettings(cfg *config.Config) ([]kubesoloconfig.Warning, error) {
-	if cfg.Path != config.DefaultPath {
-		return nil, fmt.Errorf("--path is not supported in container mode: cluster state lives in the %s volume, mounted at %s",
-			service.ContainerNameFor(cfg.Name)+"-data", config.DefaultPath)
-	}
+// containerSettings resolves the installer's settings for a container
+// instance: the KubeSolo command line, and the configuration file it reads, or
+// nil for a release that predates the file and takes flags instead. Settings
+// that mean nothing in a container are left out and returned as dropped; the
+// rest is validated the way KubeSolo will.
+func containerSettings(cfg *config.Config) (args []string, doc []byte, dropped []string, warnings []kubesoloconfig.Warning, err error) {
 	if cfg.OfflineInstall != "" {
-		return nil, fmt.Errorf("--offline-install is not supported in container mode: KubeSolo runs from the container image; to install offline, load the image into the engine (docker load) and pass it with --image")
+		return nil, nil, nil, nil, fmt.Errorf("--offline-install is not supported in container mode: KubeSolo runs from the container image; to install offline, load the image into the engine (docker load) and pass it with --image")
 	}
-	_, warnings, err := cfg.ToKubeSoloConfig()
-	return warnings, err
+	resolved, kept, dropped, warnings, err := config.ContainerConfig(cfg.Flags())
+	if err != nil {
+		return nil, nil, dropped, warnings, err
+	}
+	// A custom image is not described by --version; it is taken to be current.
+	if cfg.ContainerImage == "" {
+		if cmp, ok := compareVersions(cfg.Version, config.MinConfigFileVersion); ok && cmp < 0 {
+			return kept, nil, dropped, warnings, nil
+		}
+	}
+	if doc, err = kubesoloconfig.Marshal(resolved); err != nil {
+		return nil, nil, dropped, warnings, err
+	}
+	return []string{"--config=" + config.ContainerConfigFile}, doc, dropped, warnings, nil
 }
 
 // writeConfigFile renders the installer's settings into the KubeSolo
@@ -444,11 +464,8 @@ func checkContainerSettings(cfg *config.Config) ([]kubesoloconfig.Warning, error
 // Older binaries predate --config entirely; passing it would abort the service
 // on every start, so kubesoloctl can still install them the old way.
 //
-// Container run mode stores KubeSolo's state in a Docker named volume rather
-// than on the host, so there is no host directory to write the file into and
-// bind-mount back. /etc is also not shared into Docker Desktop on macOS by
-// default, where container mode is the only supported mode. Container mode is a
-// developer and CI convenience, so it keeps the flag-based command line.
+// Container run mode writes its file into the container's own configuration
+// volume instead; see containerSettings.
 func writeConfigFile(p *ui.Printer, cfg *config.Config, containerMode bool) error {
 	// Validated, and its warnings shown, before anything was stopped.
 	doc, err := configDocument(p, cfg, containerMode, true)

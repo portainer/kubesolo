@@ -299,7 +299,7 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions)
 	p.OK("Datastore backed up", "rollback target: "+current)
 
 	// ── Replace the container, keeping the original runtime flags ─────────────
-	err = service.ReplaceContainer(cfg.Name, cfg, oldArgs, prev)
+	err = service.ReplaceContainer(cfg.Name, cfg, oldArgs, nil, prev)
 	var apiAddr string
 	var data []byte
 	if err == nil {
@@ -345,7 +345,7 @@ func rollBackContainerUpgrade(p *ui.Printer, name string, prev *container.Inspec
 		return p.Fail("rollback", fmt.Errorf("could not restore the datastore, which is kept in the %s volume under upgrade/container-backup: %w", service.ContainerNameFor(name)+"-data", err))
 	}
 	restore := &config.Config{Name: name, ContainerImage: target.Image}
-	if err := service.ReplaceContainer(name, restore, target.Args, prev); err != nil {
+	if err := service.ReplaceContainer(name, restore, target.Args, nil, prev); err != nil {
 		return p.Fail("rollback", err)
 	}
 	apiAddr, data, err := awaitHealthy(name, timeout)

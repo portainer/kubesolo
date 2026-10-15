@@ -67,9 +67,8 @@ type Config struct {
 	NodeIP string
 
 	// MTU optionally overrides the auto-detected network MTU used by the embedded
-	// CNI bridge (cni0) and pod veth interfaces, and — in container run mode —
-	// the outer Docker network the KubeSolo container itself runs on (the two
-	// must match; see internal/cli/service/container.go). Empty means auto-detect.
+	// CNI bridge (cni0) and pod veth interfaces. Empty means auto-detect. It is
+	// ignored in container run mode; see ContainerIgnored.
 	MTU string
 
 	// PortainerEdgeID is the Portainer edge agent ID
@@ -115,7 +114,7 @@ type Config struct {
 
 	// CPUManagerPolicy selects the kubelet CPU manager policy ("none" or "static").
 	// The static policy gives Guaranteed-QoS pods requesting whole CPUs exclusive
-	// cores, and is unsupported in container run mode.
+	// cores, and is ignored in container run mode.
 	CPUManagerPolicy string
 
 	// CPUManagerPolicyOptions is a comma-separated list of key=value options that

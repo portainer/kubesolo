@@ -11,22 +11,29 @@ import (
 )
 
 // An upgrade re-creates the container from the previous command line and a
-// fresh config that has no --d2k of its own, so the command line decides.
+// fresh config that has no --d2k of its own. The command line names d2k only
+// for a container configured by flags; one with a configuration file published
+// the port before.
 func TestPublishD2K(t *testing.T) {
+	published := &container.InspectResponse{ContainerJSONBase: &container.ContainerJSONBase{
+		HostConfig: &container.HostConfig{PortBindings: nat.PortMap{"2376/tcp": {{HostIP: "127.0.0.1", HostPort: "40000"}}}},
+	}}
 	cases := []struct {
 		name string
 		d2k  bool
 		args []string
+		prev *container.InspectResponse
 		want bool
 	}{
-		{"install with --d2k", true, []string{"--path=/var/lib/kubesolo", "--d2k"}, true},
-		{"upgrade of a d2k container", false, []string{"--path=/var/lib/kubesolo", "--d2k", "--d2k-namespace=d2k"}, true},
-		{"no d2k", false, []string{"--path=/var/lib/kubesolo"}, false},
-		{"d2k namespace alone", false, []string{"--d2k-namespace=d2k"}, false},
+		{"install with --d2k", true, []string{"--config=/etc/kubesolo/config.yaml"}, nil, true},
+		{"upgrade of a flag-configured d2k container", false, []string{"--path=/var/lib/kubesolo", "--d2k", "--d2k-namespace=d2k"}, nil, true},
+		{"upgrade of a d2k container with a config file", false, []string{"--config=/etc/kubesolo/config.yaml"}, published, true},
+		{"no d2k", false, []string{"--path=/var/lib/kubesolo"}, nil, false},
+		{"d2k namespace alone", false, []string{"--d2k-namespace=d2k"}, nil, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := publishD2K(&config.Config{D2K: c.d2k}, c.args); got != c.want {
+			if got := publishD2K(&config.Config{D2K: c.d2k}, c.args, c.prev); got != c.want {
 				t.Errorf("publishD2K = %v, want %v", got, c.want)
 			}
 		})
@@ -147,6 +154,7 @@ func TestParseContainerMounts(t *testing.T) {
 		"/a:/b:rx",
 		"/data:/var/lib/kubesolo",
 		"/mods:/lib/modules",
+		"/cfg:/etc/kubesolo",
 	} {
 		if _, err := ParseContainerMounts(bad); err == nil {
 			t.Errorf("%q: expected an error", bad)
@@ -157,7 +165,7 @@ func TestParseContainerMounts(t *testing.T) {
 // An upgrade or reset keeps the user's mounts and re-adds the ones kubesoloctl
 // owns itself, so they are neither lost nor doubled.
 func TestUserBinds(t *testing.T) {
-	prev := []string{"kubesolo-dev-data:/var/lib/kubesolo", "/lib/modules:/lib/modules:ro", "/Users/me/src:/src"}
+	prev := []string{"kubesolo-dev-data:/var/lib/kubesolo", "kubesolo-dev-config:/etc/kubesolo", "/lib/modules:/lib/modules:ro", "/Users/me/src:/src"}
 	if got := userBinds(prev); strings.Join(got, " ") != "/Users/me/src:/src" {
 		t.Errorf("userBinds = %v", got)
 	}
