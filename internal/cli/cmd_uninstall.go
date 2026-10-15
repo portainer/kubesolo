@@ -53,7 +53,10 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	p := ui.New()
 	p.Header("uninstall")
 
-	if containerModeActive(name) {
+	// What is left of a container instance whose container is gone, its
+	// network and volumes, is cleaned up too, unless a host install is what
+	// this host runs: leftovers must not hide it.
+	if containerModeActive(name) || (!hostInstalled() && service.InstanceExists(name)) {
 		return runContainerUninstall(p, name, purge, keepConfig)
 	}
 
@@ -69,10 +72,7 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 	// The binary and data directory are the canonical artifacts of a host
 	// install. If neither is present there is nothing to uninstall — report that
 	// honestly instead of claiming success for steps that did nothing.
-	_, binErr := os.Stat(config.DefaultInstallPath)
-	binaryExists := binErr == nil
-	_, dataErr := os.Stat(config.DefaultPath)
-	installed := binaryExists || dataErr == nil
+	installed := hostInstalled()
 
 	if !installed {
 		p.Warn("KubeSolo is not installed as a host service — nothing to remove")
@@ -164,6 +164,14 @@ func runUninstall(name string, purge, removeKubeconfig, keepConfig bool) error {
 
 	p.Done("KubeSolo uninstalled.")
 	return nil
+}
+
+// hostInstalled reports whether this host has a host install of KubeSolo: its
+// binary or its data directory, the canonical artifacts of one.
+func hostInstalled() bool {
+	_, binErr := os.Stat(config.DefaultInstallPath)
+	_, dataErr := os.Stat(config.DefaultPath)
+	return binErr == nil || dataErr == nil
 }
 
 func runContainerUninstall(p *ui.Printer, name string, purge, keepConfig bool) error {
