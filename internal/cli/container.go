@@ -7,6 +7,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/kubeconfig"
 	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	"github.com/portainer/kubesolo/internal/upgrade"
 )
 
 // awaitContainer waits for a KubeSolo container that was just created to come
@@ -14,12 +15,22 @@ import (
 // kubeconfig. It fails as soon as KubeSolo exits, and when the API server does
 // not answer within two minutes.
 func awaitContainer(name string) (apiAddr string, kc []byte, err error) {
-	return awaitContainerFor(name, 120*time.Second)
+	return awaitContainerFor(name, 240*time.Second)
+}
+
+// healthTimeout is the time an upgrade or rollback gives the new container to
+// become healthy: --health-timeout, where 0 means the default, as on a host.
+func healthTimeout(d time.Duration) time.Duration {
+	if d == 0 {
+		return upgrade.DefaultHealthTimeout
+	}
+	return d
 }
 
 // awaitHealthy waits, up to timeout, for a container that replaced another to
 // come up with its node Ready, the health an upgrade or rollback requires.
 func awaitHealthy(name string, timeout time.Duration) (apiAddr string, kc []byte, err error) {
+	timeout = healthTimeout(timeout)
 	deadline := time.Now().Add(timeout)
 	if apiAddr, kc, err = awaitContainerFor(name, timeout); err != nil {
 		return apiAddr, kc, err
@@ -27,10 +38,13 @@ func awaitHealthy(name string, timeout time.Duration) (apiAddr string, kc []byte
 	return apiAddr, kc, kubeconfig.WaitForNodeReady(kc, apiAddr, time.Until(deadline))
 }
 
+// awaitContainerFor is awaitContainer with one deadline, timeout from now,
+// for the whole of the wait.
 func awaitContainerFor(name string, timeout time.Duration) (apiAddr string, kc []byte, err error) {
+	deadline := time.Now().Add(timeout)
 	// The kubeconfig first: its wait notices KubeSolo exiting, and a container
 	// that is not running has no published port to look up.
-	kc, err = kubeconfig.WaitForContainerKubeconfig(service.ContainerNameFor(name), "")
+	kc, err = kubeconfig.WaitForContainerKubeconfig(service.ContainerNameFor(name), "", timeout)
 	if err != nil {
 		return "", nil, err
 	}
@@ -39,7 +53,7 @@ func awaitContainerFor(name string, timeout time.Duration) (apiAddr string, kc [
 		return "", kc, err
 	}
 	apiAddr = fmt.Sprintf("127.0.0.1:%d", port)
-	if err := kubeconfig.WaitForAPIServer(apiAddr, timeout); err != nil {
+	if err := kubeconfig.WaitForAPIServer(apiAddr, time.Until(deadline)); err != nil {
 		return apiAddr, kc, err
 	}
 	return apiAddr, kc, nil

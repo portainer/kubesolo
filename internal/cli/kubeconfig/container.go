@@ -121,19 +121,19 @@ func GetFromContainer(containerName, socketPath string) ([]byte, error) {
 }
 
 // WaitForContainerKubeconfig polls the kubesolo container until the admin
-// kubeconfig is generated, then returns the raw bytes. Waits up to 120 seconds,
-// as a host install does. Returns an error if the file never appears, the
-// container stops or restarts — KubeSolo exited — or Docker is unreachable.
-func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error) {
+// kubeconfig is generated, then returns the raw bytes. Waits up to timeout.
+// Returns an error if the file never appears, the container stops or restarts
+// — KubeSolo exited — or Docker is unreachable.
+func WaitForContainerKubeconfig(containerName, socketPath string, timeout time.Duration) ([]byte, error) {
 	cli, err := newDockerClient(socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot connect to Docker: %w", err)
 	}
 	defer func() { _ = cli.Close() }()
 
-	log.Info().Msgf("waiting for kubeconfig in container %q (up to 120s)...", containerName)
+	log.Info().Msgf("waiting for kubeconfig in container %q (up to %s)...", containerName, timeout.Round(time.Second))
 
-	deadline := time.Now().Add(120 * time.Second)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if insp, err := cli.ContainerInspect(context.Background(), containerName); err == nil &&
 			(insp.RestartCount > 0 || insp.State == nil || !insp.State.Running) {
@@ -155,7 +155,7 @@ func WaitForContainerKubeconfig(containerName, socketPath string) ([]byte, error
 		}
 		time.Sleep(2 * time.Second)
 	}
-	return nil, fmt.Errorf("KubeSolo did not write its kubeconfig within 120s")
+	return nil, fmt.Errorf("KubeSolo did not write its kubeconfig within %s", timeout.Round(time.Second))
 }
 
 // MergeContainerKubeconfig merges a KubeSolo container's admin kubeconfig into
