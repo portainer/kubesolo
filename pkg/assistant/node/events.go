@@ -13,16 +13,26 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// maxEvents bounds the Kubernetes events in a snapshot.
-const maxEvents = 20
+const (
+	// maxEvents bounds the Kubernetes events in a snapshot.
+	maxEvents = 20
 
-// warningEvents lists the newest Kubernetes warning events, oldest first.
-func warningEvents(ctx context.Context, cs kubernetes.Interface) ([]string, error) {
+	// maxEventAge is how far back a snapshot's events go. An outage is
+	// recorded after 5 minutes; the API server keeps events far longer, long
+	// enough to carry the warnings of an earlier, unrelated outage.
+	maxEventAge = 30 * time.Minute
+)
+
+// warningEvents lists the newest Kubernetes warning events of the last
+// maxEventAge, oldest first.
+func warningEvents(ctx context.Context, cs kubernetes.Interface, now time.Time) ([]string, error) {
 	list, err := cs.CoreV1().Events("").List(ctx, metav1.ListOptions{FieldSelector: "type=" + corev1.EventTypeWarning})
 	if err != nil {
 		return nil, err
 	}
-	events := slices.DeleteFunc(list.Items, func(e corev1.Event) bool { return e.Type != corev1.EventTypeWarning })
+	events := slices.DeleteFunc(list.Items, func(e corev1.Event) bool {
+		return e.Type != corev1.EventTypeWarning || now.Sub(eventTime(e)) > maxEventAge
+	})
 	sort.Slice(events, func(i, j int) bool { return eventTime(events[i]).Before(eventTime(events[j])) })
 	events = events[max(0, len(events)-maxEvents):]
 
@@ -36,7 +46,7 @@ func warningEvents(ctx context.Context, cs kubernetes.Interface) ([]string, erro
 
 // WarningEvents returns a Collector.Events that reads from the API server.
 func WarningEvents(cs kubernetes.Interface) func(context.Context) ([]string, error) {
-	return func(ctx context.Context) ([]string, error) { return warningEvents(ctx, cs) }
+	return func(ctx context.Context) ([]string, error) { return warningEvents(ctx, cs, time.Now()) }
 }
 
 func eventTime(e corev1.Event) time.Time {
