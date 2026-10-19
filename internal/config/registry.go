@@ -18,9 +18,11 @@ const (
 	// baked into types.Embedded, which each service is constructed from.
 	MutabilityRestart Mutability = iota
 
-	// MutabilityImmutable means the change cannot be applied at all. Only Path
-	// is immutable: every certificate, the kine database and all containerd
-	// state live below it, and nothing migrates them.
+	// MutabilityImmutable means the change cannot be applied at all. Path is:
+	// every certificate, the kine database and all containerd state live below
+	// it, and nothing migrates them. So are the pod and service networks: the
+	// node's spec.podCIDR, every Service's cluster IP and the API server
+	// certificate's kubernetes Service IP were allocated from them.
 	MutabilityImmutable
 
 	// MutabilitySetOnce means the setting can be set while no Portainer agent
@@ -85,6 +87,10 @@ type Field struct {
 
 	Mutability Mutability
 
+	// Unchangeable says why an immutable setting cannot be changed, for the
+	// message that refuses or warns about it. Empty for the others.
+	Unchangeable string
+
 	// Get reads the current value, for display and for diffing.
 	Get func(*types.Config) any
 
@@ -97,8 +103,8 @@ type Field struct {
 // absent from here is invisible to the loader, the CLI and the API.
 //
 // The table is built once and shared. Treat the result as read-only — it is a
-// constant, and callers on the request path would otherwise rebuild twenty-nine
-// closures apiece.
+// constant, and callers on the request path would otherwise rebuild every
+// closure apiece.
 //
 // --full is deliberately absent. It has had no effect for several releases; the
 // flag remains and still warns, but there is nothing to configure.
@@ -107,12 +113,13 @@ var Registry = sync.OnceValue(buildRegistry)
 func buildRegistry() []Field {
 	return []Field{
 		{
-			ConfigPath: "path",
-			Flag:       "path",
-			Envar:      "KUBESOLO_PATH",
-			Mutability: MutabilityImmutable,
-			Get:        func(c *types.Config) any { return c.Path },
-			Set:        func(c *types.Config, v string) error { c.Path = v; return nil },
+			ConfigPath:   "path",
+			Flag:         "path",
+			Envar:        "KUBESOLO_PATH",
+			Mutability:   MutabilityImmutable,
+			Unchangeable: "every certificate, the database and all container state live below it, and none of them move",
+			Get:          func(c *types.Config) any { return c.Path },
+			Set:          func(c *types.Config, v string) error { c.Path = v; return nil },
 		},
 		{
 			ConfigPath: "logging.debug",
@@ -127,6 +134,12 @@ func buildRegistry() []Field {
 			Envar:      "KUBESOLO_PPROF_SERVER",
 			Get:        func(c *types.Config) any { return c.Logging.Pprof },
 			Set:        func(c *types.Config, v string) error { return setBool(&c.Logging.Pprof, v) },
+		},
+		{
+			ConfigPath: "logging.pprofPort",
+			Envar:      "KUBESOLO_PPROF_PORT",
+			Get:        func(c *types.Config) any { return c.Logging.PprofPort },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Logging.PprofPort, v) },
 		},
 		{
 			ConfigPath: "network.nodeIP",
@@ -191,6 +204,30 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { c.Kubernetes.NodeName = v; return nil },
 		},
 		{
+			ConfigPath:   "kubernetes.podCIDR",
+			Envar:        "KUBESOLO_POD_CIDR",
+			Mutability:   MutabilityImmutable,
+			Unchangeable: "the node's pod range and every pod's address were allocated from it, and none of them move",
+			Get:          func(c *types.Config) any { return c.Kubernetes.PodCIDR },
+			Set:          func(c *types.Config, v string) error { c.Kubernetes.PodCIDR = v; return nil },
+		},
+		{
+			ConfigPath:   "kubernetes.serviceCIDR",
+			Envar:        "KUBESOLO_SERVICE_CIDR",
+			Mutability:   MutabilityImmutable,
+			Unchangeable: "every Service's cluster IP and the API server certificate's kubernetes Service IP were allocated from it, and none of them move",
+			Get:          func(c *types.Config) any { return c.Kubernetes.ServiceCIDR },
+			Set:          func(c *types.Config, v string) error { c.Kubernetes.ServiceCIDR = v; return nil },
+		},
+		{
+			ConfigPath:   "kubernetes.clusterDNS",
+			Envar:        "KUBESOLO_CLUSTER_DNS",
+			Mutability:   MutabilityImmutable,
+			Unchangeable: "every pod was given it as its nameserver, and none of them change",
+			Get:          func(c *types.Config) any { return c.Kubernetes.ClusterDNS },
+			Set:          func(c *types.Config, v string) error { c.Kubernetes.ClusterDNS = v; return nil },
+		},
+		{
 			ConfigPath: "kubernetes.apiServer.extraSANs",
 			Flag:       "apiserver-extra-sans",
 			Envar:      "KUBESOLO_APISERVER_EXTRA_SANS",
@@ -208,6 +245,18 @@ func buildRegistry() []Field {
 			Set: func(c *types.Config, v string) error {
 				return setInt(&c.Kubernetes.APIServer.StartupTimeoutSeconds, v)
 			},
+		},
+		{
+			ConfigPath: "kubernetes.apiServer.port",
+			Envar:      "KUBESOLO_APISERVER_PORT",
+			Get:        func(c *types.Config) any { return c.Kubernetes.APIServer.Port },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.APIServer.Port, v) },
+		},
+		{
+			ConfigPath: "kubernetes.controllerManager.port",
+			Envar:      "KUBESOLO_CONTROLLER_MANAGER_PORT",
+			Get:        func(c *types.Config) any { return c.Kubernetes.ControllerManager.Port },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.ControllerManager.Port, v) },
 		},
 		{
 			ConfigPath: "kubernetes.kubelet.cpuManager.policy",
@@ -258,6 +307,30 @@ func buildRegistry() []Field {
 			},
 		},
 		{
+			ConfigPath: "kubernetes.kubelet.port",
+			Envar:      "KUBESOLO_KUBELET_PORT",
+			Get:        func(c *types.Config) any { return c.Kubernetes.Kubelet.Port },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.Kubelet.Port, v) },
+		},
+		{
+			ConfigPath: "kubernetes.kubelet.healthzPort",
+			Envar:      "KUBESOLO_KUBELET_HEALTHZ_PORT",
+			Get:        func(c *types.Config) any { return c.Kubernetes.Kubelet.HealthzPort },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.Kubelet.HealthzPort, v) },
+		},
+		{
+			ConfigPath: "kubernetes.kubeProxy.healthzPort",
+			Envar:      "KUBESOLO_KUBE_PROXY_HEALTHZ_PORT",
+			Get:        func(c *types.Config) any { return c.Kubernetes.KubeProxy.HealthzPort },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.KubeProxy.HealthzPort, v) },
+		},
+		{
+			ConfigPath: "kubernetes.webhook.port",
+			Envar:      "KUBESOLO_WEBHOOK_PORT",
+			Get:        func(c *types.Config) any { return c.Kubernetes.Webhook.Port },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.Webhook.Port, v) },
+		},
+		{
 			ConfigPath: "storage.localPath.enabled",
 			Flag:       "local-storage",
 			Envar:      "KUBESOLO_LOCAL_STORAGE",
@@ -270,6 +343,12 @@ func buildRegistry() []Field {
 			Envar:      "KUBESOLO_LOCAL_STORAGE_SHARED_PATH",
 			Get:        func(c *types.Config) any { return c.Storage.LocalPath.SharedPath },
 			Set:        func(c *types.Config, v string) error { c.Storage.LocalPath.SharedPath = v; return nil },
+		},
+		{
+			ConfigPath: "storage.kine.port",
+			Envar:      "KUBESOLO_KINE_PORT",
+			Get:        func(c *types.Config) any { return c.Storage.Kine.Port },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.Storage.Kine.Port, v) },
 		},
 		{
 			ConfigPath: "storage.dbWALRepair",
@@ -325,6 +404,12 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { c.D2K.Namespace = v; return nil },
 		},
 		{
+			ConfigPath: "d2k.port",
+			Envar:      "KUBESOLO_D2K_PORT",
+			Get:        func(c *types.Config) any { return c.D2K.Port },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.D2K.Port, v) },
+		},
+		{
 			ConfigPath: "metrics.enabled",
 			Flag:       "metrics-server",
 			Envar:      "KUBESOLO_METRICS_SERVER",
@@ -350,6 +435,21 @@ func buildRegistry() []Field {
 			Get:        func(c *types.Config) any { return c.API.SocketPath },
 			Set:        func(c *types.Config, v string) error { c.API.SocketPath = v; return nil },
 		},
+	}
+}
+
+// KeepImmutable carries every immutable setting of from over to cfg: what a reset
+// of the whole document must leave as it is, or be refused by its own
+// immutability check. The immutable settings are all strings, which Set takes as
+// they are.
+func KeepImmutable(cfg, from *types.Config) {
+	for _, f := range Registry() {
+		if f.Mutability != MutabilityImmutable {
+			continue
+		}
+		if v, ok := f.Get(from).(string); ok {
+			_ = f.Set(cfg, v)
+		}
 	}
 }
 

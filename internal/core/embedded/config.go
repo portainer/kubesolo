@@ -1,9 +1,8 @@
 package embedded
 
-import "github.com/portainer/kubesolo/types"
-
-// generateCNIConfigFile generates the default CNI configuration file
-func generateCNIConfigFile(mtu int) map[string]any {
+// generateCNIConfigFile generates the default CNI configuration file, its pods'
+// addresses from podCIDR
+func generateCNIConfigFile(mtu int, podCIDR string) map[string]any {
 	return map[string]any{
 		"cniVersion": "1.0.0",
 		"name":       "kubesolo-net",
@@ -24,7 +23,7 @@ func generateCNIConfigFile(mtu int) map[string]any {
 					"ranges": [][]map[string]any{
 						{
 							{
-								"subnet": types.DefaultPodCIDR,
+								"subnet": podCIDR,
 							},
 						},
 					},

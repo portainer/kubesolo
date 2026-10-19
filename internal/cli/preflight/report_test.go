@@ -81,7 +81,7 @@ func TestReport_PortInUse(t *testing.T) {
 		stubChecks(&ran)[0])
 	report := Report(checks)
 
-	if got := report.Checks[0]; got.Result != types.PreflightFail || !strings.Contains(got.Message, "port 10443 (Webhook server)") {
+	if got := report.Checks[0]; got.Result != types.PreflightFail || !strings.Contains(got.Message, "port 10443 (Webhook server, kubernetes.webhook.port)") {
 		t.Errorf("got %+v, want the port check to fail naming port 10443", got)
 	}
 	if len(ran) != 1 || report.Checks[1].Result != types.PreflightPass {

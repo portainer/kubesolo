@@ -175,6 +175,27 @@ type Embedded struct {
 	// Defaults to NodeIP unless overridden with --load-balancer-ip.
 	LoadBalancerIP string
 
+	// Ports the control plane listens on (kubernetes.*.port, storage.kine.port,
+	// logging.pprofPort, d2k.port). KineEndpoint is kine's address on loopback.
+	APIServerPort         int
+	ControllerManagerPort int
+	KubeletPort           int
+	KubeletHealthzPort    int
+	KubeProxyHealthzPort  int
+	WebhookPort           int
+	KinePort              int
+	KineEndpoint          string
+	PprofPort             int
+	D2KPort               int
+
+	// Cluster networks (kubernetes.podCIDR, kubernetes.serviceCIDR,
+	// kubernetes.clusterDNS). KubernetesServiceIP is the first address of
+	// ServiceCIDR; ClusterDNS is the CoreDNS Service's cluster IP, resolved.
+	PodCIDR             string
+	ServiceCIDR         string
+	KubernetesServiceIP string
+	ClusterDNS          string
+
 	// Local Path Storage
 	LocalPathStorageDir string
 	LocalStorage        bool

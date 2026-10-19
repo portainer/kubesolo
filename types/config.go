@@ -42,6 +42,10 @@ type Config struct {
 type LoggingConfig struct {
 	Debug bool `json:"debug"`
 	Pprof bool `json:"pprof"`
+
+	// PprofPort is the port the pprof server listens on, on every interface,
+	// when Pprof is set.
+	PprofPort int `json:"pprofPort"`
 }
 
 // NetworkConfig covers node addressing and the embedded CNI bridge.
@@ -82,10 +86,8 @@ type RuntimeConfig struct {
 
 // KubernetesConfig groups the Kubernetes control plane components.
 //
-// These are grouped because the family grows: controller-manager, kube-proxy,
-// CoreDNS and the pod/service CIDRs are still fixed in const.go and are the
-// likeliest settings to become configurable next. Everything else in this
-// document is single-purpose and stays at the top level.
+// These are grouped because the family grows. Everything else in this document
+// is single-purpose and stays at the top level.
 type KubernetesConfig struct {
 	// NodeName is the name of the single node this control plane manages. Empty
 	// means the hostname.
@@ -95,8 +97,28 @@ type KubernetesConfig struct {
 	// this name — a mismatch leaves the whole cluster Pending.
 	NodeName string `json:"nodeName,omitempty"`
 
-	APIServer APIServerConfig `json:"apiServer"`
-	Kubelet   KubeletConfig   `json:"kubelet"`
+	// PodCIDR is the range pod IPs are allocated from: the CNI bridge's, the
+	// node's spec.podCIDR, kube-proxy's and the pod masquerade rule's. It cannot
+	// be changed on an existing install: the node's spec.podCIDR is immutable
+	// once allocated, and running pods keep their addresses.
+	PodCIDR string `json:"podCIDR"`
+
+	// ServiceCIDR is the range Service cluster IPs are allocated from. Its first
+	// address is the kubernetes Service's, which the API server certificate
+	// carries. It cannot be changed on an existing install: Services keep the
+	// cluster IPs they were given.
+	ServiceCIDR string `json:"serviceCIDR"`
+
+	// ClusterDNS is the cluster IP of the CoreDNS Service, which the kubelet hands
+	// to every pod as its nameserver. Empty means the tenth address of
+	// ServiceCIDR. Like it, it cannot be changed on an existing install.
+	ClusterDNS string `json:"clusterDNS"`
+
+	APIServer         APIServerConfig         `json:"apiServer"`
+	ControllerManager ControllerManagerConfig `json:"controllerManager"`
+	Kubelet           KubeletConfig           `json:"kubelet"`
+	KubeProxy         KubeProxyConfig         `json:"kubeProxy"`
+	Webhook           WebhookConfig           `json:"webhook"`
 }
 
 // APIServerConfig covers the Kubernetes API server.
@@ -108,6 +130,17 @@ type APIServerConfig struct {
 	// StartupTimeoutSeconds bounds how long each component may take to pass its
 	// health check at startup. Raise it on slow storage such as SD cards.
 	StartupTimeoutSeconds int `json:"startupTimeoutSeconds"`
+
+	// Port is the API server's secure port, on every interface. The generated
+	// kubeconfigs point at it.
+	Port int `json:"port"`
+}
+
+// ControllerManagerConfig covers the Kubernetes controller manager.
+type ControllerManagerConfig struct {
+	// Port is the controller manager's secure (health and metrics) port, on
+	// every interface.
+	Port int `json:"port"`
 }
 
 // KubeletConfig covers the node agent's resource management.
@@ -117,15 +150,43 @@ type KubeletConfig struct {
 	// SystemReserved is withheld from node allocatable for the host, keyed by
 	// resource name, e.g. {"cpu": "1", "memory": "500Mi"}.
 	SystemReserved map[string]string `json:"systemReserved,omitempty"`
+
+	// Port is the kubelet API's port, on every interface: the API server reaches
+	// it for logs, exec and port-forward.
+	Port int `json:"port"`
+
+	// HealthzPort is the kubelet's health endpoint, on loopback.
+	HealthzPort int `json:"healthzPort"`
+}
+
+// KubeProxyConfig covers kube-proxy.
+type KubeProxyConfig struct {
+	// HealthzPort is kube-proxy's health endpoint, on every interface.
+	HealthzPort int `json:"healthzPort"`
+}
+
+// WebhookConfig covers KubeSolo's admission webhook, which pins every pod to
+// the node (KubeSolo runs no scheduler) and publishes LoadBalancer IPs.
+type WebhookConfig struct {
+	// Port is the webhook's port, on loopback: only the API server calls it.
+	Port int `json:"port"`
 }
 
 // StorageConfig covers the local-path provisioner and the kine database.
 type StorageConfig struct {
 	LocalPath LocalPathConfig `json:"localPath"`
+	Kine      KineConfig      `json:"kine"`
 
 	// DBWALRepair runs an integrity check against the SQLite database at startup
 	// and clears WAL artefacts if it is corrupt. Recovers from power loss.
 	DBWALRepair bool `json:"dbWALRepair"`
+}
+
+// KineConfig covers kine, the etcd API in front of the SQLite database.
+type KineConfig struct {
+	// Port is the port kine serves the etcd API on, on loopback: only the API
+	// server talks to it.
+	Port int `json:"port"`
 }
 
 // LocalPathConfig covers the local-path storage provisioner.
@@ -159,6 +220,10 @@ type D2KConfig struct {
 	// Namespace is the single namespace d2k is deployed into and translates
 	// Docker API calls against.
 	Namespace string `json:"namespace"`
+
+	// Port is the port the d2k LoadBalancer Service publishes the Docker API on,
+	// at the LoadBalancer IP.
+	Port int `json:"port"`
 }
 
 // ConfigAPI covers the config API itself.

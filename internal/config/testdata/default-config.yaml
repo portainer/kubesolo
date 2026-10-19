@@ -5,17 +5,31 @@ apiVersion: kubesolo.io/v1alpha1
 d2k:
   enabled: false
   namespace: d2k
+  port: 2376
 kind: Config
 kubernetes:
   apiServer:
+    port: 6443
     startupTimeoutSeconds: 600
+  clusterDNS: ""
+  controllerManager:
+    port: 10257
+  kubeProxy:
+    healthzPort: 10256
   kubelet:
     cpuManager:
       policy: none
       reservedCPUs: ""
+    healthzPort: 10248
+    port: 10250
+  podCIDR: 10.42.0.0/16
+  serviceCIDR: 10.43.0.0/16
+  webhook:
+    port: 10443
 logging:
   debug: false
   pprof: false
+  pprofPort: 6060
 metrics:
   bindAddress: 127.0.0.1:9105
   enabled: false
@@ -36,6 +50,8 @@ runtime:
   endpoint: ""
 storage:
   dbWALRepair: false
+  kine:
+    port: 2379
   localPath:
     enabled: true
     sharedPath: ""

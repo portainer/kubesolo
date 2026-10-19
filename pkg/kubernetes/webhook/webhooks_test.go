@@ -17,7 +17,7 @@ const testNodeName = "argos"
 func mutate(t *testing.T, kind string, raw string) []byte {
 	t.Helper()
 
-	w := NewService(testNodeName, "", "", "", false)
+	w := NewService(testNodeName, "", "", "", false, 10443)
 	review := &admissionv1.AdmissionReview{Request: &admissionv1.AdmissionRequest{Object: runtime.RawExtension{Raw: []byte(raw)}}}
 	review.Request.Kind.Kind = kind
 

@@ -31,6 +31,10 @@ type service struct {
 	disableIPv6           bool
 	cpuManager            types.CPUManagerConfig
 	systemReserved        map[string]string
+	clusterDNS            string
+	port                  int
+	healthzPort           int
+	apiServerPort         int
 }
 
 // NewService creates a new kubelet service.
@@ -62,5 +66,9 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		disableIPv6:           embedded.DisableIPv6,
 		cpuManager:            embedded.CPUManager,
 		systemReserved:        embedded.SystemReserved,
+		clusterDNS:            embedded.ClusterDNS,
+		port:                  embedded.KubeletPort,
+		healthzPort:           embedded.KubeletHealthzPort,
+		apiServerPort:         embedded.APIServerPort,
 	}
 }

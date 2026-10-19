@@ -21,9 +21,10 @@ func hasIP(ips []net.IP, want string) bool {
 func TestDefaultCertOptions_APIServerSANs(t *testing.T) {
 	t.Run("pinned node IP scopes SANs to that IP plus service IP and localhost", func(t *testing.T) {
 		e := types.Embedded{
-			NodeIP:             "10.130.0.5",
-			NodeIPSpecified:    true,
-			APIServerExtraSANs: []string{"1.2.3.4", "kubesolo.local"},
+			NodeIP:              "10.130.0.5",
+			NodeIPSpecified:     true,
+			APIServerExtraSANs:  []string{"1.2.3.4", "kubesolo.local"},
+			KubernetesServiceIP: types.DefaultKubernetesServiceIP,
 		}
 		opts := defaultCertOptions(APIServerCert, e)
 

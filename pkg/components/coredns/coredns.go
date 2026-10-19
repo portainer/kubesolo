@@ -24,8 +24,9 @@ const (
 // PodSelector selects the CoreDNS pods KubeSolo deploys, in kube-system.
 const PodSelector = "k8s-app=coredns"
 
-// Deploy deploys all the necessary Kubernetes resources for CoreDNS
-func Deploy(adminKubeconfig string, containerMode bool, disableIPv6 bool) error {
+// Deploy deploys all the necessary Kubernetes resources for CoreDNS, its Service
+// at clusterDNS (kubernetes.clusterDNS, resolved)
+func Deploy(adminKubeconfig string, containerMode bool, disableIPv6 bool, clusterDNS string) error {
 	time.Sleep(types.DefaultComponentSleep)
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.DefaultContextTimeout)
@@ -52,7 +53,7 @@ func Deploy(adminKubeconfig string, containerMode bool, disableIPv6 bool) error 
 		return fmt.Errorf("failed to create CoreDNS ClusterRoleBinding: %v", err)
 	}
 
-	if err := createService(ctx, clientset); err != nil {
+	if err := createService(ctx, clientset, clusterDNS); err != nil {
 		return fmt.Errorf("failed to create CoreDNS Service: %v", err)
 	}
 

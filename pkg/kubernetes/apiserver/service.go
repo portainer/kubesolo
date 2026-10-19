@@ -28,6 +28,9 @@ type service struct {
 	requestHeaderCAFile     string
 	requestHeaderClientCert string
 	requestHeaderClientKey  string
+	port                    int
+	serviceCIDR             string
+	kineEndpoint            string
 	kubeSoloWebhook         *webhook.Service
 }
 
@@ -51,6 +54,9 @@ func NewService(ctx context.Context, cancel context.CancelFunc, apiServerReady c
 		requestHeaderCAFile:     embedded.RequestHeaderCerts.CACert,
 		requestHeaderClientCert: embedded.RequestHeaderCerts.ClientCert,
 		requestHeaderClientKey:  embedded.RequestHeaderCerts.ClientKey,
-		kubeSoloWebhook:         webhook.NewService(nodeName, embedded.LoadBalancerIP, embedded.PKIDir, embedded.AdminKubeconfigFile, embedded.LoadBalancer),
+		port:                    embedded.APIServerPort,
+		serviceCIDR:             embedded.ServiceCIDR,
+		kineEndpoint:            embedded.KineEndpoint,
+		kubeSoloWebhook:         webhook.NewService(nodeName, embedded.LoadBalancerIP, embedded.PKIDir, embedded.AdminKubeconfigFile, embedded.LoadBalancer, embedded.WebhookPort),
 	}
 }

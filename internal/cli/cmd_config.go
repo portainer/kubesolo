@@ -359,8 +359,7 @@ func configSetCmd(path *string) *cobra.Command {
 			}
 
 			if field.Mutability == kubesoloconfig.MutabilityImmutable {
-				p.Warn(fmt.Sprintf(
-					"%s cannot be changed on an install that already has state: every certificate, the database and all container state live below it, and none of them move", name))
+				p.Warn(fmt.Sprintf("%s cannot be changed on an install that already has state: %s", name, field.Unchangeable))
 			}
 
 			if err := kubesoloconfig.Write(*path, cfg); err != nil {

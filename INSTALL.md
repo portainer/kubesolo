@@ -309,7 +309,7 @@ ls -la /var/lib/kubesolo
 
 Before installing, both installers check that pods will be able to reach the API server on the node IP and reach each other. A host firewall that rejects this traffic, such as the default `iptables-services` rules on RHEL, stops the install with `pods cannot reach the API server` or `pods cannot reach each other`. Left in place, it would keep CoreDNS from ever becoming ready (`dial tcp 10.43.0.1:443: connect: no route to host`).
 
-Allow the pod network `10.42.0.0/16` to this host and through forwarding, make the rules persistent, then run the installer again:
+Allow the pod network `10.42.0.0/16` (or the `kubernetes.podCIDR` you set in the [config file](docs/configuration/config-file.md)) to this host and through forwarding, make the rules persistent, then run the installer again:
 
 ```bash
 # firewalld

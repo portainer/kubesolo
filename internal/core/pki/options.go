@@ -74,7 +74,8 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 			"kubernetes.default.svc.cluster.local",
 			"localhost",
 		}
-		opts.IPAddresses = []net.IP{net.ParseIP(types.DefaultKubernetesServiceIP)}
+		// The kubernetes Service's cluster IP: the first address of the service CIDR.
+		opts.IPAddresses = []net.IP{net.ParseIP(embedded.KubernetesServiceIP)}
 		if embedded.NodeIPSpecified {
 			// When the node IP was pinned via --node-ip, scope the serving cert
 			// to that IP (plus localhost) so it does not vouch for unrelated NICs

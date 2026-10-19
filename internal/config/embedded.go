@@ -8,7 +8,9 @@
 package config
 
 import (
+	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/portainer/kubesolo/internal/runtime/cri"
@@ -56,6 +58,12 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 	if nodeName == "" {
 		nodeName = probe.Hostname
 	}
+
+	// The addresses derived from the service CIDR. Validate has accepted it by
+	// now, so these do not fail; were they to, the fields stay empty rather than
+	// this function growing an error path for a case that cannot happen.
+	kubernetesServiceIP, _ := KubernetesServiceIP(cfg.Kubernetes.ServiceCIDR)
+	clusterDNS, _ := ClusterDNS(cfg)
 
 	return types.Embedded{
 		NodeName: nodeName,
@@ -185,6 +193,24 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		// Load Balancer
 		LoadBalancer:   cfg.Network.LoadBalancer.Enabled,
 		LoadBalancerIP: probe.LoadBalancerIP,
+
+		// Ports
+		APIServerPort:         cfg.Kubernetes.APIServer.Port,
+		ControllerManagerPort: cfg.Kubernetes.ControllerManager.Port,
+		KubeletPort:           cfg.Kubernetes.Kubelet.Port,
+		KubeletHealthzPort:    cfg.Kubernetes.Kubelet.HealthzPort,
+		KubeProxyHealthzPort:  cfg.Kubernetes.KubeProxy.HealthzPort,
+		WebhookPort:           cfg.Kubernetes.Webhook.Port,
+		KinePort:              cfg.Storage.Kine.Port,
+		KineEndpoint:          net.JoinHostPort("127.0.0.1", strconv.Itoa(cfg.Storage.Kine.Port)),
+		PprofPort:             cfg.Logging.PprofPort,
+		D2KPort:               cfg.D2K.Port,
+
+		// Cluster networks
+		PodCIDR:             cfg.Kubernetes.PodCIDR,
+		ServiceCIDR:         cfg.Kubernetes.ServiceCIDR,
+		KubernetesServiceIP: kubernetesServiceIP,
+		ClusterDNS:          clusterDNS,
 
 		// Local Path Storage
 		LocalPathStorageDir: filepath.Join(cfg.Path, types.DefaultLocalPathStorageDir),

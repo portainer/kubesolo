@@ -19,6 +19,10 @@ type service struct {
 	caFile                    string
 	adminKubeconfigFile       string
 	serviceAccountKeyFile     string
+	port                      int
+	apiServerPort             int
+	podCIDR                   string
+	serviceCIDR               string
 }
 
 // NewService creates a new controller service
@@ -33,5 +37,9 @@ func NewService(ctx context.Context, cancel context.CancelFunc, controllerReady 
 		caFile:                    embedded.CACerts.Cert,
 		adminKubeconfigFile:       embedded.AdminKubeconfigFile,
 		serviceAccountKeyFile:     embedded.ServiceAccountKeyFile,
+		port:                      embedded.ControllerManagerPort,
+		apiServerPort:             embedded.APIServerPort,
+		podCIDR:                   embedded.PodCIDR,
+		serviceCIDR:               embedded.ServiceCIDR,
 	}
 }
