@@ -51,7 +51,7 @@ func TestCreateDeployment_Idempotent(t *testing.T) {
 
 func TestCreateService(t *testing.T) {
 	cs := fake.NewSimpleClientset()
-	require.NoError(t, createService(context.Background(), cs))
+	require.NoError(t, createService(context.Background(), cs, types.DefaultCoreDNSIP))
 
 	svc, err := cs.CoreV1().Services(coreDNSNamespace).Get(context.Background(), coreDNSServiceName, metav1.GetOptions{})
 	require.NoError(t, err)

@@ -14,12 +14,15 @@ import (
 	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/runtime/filesystem"
+	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
 
-// KubeSoloPorts are the TCP ports KubeSolo opens; processes holding any of
-// these are candidates for termination if they are a KubeSolo process.
+// KubeSoloPorts are the TCP ports KubeSolo opens by default; processes holding
+// any of these, or the ones the installed configuration moved them to, are
+// candidates for termination if they are a KubeSolo process.
 var KubeSoloPorts = []int{2379, 6443, 10443, 6060}
 
 // systemContainerdSocket is the standard containerd socket path. KubeSolo symlinks
@@ -199,6 +202,10 @@ func findKubeSoloPIDs() []int {
 func findPortOwners() []int {
 	targetPorts := make(map[int]bool, len(KubeSoloPorts))
 	for _, p := range KubeSoloPorts {
+		targetPorts[p] = true
+	}
+	cfg := kubesoloconfig.Installed(types.DefaultConfigFile)
+	for _, p := range []int{cfg.Storage.Kine.Port, cfg.Kubernetes.APIServer.Port, cfg.Kubernetes.Webhook.Port, cfg.Logging.PprofPort} {
 		targetPorts[p] = true
 	}
 

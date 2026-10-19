@@ -38,6 +38,9 @@ func TestGenerateKubeletConfig_Common(t *testing.T) {
 		keyFile:         "/pki/kubelet.key",
 		kubeletDir:      t.TempDir(),
 		containerMode:   true, // avoids reading the host /etc/resolv.conf
+		clusterDNS:      types.DefaultCoreDNSIP,
+		port:            types.DefaultKubeletPort,
+		healthzPort:     types.DefaultKubeletHealthzPort,
 	}
 	cfg := s.generateKubeletConfig()
 
@@ -46,6 +49,8 @@ func TestGenerateKubeletConfig_Common(t *testing.T) {
 	assert.Equal(t, "unix:///run/kubesolo/containerd.sock", cfg["containerRuntimeEndpoint"])
 	assert.Equal(t, "cluster.local", cfg["clusterDomain"])
 	assert.Equal(t, []string{types.DefaultCoreDNSIP}, cfg["clusterDNS"])
+	assert.Equal(t, types.DefaultKubeletPort, cfg["port"])
+	assert.Equal(t, types.DefaultKubeletHealthzPort, cfg["healthzPort"])
 	assert.Equal(t, 0, cfg["readOnlyPort"])
 	assert.Equal(t, false, cfg["failSwapOn"])
 	assert.Equal(t, true, cfg["rotateCertificates"])

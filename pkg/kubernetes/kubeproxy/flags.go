@@ -1,9 +1,11 @@
 package kubeproxy
 
 import (
+	"net"
+	"strconv"
+
 	"github.com/portainer/kubesolo/internal/logging"
 	"github.com/portainer/kubesolo/internal/runtime/network"
-	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +28,8 @@ func (s *service) configureKubeProxyFlags(command *cobra.Command) {
 
 	// networking settings
 	_ = flags.Set("kubeconfig", s.adminKubeconfigFile)
-	_ = flags.Set("cluster-cidr", types.DefaultPodCIDR)
+	_ = flags.Set("cluster-cidr", s.podCIDR)
+	_ = flags.Set("healthz-bind-address", net.JoinHostPort("0.0.0.0", strconv.Itoa(s.healthzPort)))
 	_ = flags.Set("metrics-bind-address", "")
 
 	// performance settings

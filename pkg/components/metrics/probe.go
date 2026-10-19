@@ -7,11 +7,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	kubesolokubernetes "github.com/portainer/kubesolo/internal/kubernetes"
-	"github.com/portainer/kubesolo/types"
+	"github.com/portainer/kubesolo/internal/runtime/network"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -52,11 +53,11 @@ func (s *Service) buildProbers() map[string]prober {
 
 	return map[string]prober{
 		ComponentRuntime:    probeFileExists(s.embedded.RuntimeSocketPath),
-		ComponentKine:       probeTCP(types.DefaultKineEndpoint),
-		ComponentAPIServer:  probeHTTP(tlsClient, "https://127.0.0.1:6443/livez"),
-		ComponentController: probeHTTP(tlsClient, "https://127.0.0.1:10257/healthz"),
-		ComponentKubelet:    probeHTTP(httpClient, "http://127.0.0.1:10248/healthz"),
-		ComponentWebhook:    probeTCP(fmt.Sprintf("127.0.0.1:%d", types.DefaultWebhookPort)),
+		ComponentKine:       probeTCP(s.embedded.KineEndpoint),
+		ComponentAPIServer:  probeHTTP(tlsClient, network.LoopbackURL("https", s.embedded.APIServerPort, "/livez")),
+		ComponentController: probeHTTP(tlsClient, network.LoopbackURL("https", s.embedded.ControllerManagerPort, "/healthz")),
+		ComponentKubelet:    probeHTTP(httpClient, network.LoopbackURL("http", s.embedded.KubeletHealthzPort, "/healthz")),
+		ComponentWebhook:    probeTCP(net.JoinHostPort("127.0.0.1", strconv.Itoa(s.embedded.WebhookPort))),
 		ComponentCoreDNS:    probeCoreDNS(clientCache),
 	}
 }

@@ -1,8 +1,9 @@
 package apiserver
 
 import (
+	"strconv"
+
 	"github.com/portainer/kubesolo/internal/logging"
-	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
 )
 
@@ -12,10 +13,11 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	// networking settings
 	_ = flags.Set("insecure-port", "0")
 	_ = flags.Set("advertise-address", s.nodeIP)
-	_ = flags.Set("service-cluster-ip-range", types.DefaultServiceClusterIPRange)
+	_ = flags.Set("secure-port", strconv.Itoa(s.port))
+	_ = flags.Set("service-cluster-ip-range", s.serviceCIDR)
 
 	// etcd configuration
-	_ = flags.Set("etcd-servers", types.DefaultKineEndpoint)
+	_ = flags.Set("etcd-servers", s.kineEndpoint)
 
 	// security and certificates
 	_ = flags.Set("cert-dir", s.pkiAPIServerDir)
