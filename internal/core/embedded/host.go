@@ -53,7 +53,7 @@ func ensureHostDependencies(embedded types.Embedded) error {
 			Msgf("removed the cni config symlink at %s left by a previous run with the embedded containerd", cniConfigFile)
 	}
 
-	if err := writeCNIConfigFile(cniConfigFile, embedded.MTU); err != nil {
+	if err := writeCNIConfigFile(cniConfigFile, embedded.MTU, embedded.PodCIDR); err != nil {
 		return fmt.Errorf("%v (the directory has to be writable, so on a read-only rootfs it must be mounted read-write)", err)
 	}
 

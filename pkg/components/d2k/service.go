@@ -11,11 +11,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// createService reconciles the LoadBalancer Service exposing d2k on port 2376.
+// createService reconciles the LoadBalancer Service exposing d2k on port (2376
+// by default; d2k.port), in front of d2k's own 2376 in its pod.
 // The kubesolo webhook (when --load-balancer is enabled, which is the default)
 // observes the Service and patches its Status.LoadBalancer.Ingress with the
 // node IP, which the endpoint persister then surfaces to operators.
-func createService(ctx context.Context, clientset kubernetes.Interface, namespace string) error {
+func createService(ctx context.Context, clientset kubernetes.Interface, namespace string, port int) error {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName,
@@ -31,7 +32,7 @@ func createService(ctx context.Context, clientset kubernetes.Interface, namespac
 				{
 					Name:       "docker-api",
 					Protocol:   corev1.ProtocolTCP,
-					Port:       types.DefaultD2KPort,
+					Port:       int32(port),
 					TargetPort: intstr.FromInt32(types.DefaultD2KPort),
 				},
 			},

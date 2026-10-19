@@ -169,9 +169,10 @@ func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
 	s.mutate(w, r, func(current *types.Config, _ []byte) (*types.Config, error) {
 		next := config.Defaults()
 
-		// Path is immutable, so a reset cannot move it. Carrying it over keeps
-		// the reset from being rejected by its own immutability check.
-		next.Path = current.Path
+		// The immutable settings (path, the cluster networks) cannot be reset.
+		// Carrying them over keeps the reset from being rejected by its own
+		// immutability check.
+		config.KeepImmutable(next, current)
 		return next, nil
 	})
 }
@@ -266,9 +267,13 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 	}
 
 	if field, ok := immutableChange(current, next); ok {
+		why := "it cannot be moved"
+		if f, found := config.FieldByPath(field); found && f.Unchangeable != "" {
+			why = f.Unchangeable
+		}
 		writeErrorFor(w, r, http.StatusConflict, ErrorResponse{
 			Field: field,
-			Error: fmt.Sprintf("%s cannot be changed on an existing installation: every certificate, the database and all container state live below it, and none of them move", field),
+			Error: fmt.Sprintf("%s cannot be changed on an existing installation: %s", field, why),
 		})
 		return
 	}

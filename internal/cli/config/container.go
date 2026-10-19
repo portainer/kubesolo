@@ -33,6 +33,9 @@ const ContainerConfigFile = types.DefaultConfigFile
 //     which KubeSolo does not control.
 //   - api.*: the API serves upgrades, which a container cannot do to itself, and
 //     its socket is not reachable from the host.
+//   - kubernetes.apiServer.port, d2k.port: kubesoloctl publishes the container's
+//     6443 and 2376 on host ports of its own choosing, so it leaves them out of
+//     a container's configuration.
 var ContainerIgnored = []string{
 	"path",
 	"network.nodeIP",
@@ -46,6 +49,8 @@ var ContainerIgnored = []string{
 	"kubernetes.kubelet.cpuManager.reservedCPUs",
 	"api.enabled",
 	"api.socketPath",
+	"kubernetes.apiServer.port",
+	"d2k.port",
 }
 
 // Flags returns the installer's settings as KubeSolo flags.
