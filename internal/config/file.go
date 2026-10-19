@@ -45,6 +45,12 @@ func Read(path string, cfg *types.Config) (found bool, warnings []Warning, err e
 	return true, warnings, err
 }
 
+// Parse applies a configuration document onto cfg, as Read does a file: keys it
+// does not mention are left at what cfg holds.
+func Parse(raw []byte, cfg *types.Config) ([]Warning, error) {
+	return unmarshal(raw, "the configuration document", cfg)
+}
+
 // unmarshal applies raw onto cfg, reporting unknown keys as warnings rather
 // than errors so a config written by a newer KubeSolo still boots on an older
 // binary. Malformed YAML and wrongly typed values remain errors.
