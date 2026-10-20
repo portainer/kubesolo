@@ -79,6 +79,11 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 		"Image deployed for the Portainer edge agent, including the tag\n"+
 			"(default: docker.io/portainer/agent:lts). Any other image is pulled from the registry")
 
+	f.BoolVar(&cfg.APIEnabled, "api-enabled",
+		envBool("KUBESOLO_API_ENABLED", false),
+		"Enable the KubeSolo API, and give the Portainer edge agent its socket when an edge ID and key are set.\n"+
+			"Requires KubeSolo v1.2.1 or newer; ignored in container mode")
+
 	f.BoolVar(&cfg.LocalStorage, "local-storage",
 		envBool("KUBESOLO_LOCAL_STORAGE", false),
 		"Enable the local-path storage provisioner")
@@ -449,6 +454,10 @@ func containerSettings(cfg *config.Config) (args []string, doc []byte, dropped [
 		return nil, nil, nil, nil, fmt.Errorf("--offline-install is not supported in container mode: KubeSolo runs from the container image; to install offline, load the image into the engine (docker load) and pass it with --image")
 	}
 	resolved, kept, dropped, warnings, err := config.ContainerConfig(cfg.Flags())
+	// Not among the flags ContainerConfig drops, as KubeSolo has no flag for it.
+	if cfg.APIEnabled {
+		dropped = append(dropped, "--api-enabled")
+	}
 	if err != nil {
 		return nil, nil, dropped, warnings, err
 	}
@@ -496,6 +505,10 @@ func configDocument(p *ui.Printer, cfg *config.Config, containerMode, quiet bool
 		return nil, nil
 	}
 	if cmp, ok := compareVersions(cfg.Version, config.MinConfigFileVersion); ok && cmp < 0 {
+		if cfg.APIEnabled {
+			return nil, fmt.Errorf("--api-enabled requires kubesolo %s or newer; %s has no API — re-run with --version=%s (or later)",
+				config.MinConfigFileVersion, cfg.Version, config.MinConfigFileVersion)
+		}
 		log.Info().Msgf("kubesolo %s predates the configuration file; installing with flags instead", cfg.Version)
 		return nil, nil
 	}

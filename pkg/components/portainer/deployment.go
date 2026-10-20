@@ -225,7 +225,9 @@ func addAPISocket(spec *corev1.PodSpec, dir string) {
 			continue
 		}
 		c := &spec.Containers[i]
-		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: APISocketVolume, MountPath: dir})
+		// Read-only still lets the agent connect to the socket; it stops the
+		// agent leaving files on the host.
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: APISocketVolume, MountPath: dir, ReadOnly: true})
 		c.Env = append(c.Env, corev1.EnvVar{Name: APISocketEnv, Value: filepath.Join(dir, AgentSocketName)})
 	}
 }

@@ -40,9 +40,10 @@ Practically, that means anything able to open the socket can change KubeSolo's
 configuration. Reaching it from another machine means going through something
 that already has an authenticated channel — the Portainer Edge Agent, or SSH.
 
-> The Edge Agent cannot reach the socket today: its deployment declares no
-> hostPath volumes. Remote configuration through Portainer needs that mount
-> added first.
+> When the API is enabled and a Portainer edge ID and key are set, KubeSolo
+> serves the same API on a second socket, `<path>/agent-api/kubesolo.sock`,
+> mounts that directory into the Edge Agent's pod, and sets
+> `KUBESOLO_API_SOCKET` to the socket's path.
 
 ---
 

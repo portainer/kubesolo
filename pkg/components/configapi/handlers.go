@@ -114,6 +114,10 @@ func (s *Service) handleSchema(w http.ResponseWriter, _ *http.Request) {
 
 // handlePut replaces the configuration wholesale.
 func (s *Service) handlePut(w http.ResponseWriter, r *http.Request) {
+	if fromAgentSocket(r) {
+		writeErrorFor(w, r, http.StatusForbidden, ErrorResponse{Error: "PUT is not accepted on the Portainer agent's socket; use PATCH"})
+		return
+	}
 	s.mutate(w, r, func(current *types.Config, body []byte) (*types.Config, error) {
 		// Replacement starts from the defaults, not from the current document:
 		// a setting the caller omitted is being removed, not left alone. That is
@@ -271,6 +275,20 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 			Error: fmt.Sprintf("%s cannot be changed on an existing installation: every certificate, the database and all container state live below it, and none of them move", field),
 		})
 		return
+	}
+
+	// portainer.image swaps the image of a cluster-admin pod, and the rest of
+	// portainer.* and api.* can cut the agent off from KubeSolo or Portainer.
+	if fromAgentSocket(r) {
+		for _, field := range changedSettings(current, next) {
+			if strings.HasPrefix(field, "portainer.") || strings.HasPrefix(field, "api.") {
+				writeErrorFor(w, r, http.StatusForbidden, ErrorResponse{
+					Field: field,
+					Error: field + " cannot be changed on the Portainer agent's socket; change it with kubesoloctl config set on the host",
+				})
+				return
+			}
+		}
 	}
 
 	warnings, err := config.Validate(next, s.opts.Host)

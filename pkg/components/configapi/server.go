@@ -37,7 +37,7 @@ func (s *Service) Run() error {
 		Str("socket", s.opts.SocketPath).
 		Msg("starting kubesolo configuration API...")
 
-	srv, err := s.startServer(s.opts.SocketPath)
+	srv, err := s.startServer(s.opts.SocketPath, false)
 	if err != nil {
 		log.Error().Str("component", "configapi").Err(err).Msg("failed to start configuration API")
 		return err
@@ -49,7 +49,7 @@ func (s *Service) Run() error {
 	// access, not KubeSolo its API.
 	var agentSrv *http.Server
 	if s.opts.AgentSocketPath != "" {
-		if agentSrv, err = s.startServer(s.opts.AgentSocketPath); err != nil {
+		if agentSrv, err = s.startServer(s.opts.AgentSocketPath, true); err != nil {
 			log.Error().Str("component", "configapi").Err(err).Msg("failed to open the API socket for the Portainer agent")
 		} else {
 			log.Info().Str("component", "configapi").Str("socket", s.opts.AgentSocketPath).Msg("API socket for the Portainer agent is ready")
@@ -85,11 +85,20 @@ func (s *Service) Run() error {
 	return nil
 }
 
-// startServer binds the socket and begins serving.
+// agentSocketKey marks a request that arrived on the Portainer agent's socket.
+type agentSocketKey struct{}
+
+func fromAgentSocket(r *http.Request) bool {
+	agent, _ := r.Context().Value(agentSocketKey{}).(bool)
+	return agent
+}
+
+// startServer binds the socket and begins serving. agent marks it as the
+// Portainer agent's socket.
 //
 // The listener is created synchronously so that a bind failure reaches the
 // caller rather than being swallowed inside a goroutine.
-func (s *Service) startServer(socketPath string) (*http.Server, error) {
+func (s *Service) startServer(socketPath string, agent bool) (*http.Server, error) {
 	if err := clearStaleSocket(socketPath); err != nil {
 		return nil, err
 	}
@@ -118,6 +127,11 @@ func (s *Service) startServer(socketPath string) (*http.Server, error) {
 		ReadTimeout:  httpReadTimeout,
 		WriteTimeout: httpWriteTimeout,
 		IdleTimeout:  httpIdleTimeout,
+	}
+	if agent {
+		srv.BaseContext = func(net.Listener) context.Context {
+			return context.WithValue(context.Background(), agentSocketKey{}, true)
+		}
 	}
 
 	s.wg.Go(func() {

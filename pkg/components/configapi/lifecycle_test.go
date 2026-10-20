@@ -21,6 +21,7 @@ import (
 // spawns are recorded instead of run.
 type lifecycleAPI struct {
 	client *http.Client
+	agent  *http.Client
 	layout upgrade.Layout
 	lc     *Lifecycle
 
@@ -71,13 +72,14 @@ func newLifecycleAPI(t *testing.T, running string, seed func(*types.Config), twe
 	}
 	a.layout = upgrade.NewLayout(a.lc.DataDir, configPath)
 
-	socket := filepath.Join(dir, "c.sock")
+	socket, agentSocket := filepath.Join(dir, "c.sock"), filepath.Join(dir, "agent", "k.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := NewService(ctx, cancel, make(chan struct{}), Options{
-		SocketPath: socket,
-		ConfigPath: configPath,
-		Host:       config.Host{NumCPU: 4, GOARCH: "amd64"},
-		Lifecycle:  a.lc,
+		SocketPath:      socket,
+		AgentSocketPath: agentSocket,
+		ConfigPath:      configPath,
+		Host:            config.Host{NumCPU: 4, GOARCH: "amd64"},
+		Lifecycle:       a.lc,
 	})
 	done := make(chan error, 1)
 	go func() { done <- svc.Run() }()
@@ -85,6 +87,7 @@ func newLifecycleAPI(t *testing.T, running string, seed func(*types.Config), twe
 	t.Cleanup(func() { cancel(); <-done })
 
 	a.client = unixClient(socket)
+	a.agent = unixClient(agentSocket)
 	return a
 }
 
@@ -221,6 +224,84 @@ func TestUpgradeRequestValidation(t *testing.T) {
 	resp, raw := do(t, a.client, "POST", "/api/v1/upgrade", upgrade.Request{Version: "v1.2.0", Force: true, Source: existing}, nil)
 	if resp.StatusCode != http.StatusAccepted {
 		t.Errorf("forced downgrade: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// The agent's socket installs newer published releases only: a source would
+// let it run any binary as root, and force an older release.
+func TestAgentSocketUpgradesToReleasesOnly(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.1", nil, nil)
+	existing := filepath.Join(shortTempDir(t), "kubesolo.tar.gz")
+	if err := os.WriteFile(existing, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		name string
+		req  upgrade.Request
+		want string
+	}{
+		{"source", upgrade.Request{Version: "v1.2.2", Source: existing, SHA256: strings.Repeat("a", 64)}, "source"},
+		{"force", upgrade.Request{Version: "v1.2.0", Force: true}, "force"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			resp, raw := do(t, a.agent, "POST", "/api/v1/upgrade", c.req, nil)
+			if resp.StatusCode != http.StatusForbidden || !strings.HasPrefix(errorOf(t, raw), c.want+" is not accepted") {
+				t.Errorf("status = %d, body %s; want 403 refusing %s", resp.StatusCode, raw, c.want)
+			}
+		})
+	}
+	if len(a.spawned()) != 0 {
+		t.Fatal("a refused request started the executor")
+	}
+
+	resp, raw := do(t, a.agent, "POST", "/api/v1/upgrade", upgrade.Request{Version: "v1.2.2"}, nil)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Errorf("release upgrade over the agent's socket: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// The agent's socket cannot replace the configuration or change portainer.*
+// or api.*, however the request is written; other settings it can change.
+func TestAgentSocketConfigLimits(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", func(c *types.Config) {
+		c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key"
+		c.API.Enabled = true
+	}, nil)
+
+	for _, c := range []struct {
+		name, method string
+		body         any
+		want         string
+	}{
+		{"put", "PUT", `{}`, "PUT is not accepted"},
+		{"agent image", "PATCH", `{"portainer":{"image":"example.com/agent:evil"}}`, "portainer.image cannot be changed"},
+		{"edge key reset", "PATCH", `{"portainer":null}`, "portainer."},
+		{"api off", "PATCH", `{"api":{"enabled":false}}`, "api.enabled cannot be changed"},
+		{"reset everything", "DELETE", nil, "cannot be changed"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			resp, raw := do(t, a.agent, c.method, "/api/v1/config", c.body, nil)
+			if resp.StatusCode != http.StatusForbidden || !strings.Contains(errorOf(t, raw), c.want) {
+				t.Errorf("status = %d, body %s; want 403 containing %q", resp.StatusCode, raw, c.want)
+			}
+		})
+	}
+
+	if resp, raw := do(t, a.agent, "PATCH", "/api/v1/config", `{"logging":{"debug":true}}`, nil); resp.StatusCode != http.StatusOK {
+		t.Errorf("agent PATCH of logging.debug: %d %s", resp.StatusCode, raw)
+	}
+	if resp, raw := do(t, a.client, "PATCH", "/api/v1/config", `{"portainer":{"image":"example.com/agent:1"}}`, nil); resp.StatusCode != http.StatusOK {
+		t.Errorf("host PATCH of portainer.image: %d %s", resp.StatusCode, raw)
+	}
+
+	_, raw := do(t, a.client, "GET", "/api/v1/config", nil, nil)
+	var saved Response
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if c := saved.Config; c.Portainer.EdgeID != "edge-id" || !c.API.Enabled || !c.Logging.Debug {
+		t.Errorf("saved configuration: edgeID %q, api.enabled %v, logging.debug %v", c.Portainer.EdgeID, c.API.Enabled, c.Logging.Debug)
 	}
 }
 

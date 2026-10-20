@@ -5,6 +5,10 @@ import (
 	"testing"
 
 	"github.com/portainer/kubesolo/internal/cli/config"
+	"github.com/portainer/kubesolo/internal/cli/ui"
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
+	"github.com/portainer/kubesolo/types"
+	"sigs.k8s.io/yaml"
 )
 
 func containerConfig() config.Config {
@@ -27,6 +31,7 @@ func TestContainerSettings(t *testing.T) {
 		{name: "defaults", edit: func(*config.Config) {}},
 		{name: "valid settings", edit: func(c *config.Config) { c.D2K = true; c.D2KNamespace = "d2k"; c.Debug = true }},
 		{name: "irrelevant settings are dropped", edit: func(c *config.Config) { c.Path = "/data/ks"; c.MTU = "1400"; c.CPUManagerPolicy = "static" }, wantDropped: "--path --mtu --cpu-manager-policy"},
+		{name: "api is dropped", edit: func(c *config.Config) { c.APIEnabled = true }, wantDropped: "--api-enabled"},
 		{name: "offline install", edit: func(c *config.Config) { c.OfflineInstall = "/tmp/kubesolo.tar.gz" }, wantErr: "--offline-install"},
 		{name: "invalid system reserved", edit: func(c *config.Config) { c.SystemReserved = "bogus" }, wantErr: "bogus"},
 		{name: "release before the configuration file", edit: func(c *config.Config) { c.Version = "v1.2.0"; c.MTU = "1400" }, wantDropped: "--mtu", wantFlags: true},
@@ -60,6 +65,56 @@ func TestContainerSettings(t *testing.T) {
 			}
 			if strings.Contains(string(doc), "mtu: 1400") {
 				t.Errorf("an ignored setting reached the file:\n%s", doc)
+			}
+		})
+	}
+}
+
+// TestInstallAPIEnabled checks that the API setting, given as a flag or in the
+// environment, reaches the configuration file install writes.
+func TestInstallAPIEnabled(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     string
+		args    []string
+		want    bool
+		wantErr string
+	}{
+		{name: "off by default", want: false},
+		{name: "flag", args: []string{"--api-enabled"}, want: true},
+		{name: "environment", env: "true", want: true},
+		{name: "flag overrides environment", env: "true", args: []string{"--api-enabled=false"}, want: false},
+		{name: "release before the configuration file", args: []string{"--api-enabled", "--version=v1.2.0"}, wantErr: "--api-enabled requires kubesolo v1.2.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.env != "" {
+				t.Setenv("KUBESOLO_API_ENABLED", tc.env)
+			}
+			var cfg config.Config
+			if err := installCmd(&cfg).ParseFlags(tc.args); err != nil {
+				t.Fatal(err)
+			}
+			doc, err := configDocument(ui.New(), &cfg, false, true)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want one mentioning %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := kubesoloconfig.Marshal(doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var file types.Config
+			if err := yaml.Unmarshal(raw, &file); err != nil {
+				t.Fatal(err)
+			}
+			if file.API.Enabled != tc.want {
+				t.Errorf("api.enabled = %v, want %v in:\n%s", file.API.Enabled, tc.want, raw)
 			}
 		})
 	}
