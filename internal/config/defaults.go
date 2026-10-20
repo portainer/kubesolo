@@ -71,7 +71,8 @@ func Defaults() *types.Config {
 		},
 
 		GPU: types.GPUConfig{
-			Vendor: "", // no GPU support
+			Vendor:  "", // no GPU support
+			Sharing: types.GPUSharing{Replicas: 0},
 		},
 
 		Metrics: types.MetricsConfig{

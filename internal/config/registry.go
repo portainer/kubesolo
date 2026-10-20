@@ -294,6 +294,12 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { c.GPU.Vendor = v; return nil },
 		},
 		{
+			ConfigPath: "gpu.sharing.replicas",
+			Envar:      "KUBESOLO_GPU_SHARING_REPLICAS",
+			Get:        func(c *types.Config) any { return c.GPU.Sharing.Replicas },
+			Set:        func(c *types.Config, v string) error { return setInt(&c.GPU.Sharing.Replicas, v) },
+		},
+		{
 			ConfigPath: "metrics.enabled",
 			Flag:       "metrics-server",
 			Envar:      "KUBESOLO_METRICS_SERVER",

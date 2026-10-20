@@ -206,6 +206,8 @@ d2k:
 
 gpu:
   vendor: ""              # "" = no GPU support; nvidia or amd
+  sharing:
+    replicas: 0           # pods sharing each NVIDIA GPU, by time-slicing; 0 = no sharing
 ```
 
 Only `kubernetes:` groups its contents, because that family grows —
@@ -223,6 +225,7 @@ and stays at the top level.
 | `api.socketPath` | `string` | `""` |
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |
+| `gpu.sharing.replicas` | `integer` | `0` |
 | `gpu.vendor` | `string` | `""` |
 | `kubernetes.apiServer.extraSANs` | `array` | `[]` |
 | `kubernetes.apiServer.startupTimeoutSeconds` | `integer` | `600` |

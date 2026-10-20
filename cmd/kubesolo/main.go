@@ -454,7 +454,7 @@ func (s *kubesolo) run() {
 		log.Info().Str("component", "kubesolo").Str("vendor", vendor).Msg("deploying gpu device plugin...")
 		if err := gpu.CheckHost(vendor); err != nil {
 			log.Error().Err(err).Str("vendor", vendor).Msg("host is not ready for gpu support, continuing without it")
-		} else if err := gpu.Deploy(s.embedded.AdminKubeconfigFile, vendor); err != nil {
+		} else if err := gpu.Deploy(s.embedded.AdminKubeconfigFile, vendor, s.cfg.GPU.Sharing.Replicas); err != nil {
 			log.Error().Err(err).Msg("failed to deploy gpu device plugin, continuing without it")
 		}
 	} else if err := gpu.Remove(s.embedded.AdminKubeconfigFile); err != nil {

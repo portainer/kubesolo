@@ -2,6 +2,7 @@ package gpu
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/portainer/kubesolo/types"
@@ -14,7 +15,12 @@ import (
 
 func deploy(t *testing.T, cs *fake.Clientset, vendor string) *appsv1.DaemonSet {
 	t.Helper()
-	if err := reconcile(context.Background(), cs, vendor); err != nil {
+	return deployShared(t, cs, vendor, 0)
+}
+
+func deployShared(t *testing.T, cs *fake.Clientset, vendor string, replicas int) *appsv1.DaemonSet {
+	t.Helper()
+	if err := reconcile(context.Background(), cs, vendor, replicas); err != nil {
 		t.Fatal(err)
 	}
 	ds, err := cs.AppsV1().DaemonSets(Namespace).Get(context.Background(), plugins[vendor].name, metav1.GetOptions{})
@@ -149,5 +155,51 @@ func TestResourceName(t *testing.T) {
 	}
 	if got := ResourceName(types.GPUVendorAMD); got != "amd.com/gpu" {
 		t.Errorf("amd: %q", got)
+	}
+}
+
+// Time-slicing advertises one GPU as several, so several pods can share it:
+// on a single node, the first pod would otherwise take the GPU from all the
+// others.
+func TestGPUSharing(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	ds := deployShared(t, cs, types.GPUVendorNVIDIA, 4)
+
+	cm, err := cs.CoreV1().ConfigMaps(Namespace).Get(context.Background(), sharingConfigMap, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("no sharing config: %v", err)
+	}
+	conf := cm.Data[sharingConfigFile]
+	for _, want := range []string{"timeSlicing", "name: nvidia.com/gpu", "replicas: 4", "failRequestsGreaterThanOne: true"} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("the sharing config lacks %q:\n%s", want, conf)
+		}
+	}
+	c := ds.Spec.Template.Spec.Containers[0]
+	env := map[string]string{}
+	for _, e := range c.Env {
+		env[e.Name] = e.Value
+	}
+	if env["CONFIG_FILE"] != sharingMountPath+"/"+sharingConfigFile {
+		t.Errorf("CONFIG_FILE = %q", env["CONFIG_FILE"])
+	}
+	if _, ok := mounts(c)[sharingMountPath]; !ok {
+		t.Error("the sharing config is not mounted")
+	}
+	// The plugin reads its configuration once, at start: a change must
+	// restart it.
+	if ds.Spec.Template.Annotations[sharingAnnotation] != "4" {
+		t.Errorf("pod template annotations = %v", ds.Spec.Template.Annotations)
+	}
+
+	// Without sharing, the config goes.
+	ds = deployShared(t, cs, types.GPUVendorNVIDIA, 0)
+	if _, err := cs.CoreV1().ConfigMaps(Namespace).Get(context.Background(), sharingConfigMap, metav1.GetOptions{}); !errors.IsNotFound(err) {
+		t.Errorf("the sharing config should be removed, got %v", err)
+	}
+	for _, e := range ds.Spec.Template.Spec.Containers[0].Env {
+		if e.Name == "CONFIG_FILE" {
+			t.Error("CONFIG_FILE is still set without sharing")
+		}
 	}
 }

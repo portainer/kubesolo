@@ -73,6 +73,9 @@ const (
 	CPUManagerPolicyStatic = "static"
 )
 
+// MaxGPUSharingReplicas bounds gpu.sharing.replicas.
+const MaxGPUSharingReplicas = 100
+
 // GPU vendors accepted by gpu.vendor.
 const (
 	GPUVendorNVIDIA = "nvidia"

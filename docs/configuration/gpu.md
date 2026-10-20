@@ -17,6 +17,7 @@ gpu:
 | Setting | Env var | Default |
 |---|---|---|
 | `gpu.vendor` | `KUBESOLO_GPU_VENDOR` | `""` |
+| `gpu.sharing.replicas` | `KUBESOLO_GPU_SHARING_REPLICAS` | `0` |
 
 Changes take effect when KubeSolo restarts. KubeSolo checks the host first (see below); if something is missing, it logs what and starts without GPU support rather than failing. Setting `vendor` back to `""` and restarting deletes the `kubesolo-gpu` namespace and the device plugin in it.
 
@@ -100,7 +101,22 @@ kubectl logs gpu-check                                         # nvidia-smi outp
 
 For AMD, request `amd.com/gpu: 1` and use an image with ROCm, such as `rocm/rocm-terminal` running `rocm-smi`.
 
-A GPU is allocated whole: while one pod holds it, others that request a GPU stay `Pending`.
+A GPU is allocated whole: while one pod holds it, others that request a GPU stay `Pending` — unless it is shared.
+
+### Sharing a GPU
+
+On a single node, one pod holding the GPU leaves every other GPU workload waiting. With NVIDIA, `gpu.sharing.replicas` lets that many pods share each GPU, by the device plugin's [time-slicing](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html):
+
+```yaml
+gpu:
+  vendor: nvidia
+  sharing:
+    replicas: 4
+```
+
+The node then advertises `nvidia.com/gpu: 4` for its one GPU, and up to four pods that request `nvidia.com/gpu: 1` run on it at once, taking turns. There is **no isolation** between them: they share its memory, and one that exhausts it, or faults, affects the others. A pod that requests more than one is refused. `0` or `1` means no sharing.
+
+KubeSolo has no scheduler to hold a pod back until a GPU, or a share of one, is free: a pod that requests one when none is free fails, `UnexpectedAdmissionError`, rather than waiting `Pending`. Give the node enough shares for the GPU workloads it runs. AMD's device plugin has no equivalent, so the setting needs `gpu.vendor: nvidia`.
 
 ---
 

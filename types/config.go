@@ -167,6 +167,17 @@ type D2KConfig struct {
 type GPUConfig struct {
 	// Vendor is "nvidia", "amd", or empty for no GPU support.
 	Vendor string `json:"vendor"`
+
+	Sharing GPUSharing `json:"sharing"`
+}
+
+// GPUSharing lets pods share a GPU, which the device plugin otherwise gives
+// to one pod whole.
+type GPUSharing struct {
+	// Replicas is how many pods can share each GPU, by NVIDIA's time-slicing:
+	// they take turns on it, with no isolation of memory or faults between
+	// them. 0 or 1 means no sharing.
+	Replicas int `json:"replicas"`
 }
 
 // ConfigAPI covers the config API itself.

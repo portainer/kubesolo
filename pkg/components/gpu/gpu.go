@@ -51,7 +51,7 @@ func CheckHost(vendor string) error {
 }
 
 // Deploy reconciles the vendor's device plugin and removes any other vendor's.
-func Deploy(adminKubeconfig, vendor string) error {
+func Deploy(adminKubeconfig, vendor string, replicas int) error {
 	time.Sleep(types.DefaultComponentSleep)
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.DefaultContextTimeout)
@@ -62,7 +62,7 @@ func Deploy(adminKubeconfig, vendor string) error {
 		return fmt.Errorf("failed to create kubernetes client: %v", err)
 	}
 
-	return reconcile(ctx, clientset, vendor)
+	return reconcile(ctx, clientset, vendor, replicas)
 }
 
 // Remove deletes everything Deploy created. It runs on every start with GPU
@@ -79,7 +79,7 @@ func Remove(adminKubeconfig string) error {
 	return remove(ctx, clientset)
 }
 
-func reconcile(ctx context.Context, clientset kubernetes.Interface, vendor string) error {
+func reconcile(ctx context.Context, clientset kubernetes.Interface, vendor string, replicas int) error {
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   Namespace,
@@ -101,7 +101,10 @@ func reconcile(ctx context.Context, clientset kubernetes.Interface, vendor strin
 		}
 	}
 
-	if err := createDaemonSet(ctx, clientset, vendor); err != nil {
+	if err := reconcileSharing(ctx, clientset, vendor, replicas); err != nil {
+		return fmt.Errorf("failed to reconcile gpu sharing: %v", err)
+	}
+	if err := createDaemonSet(ctx, clientset, vendor, replicas); err != nil {
 		return fmt.Errorf("failed to reconcile the %s device plugin: %v", vendor, err)
 	}
 
