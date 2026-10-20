@@ -243,6 +243,7 @@ Full documentation is at [kubesolo.io](https://kubesolo.io/documentation). The g
 - [Container mode](docs/configuration/container-mode.md): running KubeSolo itself in a container
 - [CPU pinning](docs/configuration/cpu-pinning.md): exclusive cores for latency-sensitive workloads
 - [d2k](docs/configuration/d2k.md): a Docker-compatible API endpoint on the node
+- [GPUs](docs/configuration/gpu.md): NVIDIA and AMD GPUs for any workload
 - [Registry configuration](docs/configuration/registry.md): mirrors, private registries and custom TLS
 - [containerd drop-ins and NVIDIA GPUs](docs/configuration/containerd-drop-ins.md): extra runtimes, GPU workloads
 - [Installing a CNI (Cilium)](docs/configuration/cni.md): running an external CNI on a single KubeSolo node

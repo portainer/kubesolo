@@ -203,6 +203,9 @@ portainer:
 d2k:
   enabled: false
   namespace: d2k
+
+gpu:
+  vendor: ""              # "" = no GPU support; nvidia or amd
 ```
 
 Only `kubernetes:` groups its contents, because that family grows —
@@ -220,6 +223,7 @@ and stays at the top level.
 | `api.socketPath` | `string` | `""` |
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |
+| `gpu.vendor` | `string` | `""` |
 | `kubernetes.apiServer.extraSANs` | `array` | `[]` |
 | `kubernetes.apiServer.startupTimeoutSeconds` | `integer` | `600` |
 | `kubernetes.kubelet.cpuManager.policy` | `string` | `none` |

@@ -354,3 +354,58 @@ func TestValidateRejectsMalformedAddresses(t *testing.T) {
 		}
 	}
 }
+
+func TestGPUDisabledOnUnsupportedArch(t *testing.T) {
+	for _, tc := range []struct{ vendor, arch string }{
+		{types.GPUVendorAMD, "arm64"},
+		{types.GPUVendorAMD, "arm"},
+		{types.GPUVendorNVIDIA, "arm"},
+		{types.GPUVendorNVIDIA, "riscv64"},
+	} {
+		t.Run(tc.vendor+"/"+tc.arch, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.GPU.Vendor = tc.vendor
+
+			host := testHost()
+			host.GOARCH = tc.arch
+			warnings, err := Validate(cfg, host)
+			if err != nil {
+				t.Fatalf("unsupported architecture should warn, not fail: %v", err)
+			}
+			if cfg.GPU.Vendor != "" {
+				t.Error("gpu support should have been disabled")
+			}
+			if len(warnings) == 0 {
+				t.Error("expected a warning explaining why gpu support was disabled")
+			}
+		})
+	}
+}
+
+func TestGPUSupportedArch(t *testing.T) {
+	for _, tc := range []struct{ vendor, arch string }{
+		{types.GPUVendorNVIDIA, "amd64"},
+		{types.GPUVendorNVIDIA, "arm64"},
+		{types.GPUVendorAMD, "amd64"},
+	} {
+		t.Run(tc.vendor+"/"+tc.arch, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.GPU.Vendor = tc.vendor
+
+			host := testHost()
+			host.GOARCH = tc.arch
+			warnings, err := Validate(cfg, host)
+			if err != nil || len(warnings) != 0 {
+				t.Fatalf("warnings %v, err %v", warnings, err)
+			}
+		})
+	}
+}
+
+func TestGPUVendorRejected(t *testing.T) {
+	cfg := Defaults()
+	cfg.GPU.Vendor = "intel"
+	if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), "gpu.vendor") {
+		t.Errorf("an unknown vendor should be rejected, got %v", err)
+	}
+}

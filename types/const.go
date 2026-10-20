@@ -33,6 +33,8 @@ const (
 	DefaultLocalPathProvisionerImage = "docker.io/rancher/local-path-provisioner:v0.0.36"
 	DefaultLocalPathStorageDir       = "local-path-storage"
 	DefaultD2KImage                  = "docker.io/portainer/d2k:1.2.3"
+	DefaultNVIDIADevicePluginImage   = "nvcr.io/nvidia/k8s-device-plugin:v0.20.1"
+	DefaultAMDDevicePluginImage      = "docker.io/rocm/k8s-device-plugin:1.31.0.11"
 	DefaultD2KPort                   = int32(2376)
 	DefaultD2KDir                    = "d2k"
 	DefaultWebhookReadWriteTimeout   = 10 * time.Second
@@ -69,4 +71,10 @@ const (
 const (
 	CPUManagerPolicyNone   = "none"
 	CPUManagerPolicyStatic = "static"
+)
+
+// GPU vendors accepted by gpu.vendor.
+const (
+	GPUVendorNVIDIA = "nvidia"
+	GPUVendorAMD    = "amd"
 )

@@ -5,6 +5,8 @@ apiVersion: kubesolo.io/v1alpha1
 d2k:
   enabled: false
   namespace: d2k
+gpu:
+  vendor: ""
 kind: Config
 kubernetes:
   apiServer:

@@ -34,6 +34,7 @@ type Config struct {
 	Storage    StorageConfig    `json:"storage"`
 	Portainer  PortainerConfig  `json:"portainer"`
 	D2K        D2KConfig        `json:"d2k"`
+	GPU        GPUConfig        `json:"gpu"`
 	Metrics    MetricsConfig    `json:"metrics"`
 	API        ConfigAPI        `json:"api"`
 }
@@ -159,6 +160,13 @@ type D2KConfig struct {
 	// Namespace is the single namespace d2k is deployed into and translates
 	// Docker API calls against.
 	Namespace string `json:"namespace"`
+}
+
+// GPUConfig makes the node's GPU available to pods, through the vendor's
+// device plugin.
+type GPUConfig struct {
+	// Vendor is "nvidia", "amd", or empty for no GPU support.
+	Vendor string `json:"vendor"`
 }
 
 // ConfigAPI covers the config API itself.
