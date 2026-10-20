@@ -178,6 +178,9 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	}
 
 	containerMode := cfg.RunMode == config.RunModeContainer
+	if !containerMode {
+		offlineVersion(p, cfg)
+	}
 
 	// ── Feature/version compatibility ──────────────────────────────────────────
 	// d2k flags only exist in kubesolo >= MinD2KVersion. Passing --d2k to an older
@@ -527,6 +530,17 @@ func configDocument(p *ui.Printer, cfg *config.Config, containerMode, quiet bool
 	return doc, nil
 }
 
+// offlineVersion takes the version from an offline archive's name, so the
+// checks made before KubeSolo is stopped see the release that will be
+// installed. The archive is trusted over a --version left at its default,
+// which would otherwise fail stageRelease's version check.
+func offlineVersion(p *ui.Printer, cfg *config.Config) {
+	if v, ok := upgrade.VersionFromArchiveName(cfg.OfflineInstall); ok && v != cfg.Version {
+		p.Info(fmt.Sprintf("installing %s, the version %s contains", v, filepath.Base(cfg.OfflineInstall)))
+		cfg.Version = v
+	}
+}
+
 // stageRelease fetches the release and verifies it — checksum, architecture,
 // C library, version — before anything on the host changes. An offline
 // archive without a SHA256SUMS beside it, as bundles from older kubesoloctl
@@ -539,12 +553,6 @@ func stageRelease(p *ui.Printer, cfg *config.Config, info *detect.SystemInfo) (f
 			return func() {}, nil, p.Fail("offline source", err)
 		}
 		req.Source = abs
-		// The archive names its own version. Trust it over a --version left at
-		// its default, which would otherwise fail the version check below.
-		if v, ok := upgrade.VersionFromArchiveName(abs); ok && v != cfg.Version {
-			p.Info(fmt.Sprintf("installing %s, the version %s contains", v, filepath.Base(abs)))
-			cfg.Version, req.Version = v, v
-		}
 	}
 
 	layout := upgrade.NewLayout(cfg.Path, types.DefaultConfigFile)

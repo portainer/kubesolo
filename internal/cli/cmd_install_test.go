@@ -85,6 +85,7 @@ func TestInstallAPIEnabled(t *testing.T) {
 		{name: "environment", env: "true", want: true},
 		{name: "flag overrides environment", env: "true", args: []string{"--api-enabled=false"}, want: false},
 		{name: "release before the configuration file", args: []string{"--api-enabled", "--version=v1.2.0"}, wantErr: "--api-enabled requires kubesolo v1.2.1"},
+		{name: "offline archive before the configuration file", args: []string{"--api-enabled", "--offline-install=/var/tmp/kubesolo-v1.2.0-linux-amd64.tar.gz"}, wantErr: "--api-enabled requires kubesolo v1.2.1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -95,6 +96,8 @@ func TestInstallAPIEnabled(t *testing.T) {
 			if err := installCmd(&cfg).ParseFlags(tc.args); err != nil {
 				t.Fatal(err)
 			}
+			// In runInstall's order: the archive's version is known before the check.
+			offlineVersion(ui.New(), &cfg)
 			doc, err := configDocument(ui.New(), &cfg, false, true)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {

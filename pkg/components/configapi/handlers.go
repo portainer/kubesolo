@@ -114,10 +114,6 @@ func (s *Service) handleSchema(w http.ResponseWriter, _ *http.Request) {
 
 // handlePut replaces the configuration wholesale.
 func (s *Service) handlePut(w http.ResponseWriter, r *http.Request) {
-	if fromAgentSocket(r) {
-		writeErrorFor(w, r, http.StatusForbidden, ErrorResponse{Error: "PUT is not accepted on the Portainer agent's socket; use PATCH"})
-		return
-	}
 	s.mutate(w, r, func(current *types.Config, body []byte) (*types.Config, error) {
 		// Replacement starts from the defaults, not from the current document:
 		// a setting the caller omitted is being removed, not left alone. That is
@@ -229,6 +225,12 @@ type badRequest struct{ error }
 // Nothing touches the file until validation has passed, so a rejected request
 // leaves the existing configuration exactly as it was.
 func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*types.Config, []byte) (*types.Config, error)) {
+	// The agent acts for a remote Portainer server; no setting is open to it yet.
+	if fromAgentSocket(r) {
+		writeErrorFor(w, r, http.StatusForbidden, ErrorResponse{Error: "the configuration cannot be changed on the Portainer agent's socket; change it with kubesoloctl config set on the host"})
+		return
+	}
+
 	body, ok := readBody(w, r)
 	if !ok {
 		return

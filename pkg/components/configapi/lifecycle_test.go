@@ -15,6 +15,7 @@ import (
 	"github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/types"
+	"github.com/rs/zerolog"
 )
 
 // lifecycleAPI is a running API with the lifecycle endpoints, whose executor
@@ -261,9 +262,9 @@ func TestAgentSocketUpgradesToReleasesOnly(t *testing.T) {
 	}
 }
 
-// The agent's socket cannot replace the configuration or change portainer.*
-// or api.*, however the request is written; other settings it can change.
-func TestAgentSocketConfigLimits(t *testing.T) {
+// The configuration is read-only on the agent's socket, even for a setting
+// sent back unchanged; the host socket still writes it.
+func TestAgentSocketConfigIsReadOnly(t *testing.T) {
 	a := newLifecycleAPI(t, "v1.2.2", func(c *types.Config) {
 		c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key"
 		c.API.Enabled = true
@@ -272,24 +273,23 @@ func TestAgentSocketConfigLimits(t *testing.T) {
 	for _, c := range []struct {
 		name, method string
 		body         any
-		want         string
 	}{
-		{"put", "PUT", `{}`, "PUT is not accepted"},
-		{"agent image", "PATCH", `{"portainer":{"image":"example.com/agent:evil"}}`, "portainer.image cannot be changed"},
-		{"edge key reset", "PATCH", `{"portainer":null}`, "portainer."},
-		{"api off", "PATCH", `{"api":{"enabled":false}}`, "api.enabled cannot be changed"},
-		{"reset everything", "DELETE", nil, "cannot be changed"},
+		{"put", "PUT", `{}`},
+		{"patch", "PATCH", `{"logging":{"debug":true}}`},
+		{"unchanged value", "PATCH", `{"logging":{"debug":false}}`},
+		{"agent image", "PATCH", `{"portainer":{"image":"example.com/agent:evil"}}`},
+		{"reset everything", "DELETE", nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			resp, raw := do(t, a.agent, c.method, "/api/v1/config", c.body, nil)
-			if resp.StatusCode != http.StatusForbidden || !strings.Contains(errorOf(t, raw), c.want) {
-				t.Errorf("status = %d, body %s; want 403 containing %q", resp.StatusCode, raw, c.want)
+			if resp.StatusCode != http.StatusForbidden || !strings.Contains(errorOf(t, raw), "cannot be changed on the Portainer agent's socket") {
+				t.Errorf("status = %d, body %s; want 403", resp.StatusCode, raw)
 			}
 		})
 	}
 
-	if resp, raw := do(t, a.agent, "PATCH", "/api/v1/config", `{"logging":{"debug":true}}`, nil); resp.StatusCode != http.StatusOK {
-		t.Errorf("agent PATCH of logging.debug: %d %s", resp.StatusCode, raw)
+	if resp, raw := do(t, a.agent, "GET", "/api/v1/config", nil, nil); resp.StatusCode != http.StatusOK {
+		t.Errorf("agent GET: %d %s", resp.StatusCode, raw)
 	}
 	if resp, raw := do(t, a.client, "PATCH", "/api/v1/config", `{"portainer":{"image":"example.com/agent:1"}}`, nil); resp.StatusCode != http.StatusOK {
 		t.Errorf("host PATCH of portainer.image: %d %s", resp.StatusCode, raw)
@@ -300,8 +300,40 @@ func TestAgentSocketConfigLimits(t *testing.T) {
 	if err := json.Unmarshal(raw, &saved); err != nil {
 		t.Fatal(err)
 	}
-	if c := saved.Config; c.Portainer.EdgeID != "edge-id" || !c.API.Enabled || !c.Logging.Debug {
-		t.Errorf("saved configuration: edgeID %q, api.enabled %v, logging.debug %v", c.Portainer.EdgeID, c.API.Enabled, c.Logging.Debug)
+	if c := saved.Config; c.Portainer.EdgeID != "edge-id" || !c.API.Enabled || c.Logging.Debug || c.Portainer.Image != "example.com/agent:1" {
+		t.Errorf("saved configuration: edgeID %q, api.enabled %v, logging.debug %v, image %q", c.Portainer.EdgeID, c.API.Enabled, c.Logging.Debug, c.Portainer.Image)
+	}
+}
+
+// Rollback stays open to the agent: it only restores the release the last
+// upgrade replaced.
+func TestAgentSocketCanRollBack(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+	writeTestBackup(t, a.layout, upgrade.Manifest{From: "v1.2.1", To: "v1.2.2"})
+
+	if resp, raw := do(t, a.agent, "POST", "/api/v1/rollback", nil, nil); resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("rollback over the agent's socket: %d %s", resp.StatusCode, raw)
+	}
+	if len(a.spawned()) != 1 {
+		t.Errorf("executor started %d times, want 1", len(a.spawned()))
+	}
+}
+
+// Each request's log line says which socket it came in on, so a change made
+// through Portainer can be told from one made on the host.
+func TestLogNamesTheSocket(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+	logs := captureLogs(t, zerolog.InfoLevel)
+
+	do(t, a.agent, "PATCH", "/api/v1/config", `{"logging":{"debug":true}}`, nil)
+	do(t, a.client, "PATCH", "/api/v1/config", `{"logging":{"debug":true}}`, nil)
+
+	var got []any
+	for _, e := range logs.entries(t) {
+		got = append(got, e["agent_socket"])
+	}
+	if len(got) != 2 || got[0] != true || got[1] != false {
+		t.Errorf("agent_socket per request = %v, want [true false]", got)
 	}
 }
 

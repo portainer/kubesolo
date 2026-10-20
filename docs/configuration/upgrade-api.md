@@ -187,16 +187,14 @@ not the socket: KubeSolo recreates the socket on every start, and a bind mount
 of the file would keep pointing at the old one. It is mounted read-only, which
 still lets the agent connect but not write files to the host.
 
-This gives the agent configuration, upgrade and rollback control, with limits
-that answer `403`:
+This gives the agent upgrade and rollback control and a read of the
+configuration, with limits that answer `403`:
 
 - An upgrade takes no `source` or `force`, so the agent can only install a newer
   published release. A source with a checksum the caller supplies would let it
   run any binary as root.
-- The configuration cannot be replaced with `PUT`, and no request can change
-  `portainer.*` or `api.*`, including a `DELETE` that would reset them.
-  `portainer.image` would swap the image of a cluster-admin pod, and the rest
-  can cut the agent off from KubeSolo or Portainer.
+- The configuration cannot be changed: `PUT`, `PATCH` and `DELETE
+  /api/v1/config` are refused.
 
 Do these on the host instead, with `kubesoloctl upgrade` and `kubesoloctl config
 set`. The agent already runs as cluster-admin. Leave the API disabled to

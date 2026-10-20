@@ -43,7 +43,9 @@ that already has an authenticated channel — the Portainer Edge Agent, or SSH.
 > When the API is enabled and a Portainer edge ID and key are set, KubeSolo
 > serves the same API on a second socket, `<path>/agent-api/kubesolo.sock`,
 > mounts that directory into the Edge Agent's pod, and sets
-> `KUBESOLO_API_SOCKET` to the socket's path.
+> `KUBESOLO_API_SOCKET` to the socket's path. The configuration is read-only on
+> that socket: writes answer `403`. See
+> [the Portainer agent's socket](upgrade-api.md#the-portainer-agents-socket).
 
 ---
 
