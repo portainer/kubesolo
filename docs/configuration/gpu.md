@@ -61,6 +61,16 @@ KubeSolo checks for `/dev/kfd` at startup.
 
 ---
 
+### Checking a host
+
+With `gpu.vendor` set in `/etc/kubesolo/config.yaml`, `kubesoloctl check` runs the same checks KubeSolo does at startup, and names what is missing:
+
+```bash
+sudo kubesoloctl check
+```
+
+---
+
 ## Using the GPU
 
 Request one GPU in the container's limits:

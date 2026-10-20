@@ -6,6 +6,7 @@ package preflight
 import (
 	"bufio"
 	"fmt"
+	"github.com/portainer/kubesolo/pkg/components/gpu/host"
 	"net"
 	"os"
 	"os/exec"
@@ -41,6 +42,16 @@ func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
 		// After the port check: it listens on the API server port itself.
 		{Name: "host firewall", Run: func() error { return network.CheckFirewall(nodeIP) }},
 	}
+}
+
+// GPUChecks are the checks for the vendor's GPU support, when gpu.vendor asks
+// for it: the driver and, for NVIDIA, the Container Toolkit. KubeSolo checks
+// the same at start, and starts without GPU support if they are missing.
+func GPUChecks(vendor string) []Check {
+	if vendor == "" {
+		return nil
+	}
+	return []Check{{Name: vendor + " GPU driver and toolkit", Run: func() error { return host.Check(vendor) }}}
 }
 
 // RunSuite executes every check in suite, stopping on the first failure.

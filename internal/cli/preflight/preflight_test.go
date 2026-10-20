@@ -1,6 +1,7 @@
 package preflight
 
 import (
+	"github.com/portainer/kubesolo/types"
 	"os"
 	"path/filepath"
 	"strings"
@@ -272,4 +273,16 @@ func containsString(s, sub string) bool {
 			}
 			return false
 		}())
+}
+
+// The GPU check runs only when gpu.vendor asks for a GPU, and names what is
+// missing before anything is installed.
+func TestGPUChecks(t *testing.T) {
+	if checks := GPUChecks(""); len(checks) != 0 {
+		t.Errorf("no vendor: %d checks, want none", len(checks))
+	}
+	checks := GPUChecks(types.GPUVendorNVIDIA)
+	if len(checks) != 1 || !strings.Contains(checks[0].Name, "nvidia") {
+		t.Fatalf("checks = %+v", checks)
+	}
 }

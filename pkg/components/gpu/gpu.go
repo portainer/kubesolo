@@ -3,11 +3,10 @@ package gpu
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	kubesolokubernetes "github.com/portainer/kubesolo/internal/kubernetes"
+	"github.com/portainer/kubesolo/pkg/components/gpu/host"
 	"github.com/portainer/kubesolo/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -26,27 +25,16 @@ type plugin struct {
 
 	// resource is what the plugin advertises on the node and pods request.
 	resource corev1.ResourceName
-
-	// requires are the host files the plugin cannot work without, and why.
-	requires map[string]string
 }
 
 var plugins = map[string]plugin{
 	types.GPUVendorNVIDIA: {
 		name:     "nvidia-device-plugin",
 		resource: "nvidia.com/gpu",
-		requires: map[string]string{
-			"/dev/nvidiactl": "the NVIDIA driver is not loaded",
-			// The CDI spec the plugin writes runs this on the host as a hook.
-			"/usr/bin/nvidia-ctk": "the NVIDIA Container Toolkit is not installed",
-		},
 	},
 	types.GPUVendorAMD: {
 		name:     "amdgpu-device-plugin",
 		resource: "amd.com/gpu",
-		requires: map[string]string{
-			"/dev/kfd": "the amdgpu driver is not loaded, or the GPU does not support ROCm",
-		},
 	},
 }
 
@@ -57,19 +45,9 @@ func ResourceName(vendor string) corev1.ResourceName {
 }
 
 // CheckHost reports what the host is missing for the vendor's device plugin to
-// work. Deploying it anyway would leave the GPU unadvertised and every pod that
-// asks for one Pending, with the cause only in the plugin's log.
+// work.
 func CheckHost(vendor string) error {
-	return checkHost("/", vendor)
-}
-
-func checkHost(root, vendor string) error {
-	for path, cause := range plugins[vendor].requires {
-		if _, err := os.Stat(filepath.Join(root, path)); err != nil {
-			return fmt.Errorf("%s not found: %s", path, cause)
-		}
-	}
-	return nil
+	return host.Check(vendor)
 }
 
 // Deploy reconciles the vendor's device plugin and removes any other vendor's.
