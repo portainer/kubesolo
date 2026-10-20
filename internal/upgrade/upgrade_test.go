@@ -376,6 +376,10 @@ func TestCloseInterrupted(t *testing.T) {
 		{"died before changing anything", interrupted(OpUpgrade, false), "v1.2.1", "", ResultAborted},
 		{"rollback came up", &State{Current: &Run{ID: "r", Operation: OpRollback, From: "v1.2.2", To: "v1.2.1", Started: started, PID: deadPID(t), HostChanged: true}}, "v1.2.1", "", ResultSucceeded},
 		{"something else is running", interrupted(OpUpgrade, true), "v1.1.9", "", ResultFailed},
+		{"restart came up", &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: started, PID: deadPID(t), HostChanged: true}}, "v1.2.2", "", ResultSucceeded},
+		{"restart died before stopping KubeSolo", &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: started, PID: deadPID(t)}}, "v1.2.2", "", ResultAborted},
+		{"restart died while reverting", &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: started, PID: deadPID(t), HostChanged: true, Phase: PhaseRollingBack}}, "v1.2.2", "", ResultRolledBack},
+		{"restart, then another version is running", &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: started, PID: deadPID(t), HostChanged: true}}, "v1.2.1", "", ResultFailed},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

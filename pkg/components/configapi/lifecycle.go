@@ -10,13 +10,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/types"
 )
 
-// Lifecycle is what the upgrade, rollback and status endpoints need from the
-// running KubeSolo. The functions are fields so tests can replace them; main
-// supplies the real ones.
+// Lifecycle is what the upgrade, rollback, restart and status endpoints need
+// from the running KubeSolo. The functions are fields so tests can replace
+// them; main supplies the real ones.
 type Lifecycle struct {
 	// Version and Commit identify the running binary.
 	Version string
@@ -28,6 +29,11 @@ type Lifecycle struct {
 	// ContainerMode is set when KubeSolo runs in a container, which cannot
 	// replace its own image.
 	ContainerMode bool
+
+	// StartedWith is the configuration file as KubeSolo read it at start,
+	// before flags and the environment were applied over it. A restart is
+	// refused when the file now changes a setting KubeSolo would not apply.
+	StartedWith *types.Config
 
 	// Spawn starts the upgrade executor on a job file, detached from the
 	// KubeSolo service.
@@ -109,9 +115,33 @@ func versionAllowed(running string, req upgrade.Request) error {
 	return nil
 }
 
-// rollbackRequest is the optional body of POST /api/v1/rollback.
-type rollbackRequest struct {
+// timeoutRequest is the optional body of POST /api/v1/rollback and
+// POST /api/v1/restart.
+type timeoutRequest struct {
 	HealthTimeoutSeconds int `json:"healthTimeoutSeconds,omitempty"`
+}
+
+// readTimeoutRequest reads an optional timeoutRequest body for op, answering
+// 400 itself when it is not valid.
+func readTimeoutRequest(w http.ResponseWriter, r *http.Request, op upgrade.Operation) (timeoutRequest, bool) {
+	var tr timeoutRequest
+	body, ok := readBody(w, r)
+	if !ok {
+		return tr, false
+	}
+	if len(bytes.TrimSpace(body)) > 0 {
+		dec := json.NewDecoder(bytes.NewReader(body))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&tr); err != nil {
+			writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("body is not a valid %s request", op)})
+			return tr, false
+		}
+	}
+	if err := upgrade.ValidateHealthTimeout(tr.HealthTimeoutSeconds); err != nil {
+		writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return tr, false
+	}
+	return tr, true
 }
 
 // handleRollback restores the version, datastore and configuration file from
@@ -124,21 +154,8 @@ func (s *Service) handleRollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := readBody(w, r)
+	rb, ok := readTimeoutRequest(w, r, upgrade.OpRollback)
 	if !ok {
-		return
-	}
-	var rb rollbackRequest
-	if len(bytes.TrimSpace(body)) > 0 {
-		dec := json.NewDecoder(bytes.NewReader(body))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&rb); err != nil {
-			writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: "body is not a valid rollback request"})
-			return
-		}
-	}
-	if err := upgrade.ValidateHealthTimeout(rb.HealthTimeoutSeconds); err != nil {
-		writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -153,6 +170,58 @@ func (s *Service) handleRollback(w http.ResponseWriter, r *http.Request) {
 		Request: upgrade.Request{Version: target.From, HealthTimeoutSeconds: rb.HealthTimeoutSeconds},
 		DataDir: lc.DataDir, ConfigFile: s.opts.ConfigPath, From: lc.Version,
 	}, target)
+}
+
+// errContainerRestart is the 501 for a restart in container mode: stopping
+// KubeSolo there stops the container, and nothing inside it can start it again.
+var errContainerRestart = errors.New("KubeSolo is running in a container, which cannot restart itself; restart the container from the host")
+
+// handleRestart applies the stored configuration by restarting KubeSolo, which
+// the executor does for the same reason it does an upgrade: stopping KubeSolo
+// stops the process serving this request.
+//
+// The stored configuration is validated first, the way KubeSolo will at start,
+// so a file it would refuse is reported here rather than by a KubeSolo that
+// does not come back.
+func (s *Service) handleRestart(w http.ResponseWriter, r *http.Request) {
+	lc := s.opts.Lifecycle
+	if lc.ContainerMode {
+		writeErrorFor(w, r, http.StatusNotImplemented, ErrorResponse{Error: errContainerRestart.Error()})
+		return
+	}
+
+	tr, ok := readTimeoutRequest(w, r, upgrade.OpRestart)
+	if !ok {
+		return
+	}
+
+	cfg, err := s.read()
+	if err != nil {
+		writeErrorFor(w, r, http.StatusUnprocessableEntity, ErrorResponse{Error: "KubeSolo would not start with the stored configuration: " + err.Error()})
+		return
+	}
+	if _, err := config.Validate(cfg, s.opts.Host); err != nil {
+		writeErrorFor(w, r, http.StatusUnprocessableEntity, ErrorResponse{Error: "KubeSolo would not start with the stored configuration: " + err.Error()})
+		return
+	}
+	// The API refuses these changes, but the file can be edited by hand. A
+	// restart that would report success while ignoring one is refused instead.
+	var setOnce *config.SetOnceError
+	if lc.StartedWith != nil {
+		if err := config.CheckSetOnce(lc.StartedWith, cfg); errors.As(err, &setOnce) {
+			writeErrorFor(w, r, http.StatusConflict, ErrorResponse{
+				Field: setOnce.Field,
+				Error: fmt.Sprintf("the configuration file changes %s from the value KubeSolo started with; %v. Put back the value it started with", setOnce.Field, err),
+			})
+			return
+		}
+	}
+
+	s.accept(w, r, upgrade.Job{
+		ID: upgrade.NewRunID(), Operation: upgrade.OpRestart,
+		Request: upgrade.Request{Version: lc.Version, HealthTimeoutSeconds: tr.HealthTimeoutSeconds},
+		DataDir: lc.DataDir, ConfigFile: s.opts.ConfigPath, From: lc.Version,
+	}, nil)
 }
 
 // accept records the run, starts the executor and answers 202. Taking the lock
@@ -210,7 +279,7 @@ func (s *Service) accept(w http.ResponseWriter, r *http.Request, job upgrade.Job
 		state.Current = previous
 		_ = upgrade.SaveState(l, state)
 		_ = os.Remove(jobFile)
-		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: "could not start the upgrade: " + err.Error()})
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: "could not start the " + string(job.Operation) + ": " + err.Error()})
 		return
 	}
 

@@ -331,6 +331,152 @@ func TestRollback(t *testing.T) {
 	}
 }
 
+// A restart is accepted, handed to the executor and recorded where
+// /api/v1/status reports it, before anything is restarted.
+func TestRestartIsAcceptedAndReportedByStatus(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+
+	resp, raw := do(t, a.client, "POST", "/api/v1/restart", map[string]any{"healthTimeoutSeconds": 90}, nil)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d: %s", resp.StatusCode, raw)
+	}
+	if resp.Header.Get("Location") != "/api/v1/status" {
+		t.Errorf("Location = %q", resp.Header.Get("Location"))
+	}
+	var acc upgrade.Accepted
+	if err := json.Unmarshal(raw, &acc); err != nil {
+		t.Fatal(err)
+	}
+	if acc.ID == "" || acc.Operation != upgrade.OpRestart || acc.From != "v1.2.2" || acc.To != "v1.2.2" || acc.StatusPath != "/api/v1/status" {
+		t.Errorf("accepted = %+v", acc)
+	}
+
+	spawns := a.spawned()
+	if len(spawns) != 1 {
+		t.Fatalf("spawned %d executors", len(spawns))
+	}
+	job, err := upgrade.ReadJob(spawns[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.ID != acc.ID || job.Operation != upgrade.OpRestart || job.Request.HealthTimeoutSeconds != 90 || job.From != "v1.2.2" || job.ConfigFile != a.layout.ConfigFile {
+		t.Errorf("job = %+v", job)
+	}
+
+	_, raw = do(t, a.client, "GET", "/api/v1/status", nil, nil)
+	var st upgrade.Status
+	if err := json.Unmarshal(raw, &st); err != nil {
+		t.Fatal(err)
+	}
+	if !st.Upgrade.InFlight || st.Upgrade.Current == nil || st.Upgrade.Current.ID != acc.ID || st.Upgrade.Current.Operation != upgrade.OpRestart || st.Upgrade.Current.Phase != upgrade.PhaseQueued {
+		t.Errorf("status while queued = %+v", st.Upgrade)
+	}
+
+	// The restart holds the same lock as an upgrade: neither can start into
+	// the other.
+	if resp, raw := do(t, a.client, "POST", "/api/v1/restart", nil, nil); resp.StatusCode != http.StatusConflict || !strings.Contains(errorOf(t, raw), "in progress") {
+		t.Errorf("second restart: %d %s", resp.StatusCode, raw)
+	}
+	if resp, raw := do(t, a.client, "POST", "/api/v1/upgrade", upgrade.Request{Version: "v1.2.3"}, nil); resp.StatusCode != http.StatusConflict {
+		t.Errorf("upgrade during a restart: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// Whatever the executor records at the end of the restart is what status
+// reports: a restart that left KubeSolo unhealthy reads as failed.
+func TestStatusReportsAFailedRestart(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+	last := &upgrade.Run{
+		ID: "r1", Operation: upgrade.OpRestart, From: "v1.2.2", To: "v1.2.2",
+		Phase: upgrade.PhaseDone, Result: upgrade.ResultFailed, HostChanged: true, Finished: time.Now().UTC(),
+		Error: "KubeSolo v1.2.2 did not become healthy after the restart: not healthy after 1m0s: node not Ready",
+	}
+	if err := upgrade.SaveState(a.layout, &upgrade.State{Last: last}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, raw := do(t, a.client, "GET", "/api/v1/status", nil, nil)
+	var st upgrade.Status
+	if err := json.Unmarshal(raw, &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Upgrade.InFlight || st.Upgrade.Last == nil || st.Upgrade.Last.Operation != upgrade.OpRestart || st.Upgrade.Last.Result != upgrade.ResultFailed || st.Upgrade.Last.Error == "" {
+		t.Errorf("upgrade = %+v", st.Upgrade)
+	}
+}
+
+func TestRestartRequestValidation(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+
+	cases := []struct {
+		name   string
+		body   any
+		status int
+		want   string
+	}{
+		{"not JSON", "{", http.StatusBadRequest, "not a valid restart request"},
+		{"unknown field", map[string]any{"version": "v1.2.3"}, http.StatusBadRequest, "not a valid restart request"},
+		{"timeout too short", map[string]any{"healthTimeoutSeconds": 1}, http.StatusBadRequest, "at least"},
+		{"negative timeout", map[string]any{"healthTimeoutSeconds": -1}, http.StatusBadRequest, "negative"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			resp, raw := do(t, a.client, "POST", "/api/v1/restart", c.body, nil)
+			if resp.StatusCode != c.status || !strings.Contains(errorOf(t, raw), c.want) {
+				t.Errorf("status = %d, body %s; want %d containing %q", resp.StatusCode, raw, c.status, c.want)
+			}
+		})
+	}
+	if len(a.spawned()) != 0 {
+		t.Error("an invalid request started the executor")
+	}
+}
+
+// A configuration KubeSolo would refuse at start is refused here, before
+// anything is stopped.
+func TestRestartRefusesAConfigurationKubeSoloWouldNotStartWith(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+
+	// Written behind the API's back, as a hand edit would be: the API itself
+	// would have refused it.
+	cfg := config.Defaults()
+	cfg.D2K.Enabled = true
+	cfg.Network.LoadBalancer.Enabled = false
+	if err := config.Write(a.layout.ConfigFile, cfg); err != nil {
+		t.Fatal(err)
+	}
+	resp, raw := do(t, a.client, "POST", "/api/v1/restart", nil, nil)
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(errorOf(t, raw), "would not start") || !strings.Contains(errorOf(t, raw), "d2k.enabled") {
+		t.Errorf("invalid configuration: %d %s", resp.StatusCode, raw)
+	}
+
+	if err := os.WriteFile(a.layout.ConfigFile, []byte("network: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resp, raw = do(t, a.client, "POST", "/api/v1/restart", nil, nil)
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(errorOf(t, raw), "would not start") {
+		t.Errorf("unreadable configuration: %d %s", resp.StatusCode, raw)
+	}
+
+	if len(a.spawned()) != 0 {
+		t.Error("a restart into a broken configuration started the executor")
+	}
+	if state, _ := upgrade.LoadState(a.layout); state.Current != nil {
+		t.Errorf("a refused restart was recorded: %+v", state.Current)
+	}
+}
+
+func TestContainerModeCannotRestartItself(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, func(lc *Lifecycle) { lc.ContainerMode = true })
+	resp, raw := do(t, a.client, "POST", "/api/v1/restart", nil, nil)
+	if resp.StatusCode != http.StatusNotImplemented || !strings.Contains(errorOf(t, raw), "restart the container from the host") {
+		t.Errorf("%d %s", resp.StatusCode, raw)
+	}
+	if len(a.spawned()) != 0 {
+		t.Error("container mode started the executor")
+	}
+}
+
 func TestStatus(t *testing.T) {
 	a := newLifecycleAPI(t, "v1.2.2", func(c *types.Config) {
 		c.Portainer.EdgeID, c.Portainer.EdgeKey = "id", "key"
@@ -386,7 +532,7 @@ func TestStatusWithoutAgentOmitsIt(t *testing.T) {
 
 func TestLifecycleEndpointsAbsentWithoutLifecycle(t *testing.T) {
 	client, _ := api(t, nil)
-	for _, c := range []struct{ method, path string }{{"POST", "/api/v1/upgrade"}, {"POST", "/api/v1/rollback"}, {"GET", "/api/v1/status"}} {
+	for _, c := range []struct{ method, path string }{{"POST", "/api/v1/upgrade"}, {"POST", "/api/v1/rollback"}, {"POST", "/api/v1/restart"}, {"GET", "/api/v1/status"}} {
 		if resp, _ := do(t, client, c.method, c.path, upgrade.Request{Version: "v1.2.2"}, nil); resp.StatusCode != http.StatusNotFound {
 			t.Errorf("%s %s = %d", c.method, c.path, resp.StatusCode)
 		}
@@ -449,5 +595,122 @@ func TestAgentSocket(t *testing.T) {
 		if _, err := os.Stat(socket); !os.IsNotExist(err) {
 			t.Errorf("%s left behind: %v", socket, err)
 		}
+	}
+}
+
+// The Portainer agent restarts KubeSolo through its own socket, so the restart
+// endpoint is served there exactly as on the main one.
+func TestRestartThroughTheAgentSocket(t *testing.T) {
+	dir := shortTempDir(t)
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := config.Write(configPath, config.Defaults()); err != nil {
+		t.Fatal(err)
+	}
+	spawned := make(chan string, 2)
+	lc := &Lifecycle{
+		Version: "v1.2.2",
+		DataDir: filepath.Join(dir, "data"),
+		Spawn:   func(jobFile string) error { spawned <- jobFile; return nil },
+		Health: func(context.Context) upgrade.Health {
+			return upgrade.Health{Healthy: true, Checks: map[string]string{"apiserver": "ok"}}
+		},
+		AgentImage: func(context.Context) (string, error) { return "", nil },
+	}
+	agentSocket := filepath.Join(dir, "agent", "k.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	svc := NewService(ctx, cancel, make(chan struct{}), Options{
+		SocketPath: filepath.Join(dir, "c.sock"), AgentSocketPath: agentSocket, ConfigPath: configPath,
+		Host: config.Host{NumCPU: 4, GOARCH: "amd64"}, Lifecycle: lc,
+	})
+	done := make(chan error, 1)
+	go func() { done <- svc.Run() }()
+	<-svc.readyCh
+	t.Cleanup(func() { cancel(); <-done })
+
+	agent := unixClient(agentSocket)
+	resp, raw := do(t, agent, "POST", "/api/v1/restart", nil, nil)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("restart through the agent socket: %d %s", resp.StatusCode, raw)
+	}
+	var acc upgrade.Accepted
+	if err := json.Unmarshal(raw, &acc); err != nil || acc.Operation != upgrade.OpRestart {
+		t.Fatalf("accepted = %+v, %v", acc, err)
+	}
+	if job, err := upgrade.ReadJob(<-spawned); err != nil || job.ID != acc.ID || job.Operation != upgrade.OpRestart {
+		t.Fatalf("job = %+v, %v", job, err)
+	}
+
+	// The agent follows it on the same socket.
+	_, raw = do(t, agent, "GET", "/api/v1/status", nil, nil)
+	var st upgrade.Status
+	if err := json.Unmarshal(raw, &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Upgrade.Current == nil || st.Upgrade.Current.ID != acc.ID {
+		t.Errorf("status on the agent socket = %+v", st.Upgrade)
+	}
+}
+
+// The API refuses a change to the agent's set-once settings, but the file can
+// be edited by hand. A restart would ignore the change and report success, so
+// it is refused.
+func TestRestartRefusesAHandEditedAgentSetting(t *testing.T) {
+	running := config.Defaults()
+	running.Portainer.EdgeID, running.Portainer.EdgeKey = "edge-id", "edge-key"
+	a := newLifecycleAPI(t, "v1.2.2", func(c *types.Config) {
+		c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key"
+	}, func(lc *Lifecycle) { lc.StartedWith = running })
+
+	if resp, raw := do(t, a.client, "POST", "/api/v1/restart", nil, nil); resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("unchanged agent settings: %d %s", resp.StatusCode, raw)
+	}
+	state, _ := upgrade.LoadState(a.layout)
+	state.Current = nil
+	if err := upgrade.SaveState(a.layout, state); err != nil {
+		t.Fatal(err)
+	}
+
+	edited := config.Defaults()
+	edited.Portainer.EdgeID, edited.Portainer.EdgeKey = "edge-id", "another-key"
+	if err := config.Write(a.layout.ConfigFile, edited); err != nil {
+		t.Fatal(err)
+	}
+	resp, raw := do(t, a.client, "POST", "/api/v1/restart", nil, nil)
+	if resp.StatusCode != http.StatusConflict || !strings.Contains(errorOf(t, raw), "portainer.edgeKey") || !strings.Contains(errorOf(t, raw), "Put back the value it started with") {
+		t.Errorf("hand-edited edge key: %d %s", resp.StatusCode, raw)
+	}
+	if len(a.spawned()) != 1 {
+		t.Errorf("spawned %d executors, want only the first restart's", len(a.spawned()))
+	}
+
+	// Configuring an agent for the first time is applied by the restart.
+	b := newLifecycleAPI(t, "v1.2.2", func(c *types.Config) {
+		c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key"
+	}, func(lc *Lifecycle) { lc.StartedWith = config.Defaults() })
+	if resp, raw := do(t, b.client, "POST", "/api/v1/restart", nil, nil); resp.StatusCode != http.StatusAccepted {
+		t.Errorf("first agent configuration: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// A restart may revert the configuration file, so a change made while one runs
+// would be lost. It is refused until the run ends.
+func TestConfigChangesWaitForARunToEnd(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+	if resp, raw := do(t, a.client, "POST", "/api/v1/restart", nil, nil); resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("restart: %d %s", resp.StatusCode, raw)
+	}
+	patch := map[string]string{"Content-Type": "application/merge-patch+json"}
+	resp, raw := do(t, a.client, "PATCH", "/api/v1/config", `{"network":{"mtu":1400}}`, patch)
+	if resp.StatusCode != http.StatusConflict || !strings.Contains(errorOf(t, raw), "restart is in progress") {
+		t.Errorf("change during a restart: %d %s", resp.StatusCode, raw)
+	}
+
+	state, _ := upgrade.LoadState(a.layout)
+	state.Current = nil
+	if err := upgrade.SaveState(a.layout, state); err != nil {
+		t.Fatal(err)
+	}
+	if resp, raw := do(t, a.client, "PATCH", "/api/v1/config", `{"network":{"mtu":1400}}`, patch); resp.StatusCode != http.StatusOK {
+		t.Errorf("change once the restart has ended: %d %s", resp.StatusCode, raw)
 	}
 }

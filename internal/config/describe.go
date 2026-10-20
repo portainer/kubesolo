@@ -29,8 +29,8 @@ type Descriptor struct {
 	Flag  string `json:"flag,omitempty"`
 	Envar string `json:"envar,omitempty"`
 
-	// Mutability is "restart" or "immutable" — whether changing this on an
-	// existing install can take effect at all.
+	// Mutability is "restart", "immutable" or "set-once" — whether changing
+	// this on an existing install can take effect at all.
 	Mutability string `json:"mutability"`
 
 	// Secret marks a value that is redacted when read back.

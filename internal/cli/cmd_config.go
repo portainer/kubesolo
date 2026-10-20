@@ -317,6 +317,7 @@ func configSetCmd(path *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			current := *cfg
 			if err := field.Set(cfg, value); err != nil {
 				return fmt.Errorf("%s: %w", name, err)
 			}
@@ -342,6 +343,9 @@ func configSetCmd(path *string) *cobra.Command {
 
 			// Validation runs before the file is touched, so a rejected value
 			// leaves the existing configuration exactly as it was.
+			if err := kubesoloconfig.CheckSetOnce(&current, cfg); err != nil {
+				return err
+			}
 			warnings, err := kubesoloconfig.Validate(cfg, validationHost())
 			if err != nil {
 				return err
@@ -455,6 +459,9 @@ func runConfigEdit(path string) error {
 		return nil
 	}
 
+	if err := kubesoloconfig.CheckSetOnce(cfg, edited); err != nil {
+		return fmt.Errorf("%w\n\nyour edits are kept at %s", err, tmpName)
+	}
 	warnings, err := kubesoloconfig.Validate(edited, validationHost())
 	if err != nil {
 		return fmt.Errorf("%w\n\nyour edits are kept at %s", err, tmpName)

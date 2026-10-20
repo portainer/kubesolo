@@ -64,6 +64,15 @@ type kubesolo struct {
 	// containerd, whose socket lives under cfg.Path.
 	runtimeEndpoint cri.Endpoint
 
+	// startupConfig is the configuration file as this process read it, nil
+	// when there was none. Once KubeSolo has run healthy on it, it is the
+	// configuration a failed restart goes back to.
+	startupConfig []byte
+
+	// startupFile is the configuration file as this process read it, without
+	// the flags and environment variables cfg also applies.
+	startupFile *types.Config
+
 	embedded types.Embedded
 }
 
@@ -85,11 +94,16 @@ var (
 // errors instead of exiting so that the config API can reject a bad payload
 // without taking the cluster down.
 func service() (*kubesolo, error) {
+	startupConfig, _ := os.ReadFile(*flags.Config)
 	cfg, warnings, err := config.Load(*flags.Config, config.FlagValues{
 		Values:    flags.Values(),
 		SetByUser: flags.SetByUser(),
 	})
 	if err != nil {
+		return nil, err
+	}
+	startupFile := config.Defaults()
+	if _, _, err := config.Read(*flags.Config, startupFile); err != nil {
 		return nil, err
 	}
 
@@ -115,6 +129,8 @@ func service() (*kubesolo, error) {
 		hostName:        system.GetHostname(),
 		cfg:             cfg,
 		runtimeEndpoint: runtimeEndpoint,
+		startupConfig:   startupConfig,
+		startupFile:     startupFile,
 	}, nil
 }
 
@@ -449,7 +465,14 @@ func (s *kubesolo) run() {
 
 	}
 
+	// A restart is judged from here: before it, the node and pod statuses are
+	// the previous process's.
+	if err := upgrade.RecordStarted(upgrade.NewLayout(s.cfg.Path, *flags.Config)); err != nil {
+		log.Warn().Str("component", "upgrade").Err(err).Msg("could not record that KubeSolo has started")
+	}
+
 	s.wg.Go(func() { s.verifyPendingUpgrade(ctx) })
+	s.wg.Go(func() { s.recordKnownGoodConfig(ctx) })
 
 	<-ctx.Done()
 	log.Info().Str("component", "kubesolo").Msg("shutting down...")
@@ -666,6 +689,57 @@ func (s *kubesolo) verifyPendingUpgrade(ctx context.Context) {
 	}
 }
 
+// recordKnownGoodConfig records the configuration file this process started
+// with as known to be good, once KubeSolo, and the Portainer agent that keeps
+// the device reachable, have been healthy on it for a while.
+//
+// It waits while the upgrade lock is held: a restart's executor is still
+// judging this configuration, and recording it first would make a failed one
+// the configuration the executor goes back to.
+func (s *kubesolo) recordKnownGoodConfig(ctx context.Context) {
+	if s.startupConfig == nil {
+		return
+	}
+	l := upgrade.NewLayout(s.cfg.Path, *flags.Config)
+
+	const settle = time.Minute
+	var healthySince time.Time
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		if h := executor.CheckHealth(ctx, l.AdminKubeconfig(), Version); !h.Healthy || !executor.AgentRunning(ctx, l.AdminKubeconfig()) {
+			healthySince = time.Time{}
+			continue
+		}
+		if healthySince.IsZero() {
+			healthySince = time.Now()
+		}
+		if time.Since(healthySince) < settle {
+			continue
+		}
+
+		lock, err := upgrade.TryLock(l)
+		if err != nil {
+			continue
+		}
+		wrote, err := upgrade.SaveKnownGoodConfig(l, s.startupConfig)
+		lock.Unlock()
+		switch {
+		case err != nil:
+			log.Warn().Str("component", "upgrade").Err(err).Msg("could not record the known-good configuration")
+		case wrote:
+			log.Info().Str("component", "upgrade").Msg("recorded the configuration KubeSolo is running healthy on as known-good")
+		}
+		return
+	}
+}
+
 // lastGuardEvent is the boot guard's most recent record of a restore, if any.
 func lastGuardEvent(l upgrade.Layout) string {
 	raw, err := os.ReadFile(l.GuardLog())
@@ -767,6 +841,7 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 			Commit:        Commit,
 			DataDir:       s.cfg.Path,
 			ContainerMode: s.embedded.ContainerMode,
+			StartedWith:   s.startupFile,
 			Spawn:         spawnUpgradeExecutor,
 			Health: func(ctx context.Context) upgrade.Health {
 				return executor.CheckHealth(ctx, kubeconfig, "")

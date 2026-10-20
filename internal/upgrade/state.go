@@ -20,6 +20,10 @@ type Operation string
 const (
 	OpUpgrade  Operation = "upgrade"
 	OpRollback Operation = "rollback"
+
+	// OpRestart stops and starts the installed version, which is how a change
+	// to the configuration takes effect.
+	OpRestart Operation = "restart"
 )
 
 // Phase is where a run has got to. The phases before PhaseStopping change
@@ -224,6 +228,20 @@ func (s *State) CloseInterrupted(running string, guardEvent string) bool {
 		guardEvent = ""
 	}
 	switch {
+	case run.Operation == OpRestart && run.Phase == PhaseRollingBack:
+		// The configuration that failed had been replaced by the known-good
+		// one already.
+		run.Result = ResultRolledBack
+		run.Error = "the executor stopped while reverting to the known-good configuration, which the configuration file holds again"
+		run.Log("%s", run.Error)
+	case run.Operation == OpRestart && run.To == running && run.HostChanged:
+		run.Result, run.Error = ResultSucceeded, ""
+		run.Log("the executor stopped before it finished, but KubeSolo %s came up healthy", running)
+	case run.Operation == OpRestart && run.To == running:
+		// KubeSolo was never stopped, so the configuration was not applied.
+		run.Result = ResultAborted
+		run.Error = "the executor stopped before it restarted KubeSolo"
+		run.Log("%s", run.Error)
 	case run.To == running && run.Operation == OpUpgrade:
 		run.Result, run.Error = ResultSucceeded, ""
 		run.Log("the executor stopped before it finished, but %s came up healthy", running)
@@ -250,7 +268,7 @@ func (s *State) CloseInterrupted(running string, guardEvent string) bool {
 }
 
 // ErrBusy is returned when another upgrade or rollback holds the lock.
-var ErrBusy = errors.New("another upgrade or rollback is in progress")
+var ErrBusy = errors.New("another upgrade, rollback or restart is in progress")
 
 // Lock is the exclusive lock on the upgrade directory. Whoever holds it is the
 // only writer of the binary, the datastore backup and the state file — the API,

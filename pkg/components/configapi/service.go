@@ -35,8 +35,8 @@ type Options struct {
 	// Host describes the machine, for validating candidate configurations.
 	Host config.Host
 
-	// Lifecycle enables the upgrade, rollback and status endpoints. Nil leaves
-	// them out.
+	// Lifecycle enables the upgrade, rollback, restart and status endpoints.
+	// Nil leaves them out.
 	Lifecycle *Lifecycle
 
 	// AgentSocketPath, when set, is a second socket serving the same API, for

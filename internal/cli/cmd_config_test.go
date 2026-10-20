@@ -343,3 +343,60 @@ func TestConfigEditRejectedLeavesFileUntouched(t *testing.T) {
 		t.Error("a rejected edit modified the installed configuration")
 	}
 }
+
+// The agent's settings are applied once, when KubeSolo first deploys the agent.
+// With an agent configured, a change would be saved and never applied, so it is
+// refused before the file is touched.
+func TestConfigSetAgentSettingsAreSetOnce(t *testing.T) {
+	agent := func(c *types.Config) { c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key" }
+	for _, tc := range []struct{ setting, value string }{
+		{"portainer.edgeID", "other-id"},
+		{"portainer.edgeKey", "other-key"},
+		{"portainer.async", "true"},
+	} {
+		t.Run(tc.setting, func(t *testing.T) {
+			path := seed(t, agent)
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = runConfig(t, "set", tc.setting, tc.value, "--config", path)
+			if err == nil || !strings.Contains(err.Error(), tc.setting+" cannot be changed once a Portainer agent is configured") {
+				t.Fatalf("err = %v", err)
+			}
+			if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+				t.Error("a refused change modified the configuration file")
+			}
+		})
+	}
+
+	// Configuring the agent in the first place is what the settings are for.
+	path := seed(t, nil)
+	for _, kv := range [][2]string{{"portainer.edgeID", "edge-id"}, {"portainer.edgeKey", "edge-key"}} {
+		if _, err := runConfig(t, "set", kv[0], kv[1], "--config", path); err != nil {
+			t.Fatalf("setting %s before an agent is configured: %v", kv[0], err)
+		}
+	}
+	// Other settings stay changeable with an agent configured.
+	if _, err := runConfig(t, "set", "network.mtu", "1400", "--config", path); err != nil {
+		t.Errorf("network.mtu with an agent configured: %v", err)
+	}
+}
+
+func TestConfigEditAgentSettingsAreSetOnce(t *testing.T) {
+	path := seed(t, func(c *types.Config) { c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key" })
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptedEditor(t, "s|^  edgeID: .*|  edgeID: other-id|")
+
+	_, err = runConfig(t, "edit", "--config", path)
+	if err == nil || !strings.Contains(err.Error(), "portainer.edgeID cannot be changed") || !strings.Contains(err.Error(), "your edits are kept at") {
+		t.Fatalf("err = %v", err)
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+		t.Error("a refused edit modified the configuration file")
+	}
+}
