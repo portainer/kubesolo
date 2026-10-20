@@ -13,8 +13,14 @@ import (
 	"time"
 )
 
-// MaxIncidents is how many incidents are kept; older ones are deleted.
-const MaxIncidents = 100
+// MaxIncidents is how many unreviewed incidents are kept, and
+// MaxReviewedIncidents how many reviewed ones: those are the labelled data the
+// assistant is measured and trained against, so they are kept longer. Older
+// ones are deleted.
+const (
+	MaxIncidents         = 100
+	MaxReviewedIncidents = 1000
+)
 
 // KindKubeSolo is an incident in KubeSolo itself, as opposed to a workload.
 const KindKubeSolo = "kubesolo"
@@ -104,6 +110,10 @@ type Store struct {
 	// mu serialises writes, so that a review and a triage cannot overwrite
 	// each other.
 	mu sync.Mutex
+
+	// reviewed caches which stored incidents are reviewed, for pruning; nil
+	// until first needed.
+	reviewed map[string]bool
 }
 
 // NewStore returns a store in dir, created on the first save.
@@ -116,7 +126,8 @@ func (s *Store) Added() <-chan struct{} {
 	return s.added
 }
 
-// Save writes the incident and deletes the oldest beyond MaxIncidents.
+// Save writes the incident and deletes the oldest beyond MaxIncidents, or
+// MaxReviewedIncidents for reviewed ones.
 func (s *Store) Save(inc Incident) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -161,12 +172,8 @@ func (s *Store) save(inc Incident) error {
 		return err
 	}
 
-	ids, err := s.ids()
-	if err != nil {
+	if err := s.prune(inc); err != nil {
 		return err
-	}
-	for _, id := range ids[:max(0, len(ids)-MaxIncidents)] {
-		_ = os.Remove(s.path(id))
 	}
 
 	if inc.Triage == nil {
@@ -174,6 +181,38 @@ func (s *Store) save(inc Incident) error {
 		case s.added <- struct{}{}:
 		default:
 		}
+	}
+	return nil
+}
+
+// prune deletes the oldest incidents beyond the bounds, now that inc has been
+// saved.
+func (s *Store) prune(inc Incident) error {
+	ids, err := s.ids()
+	if err != nil {
+		return err
+	}
+	if s.reviewed == nil {
+		s.reviewed = map[string]bool{}
+		for _, id := range ids {
+			if stored, err := s.read(id); err == nil {
+				s.reviewed[id] = stored.Review != nil
+			}
+		}
+	}
+	s.reviewed[inc.ID] = inc.Review != nil
+
+	var reviewed, unreviewed []string
+	for _, id := range ids {
+		if s.reviewed[id] {
+			reviewed = append(reviewed, id)
+		} else {
+			unreviewed = append(unreviewed, id)
+		}
+	}
+	for _, id := range slices.Concat(unreviewed[:max(0, len(unreviewed)-MaxIncidents)], reviewed[:max(0, len(reviewed)-MaxReviewedIncidents)]) {
+		_ = os.Remove(s.path(id))
+		delete(s.reviewed, id)
 	}
 	return nil
 }

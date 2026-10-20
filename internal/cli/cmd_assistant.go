@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/portainer/kubesolo/internal/cli/ui"
@@ -94,8 +95,79 @@ reviewed.`,
 		},
 	}
 	report.Flags().BoolVar(&asJSON, "json", false, "print the report as JSON")
-	cmd.AddCommand(approve, reject, report)
+	cmd.AddCommand(approve, reject, report, &cobra.Command{
+		Use:   "export DIR",
+		Short: "Write the reviewed incidents as test cases for the assistant",
+		Long: `Write each reviewed incident that names the right action as a test case in
+DIR, in the format of KubeSolo's triage test set (test/assistant): the
+incident, labelled with the reviewer's action. They measure, and can train,
+the assistant against real failures.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runExport(args[0])
+		},
+	})
 	return cmd
+}
+
+func runExport(dir string) error {
+	p := ui.New()
+	h, err := findHost()
+	if err != nil {
+		return p.Fail("KubeSolo", err)
+	}
+	if h.api == nil {
+		return p.Fail("assistant", errAPIUnreachable)
+	}
+	node, _ := os.Hostname()
+	n, err := exportCases(h.api, dir, node)
+	if err != nil {
+		return p.Fail("assistant", err)
+	}
+	p.Info(fmt.Sprintf("wrote %d test case(s) to %s", n, dir))
+	return nil
+}
+
+// incidentReader is the part of the API exportCases reads.
+type incidentReader interface {
+	Incidents(since string) ([]assistant.Summary, error)
+	Incident(id string) (*assistant.Incident, error)
+}
+
+// exportCases writes each reviewed incident that names the right action to
+// dir as a test case, and returns how many it wrote.
+func exportCases(api incidentReader, dir, node string) (int, error) {
+	list, err := api.Incidents("")
+	if err != nil {
+		return 0, err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, s := range list {
+		if s.Review == nil || s.Review.Action == "" {
+			continue
+		}
+		inc, err := api.Incident(s.ID)
+		if err != nil {
+			return n, err
+		}
+		c, ok := assistant.CaseFromReview(*inc)
+		if !ok {
+			continue
+		}
+		c.Source.Node = node
+		raw, err := json.MarshalIndent(c, "", "  ")
+		if err != nil {
+			return n, err
+		}
+		if err := os.WriteFile(filepath.Join(dir, s.ID+".json"), append(raw, '\n'), 0o644); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 func runReport(asJSON bool) error {

@@ -141,3 +141,68 @@ func TestRejectingAnUndiagnosedIncident(t *testing.T) {
 		t.Errorf("got %+v, %v", got, err)
 	}
 }
+
+// Reviewed incidents are the labelled data, so pruning keeps them: the
+// oldest unreviewed incidents go first, and reviewed ones only past their own,
+// larger bound.
+func TestReviewedIncidentsOutlastPruning(t *testing.T) {
+	s := NewStore(t.TempDir())
+	reviewed := triagedIncident(t, s, reviewTime, "restart_component", 0.97)
+	if _, err := s.Review(reviewed.ID, Review{Verdict: VerdictApproved}, reviewTime); err != nil {
+		t.Fatal(err)
+	}
+	for i := range MaxIncidents + 5 {
+		triagedIncident(t, s, reviewTime.Add(time.Duration(i+1)*time.Second), "report_only", 1)
+	}
+
+	if _, err := s.Get(reviewed.ID); err != nil {
+		t.Errorf("the reviewed incident was pruned: %v", err)
+	}
+	all, _ := s.List("")
+	if len(all) != MaxIncidents+1 {
+		t.Errorf("kept %d incidents, want %d unreviewed and the reviewed one", len(all), MaxIncidents)
+	}
+}
+
+func TestReviewedIncidentsAreBounded(t *testing.T) {
+	s := NewStore(t.TempDir())
+	var first string
+	for i := range MaxReviewedIncidents + 2 {
+		inc := triagedIncident(t, s, reviewTime.Add(time.Duration(i)*time.Second), "report_only", 1)
+		if _, err := s.Review(inc.ID, Review{Verdict: VerdictRejected, Action: "restart_component"}, reviewTime); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = inc.ID
+		}
+	}
+	if _, err := s.Get(first); !errors.Is(err, ErrNoIncident) {
+		t.Errorf("the oldest reviewed incident should go past %d, got %v", MaxReviewedIncidents, err)
+	}
+}
+
+// A reviewed incident becomes a test case labelled with the reviewer's
+// action, in the test set's format.
+func TestAReviewedIncidentIsATestCase(t *testing.T) {
+	s := NewStore(t.TempDir())
+	inc := triagedIncident(t, s, reviewTime, "report_only", 0.76)
+	got, err := s.Review(inc.ID, Review{Verdict: VerdictRejected, Action: "repair_database", Note: "lease UID mismatch"}, reviewTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c, ok := CaseFromReview(*got)
+	if !ok || c.Incident.Trigger != inc.Trigger || len(c.Expect.Actions) != 1 || c.Expect.Actions[0] != "repair_database" {
+		t.Errorf("case = %+v, %v", c, ok)
+	}
+	if c.Source.Review == nil || c.Source.Triage == nil {
+		t.Errorf("the case should keep the review and the triage it came from: %+v", c.Source)
+	}
+
+	// A rejection that names no action says what was wrong, not what was
+	// right: it is no label.
+	unlabelled, _ := s.Review(inc.ID, Review{Verdict: VerdictRejected}, reviewTime)
+	if _, ok := CaseFromReview(*unlabelled); ok {
+		t.Error("a review without an action should not make a case")
+	}
+}

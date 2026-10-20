@@ -199,7 +199,13 @@ Over the API, both take an optional body, `{"action": "...", "note": "..."}`, an
 | `action` | The suggested one | The right one, if the reviewer knows it; a missed fix behind `report_only` is worth recording too |
 | Refused with | `409` when no action is offered, `400` for another action | `400` for an unknown action |
 
-A later review replaces an earlier one. Reviews are pruned with their incident, after the latest 100.
+A later review replaces an earlier one. Reviewed incidents outlast the 100 kept: they are kept up to 1,000, and only the oldest unreviewed incidents are pruned before then.
+
+Reviewed incidents that name the right action can be written out as test cases, in the format of KubeSolo's [triage test set](../../test/assistant/README.md), to measure the model and its knowledge against real failures:
+
+```bash
+sudo kubesoloctl assistant export ./cases
+```
 
 ### The report
 
