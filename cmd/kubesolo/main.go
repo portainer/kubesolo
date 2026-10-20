@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/syslog"
 	"os"
@@ -456,6 +457,19 @@ func (s *kubesolo) run() {
 			log.Error().Err(err).Str("vendor", vendor).Msg("host is not ready for gpu support, continuing without it")
 		} else if err := gpu.Deploy(s.embedded.AdminKubeconfigFile, vendor, s.cfg.GPU.Sharing.Replicas); err != nil {
 			log.Error().Err(err).Msg("failed to deploy gpu device plugin, continuing without it")
+		} else {
+			s.wg.Go(func() {
+				found, err := gpu.Verify(ctx, s.embedded.AdminKubeconfigFile, s.embedded.NodeName, vendor)
+				switch {
+				case errors.Is(err, gpu.ErrInUse):
+					log.Warn().Str("component", "gpu").Err(err).Msg("the GPU could not be checked")
+					return
+				case err != nil:
+					log.Error().Str("component", "gpu").Err(err).Msg("the GPU is not usable by pods")
+					return
+				}
+				log.Info().Str("component", "gpu").Str("found", found).Msg("the GPU is usable by pods")
+			})
 		}
 	} else if err := gpu.Remove(s.embedded.AdminKubeconfigFile); err != nil {
 		log.Error().Err(err).Msg("failed to remove gpu device plugin")

@@ -19,7 +19,11 @@ gpu:
 | `gpu.vendor` | `KUBESOLO_GPU_VENDOR` | `""` |
 | `gpu.sharing.replicas` | `KUBESOLO_GPU_SHARING_REPLICAS` | `0` |
 
-Changes take effect when KubeSolo restarts. KubeSolo checks the host first (see below); if something is missing, it logs what and starts without GPU support rather than failing. Setting `vendor` back to `""` and restarting deletes the `kubesolo-gpu` namespace and the device plugin in it.
+Changes take effect when KubeSolo restarts. KubeSolo checks the host first (see below); if something is missing, it logs what and starts without GPU support rather than failing. Once the device plugin is up, KubeSolo checks the GPU works: the node must advertise it, and, for NVIDIA, a short pod that requests it must run `nvidia-smi`. It logs what it found, or why the GPU is not usable:
+
+```bash
+journalctl -u kubesolo | grep "usable by pods"
+``` Setting `vendor` back to `""` and restarting deletes the `kubesolo-gpu` namespace and the device plugin in it.
 
 | Vendor | Architectures | Device plugin |
 |---|---|---|
