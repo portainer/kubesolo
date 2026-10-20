@@ -203,3 +203,34 @@ func TestACrashLoopIsOneIncident(t *testing.T) {
 		t.Errorf("a crash after a quiet spell recorded %d incidents in all, want 2", n)
 	}
 }
+
+// An outage's snapshot carries the errors logged around it, not those of a
+// day before, which would lead the model to an older failure.
+func TestAnOutageCarriesOnlyRecentErrors(t *testing.T) {
+	w, h, now := newWatcher(t)
+	at := func(d time.Duration, msg string) string { return now.Add(d).Format(time.RFC3339) + " " + msg }
+	w.Collector.Errors = func() []string {
+		return []string{
+			at(-20*time.Hour, "kine: database is locked"),
+			at(-MaxEvidenceAge-time.Minute, "apiserver: just too old"),
+			at(-time.Minute, "kubelet: connection refused"),
+			"a line without a time", // kept: its age is unknown
+		}
+	}
+	ctx := context.Background()
+
+	h.set("kine", errors.New("down"))
+	w.check(ctx)
+	*now = now.Add(6 * time.Minute)
+	w.check(ctx)
+
+	all := listed(t, w.Store)
+	if len(all) != 1 {
+		t.Fatalf("recorded %d incidents", len(all))
+	}
+	got := strings.Join(all[0].Snapshot.RecentErrors, "\n")
+	if strings.Contains(got, "database is locked") || strings.Contains(got, "just too old") ||
+		!strings.Contains(got, "connection refused") || !strings.Contains(got, "without a time") {
+		t.Errorf("recent errors:\n%s", got)
+	}
+}

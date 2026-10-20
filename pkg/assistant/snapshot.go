@@ -18,7 +18,12 @@ type Snapshot struct {
 
 // HostInfo is the host's state at the time.
 type HostInfo struct {
-	DiskUsedPercent    int    `json:"diskUsedPercent"`
+	DiskUsedPercent int `json:"diskUsedPercent"`
+
+	// DiskUsageMiB breaks the used space down, when the disk is too full:
+	// images, assistantModel, podLogs, volumes, datastore and other.
+	DiskUsageMiB map[string]int64 `json:"diskUsageMiB,omitempty"`
+
 	MemoryAvailableMiB uint64 `json:"memoryAvailableMiB"`
 	UptimeSeconds      int64  `json:"uptimeSeconds"`
 }

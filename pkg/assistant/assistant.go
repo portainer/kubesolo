@@ -120,6 +120,12 @@ func (a *Assistant) SetKnowledge(path string, err error) {
 	a.knowledge = file{path, err}
 }
 
+// ModelFile returns the model's path, or "" until it is fetched.
+func (a *Assistant) ModelFile() string {
+	m, _ := a.files()
+	return m.path
+}
+
 func (a *Assistant) files() (model, knowledge file) {
 	a.filesMu.Lock()
 	defer a.filesMu.Unlock()

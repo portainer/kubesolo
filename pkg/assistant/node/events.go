@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portainer/kubesolo/pkg/assistant"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -20,7 +21,7 @@ const (
 	// maxEventAge is how far back a snapshot's events go. An outage is
 	// recorded after 5 minutes; the API server keeps events far longer, long
 	// enough to carry the warnings of an earlier, unrelated outage.
-	maxEventAge = 30 * time.Minute
+	maxEventAge = assistant.MaxEvidenceAge
 )
 
 // warningEvents lists the newest Kubernetes warning events of the last

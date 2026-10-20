@@ -1064,9 +1064,13 @@ func (s *kubesolo) stopIncidentRecording() {
 // unhealthy. It starts once KubeSolo has come up, so startup is not an outage.
 func (s *kubesolo) watchComponents(ctx context.Context) {
 	collector := &assistant.Collector{
-		Probes:  s.assistantChecks(),
-		Errors:  s.errorLog.Lines,
-		DataDir: s.cfg.Path,
+		Probes:     s.assistantChecks(),
+		Errors:     s.errorLog.Lines,
+		DataDir:    s.cfg.Path,
+		PodLogsDir: podLogsDir,
+	}
+	if s.assistant != nil {
+		collector.ModelFile = s.assistant.ModelFile
 	}
 	if cs, err := kubesolokubernetes.GetKubernetesClient(s.embedded.AdminKubeconfigFile); err == nil {
 		collector.Events = node.WarningEvents(cs)
@@ -1087,6 +1091,9 @@ func (s *kubesolo) incidentsForAPI() configapi.Incidents {
 	}
 	return s.incidents
 }
+
+// podLogsDir is where the kubelet keeps pod logs, its default.
+const podLogsDir = "/var/log/pods"
 
 // assistantChecks are what the assistant watches and reports on: each control
 // plane component's health probe, and the host's disk and memory.
