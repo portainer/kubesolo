@@ -13,7 +13,7 @@ require (
 	github.com/docker/go-connections v0.5.0
 	github.com/go-logr/logr v1.4.4
 	github.com/k3s-io/kine v0.16.3
-	github.com/klauspost/compress v1.18.6
+	github.com/klauspost/compress v1.18.7
 	github.com/mattn/go-sqlite3 v1.14.47
 	github.com/pelletier/go-toml v1.9.5
 	github.com/prometheus/client_golang v1.23.2
