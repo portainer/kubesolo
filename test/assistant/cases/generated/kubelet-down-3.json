@@ -10,7 +10,9 @@
         "kine": "ok",
         "kubelet": "Get \"http://127.0.0.1:10248/healthz\": dial tcp 127.0.0.1:10248: connect: connection refused",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-15T09:09:55Z kubelet: PullImage from image service failed: rpc error: code = Unknown desc = failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": dial tcp: lookup regi",

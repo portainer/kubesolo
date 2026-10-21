@@ -10,7 +10,9 @@
         "kine": "ok",
         "kubelet": "ok",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-15T08:48:45Z apiserver: Failed to parse etcd version: could not parse \"\" as version",

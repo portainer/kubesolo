@@ -10,7 +10,9 @@
         "kine": "dial tcp 127.0.0.1:2379: connect: connection refused",
         "kubelet": "ok",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-14T07:15:11Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",

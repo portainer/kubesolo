@@ -12,10 +12,11 @@
 #   generate.sh OUTDIR RUNS FAULT...
 #
 # Odd runs add noise workloads (a crash-looping pod and an unpullable image),
-# so each fault is seen with and without unrelated warnings around it.
+# so each node fault is seen with and without unrelated warnings around it.
 #
 # Faults: kubelet-down kine-blocked runtime-unreachable killed disk-full
 #         coredns-firewall db-corrupt
+#         workload-crashloop workload-image-missing workload-config-missing
 
 
 set -euo pipefail
@@ -68,11 +69,13 @@ wait_healthy() {
 
 latest_id() { api /api/v1/assistant/incidents | jq -r 'last | .id // ""'; }
 
-# wait_incident waits for a served (so triaged) incident after the cursor.
+# wait_incident waits for a served (so triaged) incident after the cursor
+# that the jq filter $2 selects: the noise workloads have incidents of their
+# own.
 wait_incident() {
-  local cursor=$1 deadline=$((SECONDS + INCIDENT_TIMEOUT)) id
+  local cursor=$1 match=$2 deadline=$((SECONDS + INCIDENT_TIMEOUT)) id
   while [ $SECONDS -lt $deadline ]; do
-    id=$(api "/api/v1/assistant/incidents?since=$cursor" 2>/dev/null | jq -r 'first | .id // ""' || true)
+    id=$(api "/api/v1/assistant/incidents?since=$cursor" 2>/dev/null | jq -r "map(select($match)) | first | .id // \"\"" || true)
     [ -n "$id" ] && { echo "$id"; return; }
     sleep 15
   done
@@ -152,6 +155,9 @@ restore_disk_full() {
   rm -f "$DATA/inject-fill"
   wait_api
   kubectl delete pods -A --field-selector=status.phase=Failed --wait=false >/dev/null 2>&1 || true
+  # The API server keeps the memory the failed pods took until KubeSolo
+  # restarts, and the next fault's triage needs it.
+  systemctl restart kubesolo
 }
 
 expect_coredns_firewall() { echo '["report_only"] ["firewall","network","api"]'; }
@@ -165,6 +171,47 @@ inject_coredns_firewall() {
   sleep "$HOLD"
 }
 restore_coredns_firewall() { while iptables -D INPUT -s 10.42.0.0/16 -p tcp --dport 6443 -j REJECT 2>/dev/null; do :; done; }
+
+# Workload faults: a workload of the inject-workload namespace fails for HOLD
+# seconds. Its incident names the namespace.
+workload_ns=inject-workload
+workload_on() { kubectl create namespace "$workload_ns" --dry-run=client -o yaml | kubectl apply -f - >/dev/null; }
+restore_workload() { kubectl delete namespace "$workload_ns" --ignore-not-found --wait=false >/dev/null 2>&1 || true; }
+
+expect_workload_crashloop() { echo '["report_only"] ["config.yaml","config"]'; }
+inject_workload_crashloop() {
+  workload_on
+  kubectl -n "$workload_ns" create deployment api --image=busybox:1.36 -- \
+    sh -c 'echo "starting api 1.4"; echo "panic: cannot read /etc/app/config.yaml: no such file or directory"; exit 2' >/dev/null
+  sleep "$HOLD"
+}
+restore_workload_crashloop() { restore_workload; }
+
+expect_workload_image_missing() { echo '["report_only"] ["image","pull"]'; }
+inject_workload_image_missing() {
+  workload_on
+  kubectl -n "$workload_ns" create deployment web --image=registry.invalid/shop/web:9.9 >/dev/null
+  sleep "$HOLD"
+}
+restore_workload_image_missing() { restore_workload; }
+
+expect_workload_config_missing() { echo '["report_only"] ["configmap","config map","app-settings"]'; }
+inject_workload_config_missing() {
+  workload_on
+  kubectl -n "$workload_ns" apply -f - >/dev/null <<YAML
+apiVersion: v1
+kind: Pod
+metadata: {name: worker}
+spec:
+  containers:
+  - name: worker
+    image: busybox:1.36
+    command: [sleep, "3600"]
+    envFrom: [{configMapRef: {name: app-settings}}]
+YAML
+  sleep "$HOLD"
+}
+restore_workload_config_missing() { restore_workload; }
 
 # db-corrupt damages the datastore, lets KubeSolo fail on it, then puts the
 # saved copy back: the incident is the crash, triaged once a run stays up.
@@ -206,7 +253,9 @@ for run in $(seq 1 "$RUNS"); do
 
     log "run $run, $fault: waiting for a healthy node"
     wait_healthy
-    if [ $((run % 2)) -eq 1 ]; then noise_on; sleep 60; fi
+    # Noise workloads would compete with a workload fault for the watcher's
+    # hourly allowance of workload incidents, and fall outside its snapshot.
+    if [ $((run % 2)) -eq 1 ] && [[ $fault != workload-* ]]; then noise_on; sleep 60; fi
     cursor=$(latest_id)
 
     log "run $run, $fault: injecting"
@@ -218,7 +267,9 @@ for run in $(seq 1 "$RUNS"); do
     noise_off
 
     log "run $run, $fault: waiting for the incident"
-    if id=$(wait_incident "$cursor"); then
+    match='.kind == "kubesolo"'
+    [[ $fault == workload-* ]] && match=".kind == \"workload\" and (.trigger | startswith(\"$workload_ns/\"))"
+    if id=$(wait_incident "$cursor" "$match"); then
       save_case "$id" "$fault" "$run" "$actions" "$mentions"
     else
       log "run $run, $fault: no incident within ${INCIDENT_TIMEOUT}s"

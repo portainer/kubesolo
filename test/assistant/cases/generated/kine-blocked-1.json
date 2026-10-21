@@ -10,7 +10,9 @@
         "kine": "dial tcp 127.0.0.1:2379: connect: connection refused",
         "kubelet": "ok",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-15T07:43:57Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ErrImagePull: \"failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: failed to do request: Head \\\"https://registry.invalid/v2/inject/missing/manifests",
@@ -24,7 +26,7 @@
         "2026-10-15T07:44:12Z kubelet: Error updating node status, will retry: failed to patch status \"{\\\"status\\\":{\\\"$setElementOrder/conditions\\\":[{\\\"type\\\":\\\"MemoryPressure\\\"},{\\\"type\\\":\\\"DiskPressure\\\"},{\\\"type\\\":\\\"PIDPressure\\\"},{\\\"type\\\":\\\"Ready\\\"}],\\\"conditions\\\":[{\\\"lastHeartbeatTime\\\":\\\"2026-10-15T0",
         "2026-10-15T07:44:12Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
         "2026-10-15T07:44:12Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
-        "2026-10-15T07:44:12Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 95.354µs, panicked: false, err: context canceled, panic-reason: <nil>",
+        "2026-10-15T07:44:12Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 95.354\u00b5s, panicked: false, err: context canceled, panic-reason: <nil>",
         "2026-10-15T07:44:12Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
         "2026-10-15T07:44:12Z apiserver: Post-timeout activity",
         "2026-10-15T07:44:22Z kubelet: Error updating node status, will retry: error getting node \"kubesolo-rnd\": Get \"https://10.49.0.6:6443/api/v1/nodes/kubesolo-rnd?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)",
@@ -36,7 +38,7 @@
         "2026-10-15T07:44:23Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
         "2026-10-15T07:44:23Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
         "2026-10-15T07:44:23Z apiserver: Post-timeout activity",
-        "2026-10-15T07:44:24Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 9.387µs, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
+        "2026-10-15T07:44:24Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 9.387\u00b5s, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
         "2026-10-15T07:44:24Z kubernetes: Server rejected event (will not retry!): Timeout: request did not complete within requested timeout - context deadline exceeded",
         "2026-10-15T07:44:25Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
         "2026-10-15T07:44:25Z kubernetes: Failed to ensure lease exists, will retry: Get \"https://10.49.0.6:6443/apis/coordination.k8s.io/v1/namespaces/kube-node-lease/leases/kubesolo-rnd?timeout=10s\": context deadline exceeded",

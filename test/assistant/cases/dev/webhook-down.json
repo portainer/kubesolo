@@ -21,7 +21,9 @@
         "kine": "ok",
         "kubelet": "ok",
         "runtime": "ok",
-        "webhook": "Get \"https://127.0.0.1:10443/healthz\": dial tcp 127.0.0.1:10443: connect: connection refused"
+        "webhook": "Get \"https://127.0.0.1:10443/healthz\": dial tcp 127.0.0.1:10443: connect: connection refused",
+        "disk": "ok",
+        "memory": "ok"
       },
       "events": [
         "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem"

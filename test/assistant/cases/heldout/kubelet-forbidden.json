@@ -22,7 +22,9 @@
         "kine": "ok",
         "kubelet": "status=403",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "events": [
         "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem"

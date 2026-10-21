@@ -10,7 +10,9 @@
         "kine": "dial tcp 127.0.0.1:2379: connect: connection refused",
         "kubelet": "ok",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-15T08:35:37Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
@@ -20,7 +22,7 @@
         "2026-10-15T08:35:39Z kubelet: Error updating node status, will retry: failed to patch status \"{\\\"status\\\":{\\\"$setElementOrder/conditions\\\":[{\\\"type\\\":\\\"MemoryPressure\\\"},{\\\"type\\\":\\\"DiskPressure\\\"},{\\\"type\\\":\\\"PIDPressure\\\"},{\\\"type\\\":\\\"Ready\\\"}],\\\"conditions\\\":[{\\\"lastHeartbeatTime\\\":\\\"2026-10-15T0",
         "2026-10-15T08:35:39Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
         "2026-10-15T08:35:39Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
-        "2026-10-15T08:35:39Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 8.477µs, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
+        "2026-10-15T08:35:39Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 8.477\u00b5s, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
         "2026-10-15T08:35:39Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
         "2026-10-15T08:35:39Z apiserver: Post-timeout activity",
         "2026-10-15T08:35:49Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"context canceled\"}: context canceled",

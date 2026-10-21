@@ -10,7 +10,9 @@
         "kine": "ok",
         "kubelet": "ok",
         "runtime": "stat /var/lib/kubesolo/containerd/containerd.sock: no such file or directory",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-15T09:32:44Z containerd: PullImage \"registry.invalid/inject/missing:1\" failed: rpc error: code = Unknown desc = failed to pull and unpack image \"registry.invalid/inject/missing:1\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/inject/missing/manifests/1\": d",

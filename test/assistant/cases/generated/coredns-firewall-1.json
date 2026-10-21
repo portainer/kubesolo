@@ -10,7 +10,9 @@
         "kine": "ok",
         "kubelet": "ok",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-15T08:07:13Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",

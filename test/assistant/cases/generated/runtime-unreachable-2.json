@@ -10,7 +10,9 @@
         "kine": "ok",
         "kubelet": "ok",
         "runtime": "stat /var/lib/kubesolo/containerd/containerd.sock: no such file or directory",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-15T08:38:17Z apiserver: Cache consistency check error: failed calculating etcd digest: The resourceVersion for the provided list is too old.",

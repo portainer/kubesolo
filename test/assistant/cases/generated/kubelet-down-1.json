@@ -10,7 +10,9 @@
         "kine": "ok",
         "kubelet": "Get \"http://127.0.0.1:10248/healthz\": dial tcp 127.0.0.1:10248: connect: connection refused",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "ok"
       },
       "recentErrors": [
         "2026-10-15T07:30:28Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"crashloop\" with CrashLoopBackOff: \"back-off 1m20s restarting failed container=crashloop pod=crashloop_inject-noise(a9099a38-4470-4460-8da2-9b08c1ee4d71)\"",

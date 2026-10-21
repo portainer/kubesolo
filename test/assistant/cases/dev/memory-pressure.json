@@ -22,7 +22,9 @@
         "kine": "ok",
         "kubelet": "context deadline exceeded",
         "runtime": "ok",
-        "webhook": "ok"
+        "webhook": "ok",
+        "disk": "ok",
+        "memory": "95 MiB available; under 200 MiB is too little"
       },
       "events": [
         "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem",
