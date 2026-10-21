@@ -79,14 +79,20 @@ func (c *Collector) Collect(ctx context.Context) Snapshot {
 }
 
 // fit trims a snapshot to its share of the prompt: each line to
-// maxLineLength, then the oldest lines — errors, then events — until it fits.
+// maxLineLength, then the oldest lines — errors, then logs, then events —
+// until it fits.
 func fit(s *Snapshot) {
 	s.RecentErrors = truncateAll(s.RecentErrors)
 	s.Events = truncateAll(s.Events)
+	if s.Workload != nil {
+		s.Workload.Logs = truncateAll(s.Workload.Logs[max(0, len(s.Workload.Logs)-maxLogLines):])
+	}
 	for size(*s) > maxSnapshotBytes {
 		switch {
 		case len(s.RecentErrors) > 0:
 			s.RecentErrors = s.RecentErrors[1:]
+		case s.Workload != nil && len(s.Workload.Logs) > 0:
+			s.Workload.Logs = s.Workload.Logs[1:]
 		case len(s.Events) > 0:
 			s.Events = s.Events[1:]
 		default:

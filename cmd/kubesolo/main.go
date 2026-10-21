@@ -502,6 +502,7 @@ func (s *kubesolo) run() {
 
 	if s.incidents != nil {
 		s.wg.Go(func() { s.watchComponents(ctx) })
+		s.wg.Go(func() { s.watchWorkloads(ctx) })
 		if s.assistant != nil {
 			s.wg.Go(func() { (&assistant.Triager{Assistant: s.assistant, Store: s.incidents}).Run(ctx) })
 		}
@@ -1090,6 +1091,25 @@ func (s *kubesolo) incidentsForAPI() configapi.Incidents {
 		return nil
 	}
 	return s.incidents
+}
+
+// watchWorkloads records an incident when a workload keeps failing: diagnosed
+// and reported, never acted on.
+func (s *kubesolo) watchWorkloads(ctx context.Context) {
+	cs, err := kubesolokubernetes.GetKubernetesClient(s.embedded.AdminKubeconfigFile)
+	if err != nil {
+		log.Error().Str("component", "assistant").Err(err).Msg("cannot watch workloads")
+		return
+	}
+	(&assistant.WorkloadWatcher{
+		Failing:    node.FailingPods(cs),
+		Describe:   node.Describe(cs),
+		Store:      s.incidents,
+		DataDir:    s.cfg.Path,
+		Interval:   assistant.DefaultWatchInterval,
+		Threshold:  assistant.DefaultUnhealthyThreshold,
+		MaxPerHour: assistant.DefaultMaxWorkloadIncidentsPerHour,
+	}).Run(ctx)
 }
 
 // podLogsDir is where the kubelet keeps pod logs, its default.

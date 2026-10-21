@@ -13,6 +13,9 @@ type Snapshot struct {
 	// Events are recent Kubernetes warning events, when the API server answers.
 	Events []string `json:"events,omitempty"`
 
+	// Workload is the failing workload, for a workload incident.
+	Workload *WorkloadState `json:"workload,omitempty"`
+
 	Host HostInfo `json:"host"`
 }
 
