@@ -67,6 +67,11 @@ type Config struct {
 
 	// StartTimeout bounds how long the model may take to load.
 	StartTimeout time.Duration
+
+	// ShaderCacheDir keeps the shaders a GPU build compiles, which would
+	// otherwise be compiled again in every llama-server, for the length of a
+	// long prompt; empty leaves the drivers' own default.
+	ShaderCacheDir string
 }
 
 // Assistant answers questions with the model. It is safe for concurrent use,
@@ -170,6 +175,14 @@ func (a *Assistant) run(ctx context.Context, model string, req chatRequest) (ans
 		// which on a CPU costs minutes.
 		"--reasoning-budget", "0",
 	)
+	if dir := a.cfg.ShaderCacheDir; dir != "" {
+		// A service often has no home directory for the drivers' defaults.
+		if err := os.MkdirAll(dir, 0o700); err == nil {
+			cmd.Env = append(os.Environ(),
+				"__GL_SHADER_DISK_CACHE=1", "__GL_SHADER_DISK_CACHE_PATH="+dir, "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1",
+				"MESA_SHADER_CACHE_DIR="+dir)
+		}
+	}
 	output := &logWriter{}
 	cmd.Stdout = output
 	cmd.Stderr = output

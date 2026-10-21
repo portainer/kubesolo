@@ -43,6 +43,7 @@ func fakeLlamaServer(mode string) {
 
 	if f := os.Getenv("FAKE_LLAMA_RECORD"); f != "" {
 		_ = os.WriteFile(f, []byte(fmt.Sprintf("%d\n%s", os.Getpid(), strings.Join(os.Args[1:], " "))), 0o644)
+		_ = os.WriteFile(f+".env", []byte(strings.Join(os.Environ(), "\n")), 0o644)
 	}
 	if mode == "crash" {
 		os.Exit(3)
@@ -305,5 +306,29 @@ func TestAskBeforeTheModelIsReady(t *testing.T) {
 	a.SetModel(model, nil)
 	if _, err := a.Ask(context.Background(), "hello"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A GPU build compiles its shaders on first use in every process, which on a
+// Vulkan GPU took 25 seconds a triage; the driver keeps them, given a place
+// to: KubeSolo, a service, often has no home directory for its default.
+func TestShaderCacheIsKept(t *testing.T) {
+	a, record := newTestAssistant(t, "ok")
+	a.cfg.ShaderCacheDir = filepath.Join(t.TempDir(), "shader-cache")
+
+	if _, err := a.Ask(context.Background(), "hello"); err != nil {
+		t.Fatal(err)
+	}
+	env, err := os.ReadFile(record + ".env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"__GL_SHADER_DISK_CACHE_PATH=" + a.cfg.ShaderCacheDir, "MESA_SHADER_CACHE_DIR=" + a.cfg.ShaderCacheDir} {
+		if !strings.Contains(string(env), want) {
+			t.Errorf("llama-server's environment lacks %s", want)
+		}
+	}
+	if _, err := os.Stat(a.cfg.ShaderCacheDir); err != nil {
+		t.Errorf("the cache directory was not made: %v", err)
 	}
 }

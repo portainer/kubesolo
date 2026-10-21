@@ -957,9 +957,10 @@ func (s *kubesolo) newAssistant(ctx context.Context) configapi.Asker {
 	model := cmp.Or(s.cfg.Assistant.Model, types.DefaultAssistantModel)
 	knowledge := cmp.Or(s.cfg.Assistant.Knowledge, types.DefaultAssistantKnowledge)
 	cfg := assistant.Config{
-		Binary:       binary,
-		ContextSize:  s.cfg.Assistant.ContextSize,
-		StartTimeout: types.DefaultAssistantStartTimeout,
+		Binary:         binary,
+		ContextSize:    s.cfg.Assistant.ContextSize,
+		StartTimeout:   types.DefaultAssistantStartTimeout,
+		ShaderCacheDir: filepath.Join(s.cfg.Path, types.DefaultAssistantDir, "shader-cache"),
 	}
 	if filepath.IsAbs(model) {
 		cfg.Model = model
