@@ -1,0 +1,52 @@
+{
+  "incident": {
+    "trigger": "inject-workload/pod/worker failing for 5m0s: CreateContainerConfigError",
+    "time": "2026-10-21T11:56:20.415064013Z",
+    "snapshot": {
+      "events": [
+        "2026-10-21T11:56:11Z Failed: Error: configmap \"app-settings\" not found"
+      ],
+      "workload": {
+        "name": "inject-workload/pod/worker",
+        "pod": "worker",
+        "containers": [
+          {
+            "name": "worker",
+            "image": "busybox:1.36",
+            "state": "waiting: CreateContainerConfigError configmap \"app-settings\" not found",
+            "restarts": 0
+          }
+        ]
+      },
+      "host": {
+        "diskUsedPercent": 17,
+        "memoryAvailableMiB": 3106,
+        "uptimeSeconds": 714194
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "configmap",
+      "config map",
+      "app-settings"
+    ]
+  },
+  "source": {
+    "fault": "workload-config-missing",
+    "run": 1,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-21T11:57:26.479752247Z",
+      "summary": "The worker pod failed to start because the required ConfigMap 'app-settings' was not found.",
+      "cause": "The ConfigMap 'app-settings' is missing from the host's configuration, matching the 'common Kubernetes problems' entry for missing ConfigMap/Secret/ConfigMap; action: report_only",
+      "action": "report_only",
+      "actionProbability": 0.9957574849181862,
+      "rating": "high"
+    }
+  }
+}

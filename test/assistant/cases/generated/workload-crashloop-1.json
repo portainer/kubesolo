@@ -1,0 +1,56 @@
+{
+  "incident": {
+    "trigger": "inject-workload/deployment/api failing for 5m0s: CrashLoopBackOff",
+    "time": "2026-10-21T08:23:25.903030825Z",
+    "snapshot": {
+      "events": [
+        "2026-10-21T08:23:01Z BackOff: Back-off restarting failed container busybox in pod api-58bb95546f-24mpq_inject-workload(816d8f5c-0905-4342-b2e2-4accec286eb7)"
+      ],
+      "workload": {
+        "name": "inject-workload/deployment/api",
+        "pod": "api-58bb95546f-24mpq",
+        "containers": [
+          {
+            "name": "busybox",
+            "image": "docker.io/library/busybox:1.36",
+            "state": "waiting: CrashLoopBackOff back-off 2m40s restarting failed container=busybox pod=api-58bb95546f-24mpq_inject-workload(816d8f5c-0905-4342-b2e2-4accec286eb7)",
+            "restarts": 5,
+            "lastTermination": "exit 2: Error"
+          }
+        ],
+        "logs": [
+          "starting api 1.4",
+          "panic: cannot read /etc/app/config.yaml: no such file or directory"
+        ]
+      },
+      "host": {
+        "diskUsedPercent": 17,
+        "memoryAvailableMiB": 2284,
+        "uptimeSeconds": 701420
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "config.yaml",
+      "config"
+    ]
+  },
+  "source": {
+    "fault": "workload-crashloop",
+    "run": 1,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-21T08:26:09.951969183Z",
+      "summary": "The API deployment failed with CrashLoopBackOff due to a missing /etc/app/config.yaml file, indicating a configuration issue.",
+      "cause": "The application cannot find its configuration file at /etc/app/config.yaml, which is a common issue when the application expects a config file that does not exist on the host.",
+      "action": "report_only",
+      "actionProbability": 0.6659555990958876,
+      "rating": "medium"
+    }
+  }
+}

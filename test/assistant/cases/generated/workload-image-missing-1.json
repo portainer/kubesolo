@@ -1,0 +1,53 @@
+{
+  "incident": {
+    "trigger": "inject-workload/deployment/web failing for 5m0s: ImagePullBackOff",
+    "time": "2026-10-21T08:33:55.890982837Z",
+    "snapshot": {
+      "events": [
+        "2026-10-21T08:31:47Z Failed: Failed to pull image \"registry.invalid/shop/web:9.9\": failed to pull and unpack image \"registry.invalid/shop/web:9.9\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/shop/web/manifests/9.9\": dial tcp: lookup registry.invalid on 127.0.0.5",
+        "2026-10-21T08:31:47Z Failed: Error: ErrImagePull",
+        "2026-10-21T08:33:07Z Failed: Error: ImagePullBackOff"
+      ],
+      "workload": {
+        "name": "inject-workload/deployment/web",
+        "pod": "web-74d6b44cc9-7nqpw",
+        "containers": [
+          {
+            "name": "web",
+            "image": "registry.invalid/shop/web:9.9",
+            "state": "waiting: ImagePullBackOff Back-off pulling image \"registry.invalid/shop/web:9.9\": ErrImagePull: failed to pull and unpack image \"registry.invalid/shop/web:9.9\": failed to resolve image: failed to do request: Head \"https://registry.invalid/v2/shop/web/manifests/9.9\": dial tcp: lookup registry.invalid on 127.0.0.53:53: no such host",
+            "restarts": 0
+          }
+        ]
+      },
+      "host": {
+        "diskUsedPercent": 17,
+        "memoryAvailableMiB": 2281,
+        "uptimeSeconds": 702050
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "image",
+      "pull"
+    ]
+  },
+  "source": {
+    "fault": "workload-image-missing",
+    "run": 1,
+    "node": "kubesolo-rnd",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-21T08:36:41.627146047Z",
+      "summary": "The web deployment fails to pull the image \"registry.invalid/shop/web:9.9\" due to DNS resolution failure on the host.",
+      "cause": "The host cannot resolve the hostname \"registry.invalid\" on 127.0.0.53:53, indicating a network configuration issue or DNS misconfiguration.",
+      "action": "report_only",
+      "actionProbability": 0.8468886708622374,
+      "rating": "high"
+    }
+  }
+}
