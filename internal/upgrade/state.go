@@ -22,7 +22,8 @@ const (
 	OpRollback Operation = "rollback"
 
 	// OpRestart stops and starts the installed version, which is how a change
-	// to the configuration takes effect.
+	// to the configuration takes effect, and is the assistant's
+	// restart_component.
 	OpRestart Operation = "restart"
 )
 

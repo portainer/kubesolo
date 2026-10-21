@@ -276,6 +276,9 @@ type Triager struct {
 	Assistant *Assistant
 	Store     *Store
 
+	// OnTriaged, if set, is handed each incident once triaged and saved.
+	OnTriaged func(Incident)
+
 	now                func() time.Time
 	memoryAvailableMiB func() uint64
 }
@@ -325,6 +328,9 @@ func (t *Triager) triagePending(ctx context.Context, started time.Time) {
 		}
 		log.Info().Str("component", "assistant").Str("incident", inc.ID).Str("status", triage.Status).
 			Str("action", triage.Action).Str("reason", triage.Reason).Msg("incident triaged")
+		if t.OnTriaged != nil {
+			t.OnTriaged(inc)
+		}
 	}
 }
 

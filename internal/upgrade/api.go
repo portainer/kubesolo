@@ -36,6 +36,11 @@ type Request struct {
 	// HealthTimeoutSeconds bounds how long the new version has to become
 	// healthy before it is rolled back. Zero means DefaultHealthTimeout.
 	HealthTimeoutSeconds int `json:"healthTimeoutSeconds,omitempty"`
+
+	// RepairDatastore, for a restart, drops the datastore's WAL artefacts
+	// while KubeSolo is stopped, as storage.dbWALRepair does at start, after
+	// backing them up: the assistant's repair_database.
+	RepairDatastore bool `json:"repairDatastore,omitempty"`
 }
 
 // DefaultHealthTimeout is generous because the slowest supported hosts take

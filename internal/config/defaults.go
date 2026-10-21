@@ -95,6 +95,7 @@ func Defaults() *types.Config {
 			Model:       "",
 			Knowledge:   "",
 			ContextSize: types.DefaultAssistantContextSize,
+			AutoRestart: false,
 		},
 
 		Metrics: types.MetricsConfig{

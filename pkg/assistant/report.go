@@ -90,6 +90,8 @@ func state(s Summary) string {
 		return StateTriageFailed
 	case t.Status == TriageSkipped:
 		return StateTriageSkipped
+	case s.ActionRun != nil:
+		return "action " + s.ActionRun.Status
 	case s.Review != nil && s.Review.Verdict == VerdictApproved:
 		return StateApproved
 	case s.Review != nil:
@@ -128,6 +130,13 @@ func (r Report) Text() string {
 			fmt.Fprintf(&b, "    %s\n", t.Summary)
 		} else {
 			fmt.Fprintf(&b, "    %s: %s\n", inc.State, t.Reason)
+		}
+		if run := inc.ActionRun; run != nil {
+			fmt.Fprintf(&b, "    action %s: %s", run.Action, run.Status)
+			if run.Reason != "" {
+				fmt.Fprintf(&b, ", %s", run.Reason)
+			}
+			b.WriteString("\n")
 		}
 		if rv := inc.Review; rv != nil {
 			fmt.Fprintf(&b, "    review: %s, right action %s", rv.Verdict, cmp.Or(rv.Action, "not given"))

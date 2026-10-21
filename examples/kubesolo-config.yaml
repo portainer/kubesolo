@@ -210,6 +210,12 @@ assistant:
   # Context window in tokens; sizes the memory held while answering.
   contextSize: 8192
 
+  # Restart KubeSolo without approval when an incident calls for
+  # restart_component, rated high, and a component still fails: at most once
+  # an hour. Every other action waits for approval.
+  # Verify: sudo kubesoloctl assistant report
+  autoRestart: false
+
 metrics:
   # Prometheus endpoint with control plane health gauges.
   # Verify: curl -s 127.0.0.1:9105/metrics | grep kubesolo_component_up

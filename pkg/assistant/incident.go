@@ -49,16 +49,20 @@ type Incident struct {
 
 	// Review is what a person made of the diagnosis; nil until reviewed.
 	Review *Review `json:"review,omitempty"`
+
+	// ActionRun is the action carried out for the incident; nil if none.
+	ActionRun *ActionRun `json:"actionRun,omitempty"`
 }
 
 // Summary is an incident without its snapshot, for listing.
 type Summary struct {
-	ID      string    `json:"id"`
-	Time    time.Time `json:"time"`
-	Kind    string    `json:"kind"`
-	Trigger string    `json:"trigger"`
-	Triage  *Triage   `json:"triage"`
-	Review  *Review   `json:"review,omitempty"`
+	ID        string     `json:"id"`
+	Time      time.Time  `json:"time"`
+	Kind      string     `json:"kind"`
+	Trigger   string     `json:"trigger"`
+	Triage    *Triage    `json:"triage"`
+	Review    *Review    `json:"review,omitempty"`
+	ActionRun *ActionRun `json:"actionRun,omitempty"`
 }
 
 // Triage outcomes.
@@ -233,7 +237,7 @@ func (s *Store) List(since string) ([]Summary, error) {
 		if err != nil {
 			continue // deleted by a concurrent save, or not triaged yet
 		}
-		out = append(out, Summary{ID: inc.ID, Time: inc.Time, Kind: inc.Kind, Trigger: inc.Trigger, Triage: inc.Triage, Review: inc.Review})
+		out = append(out, Summary{ID: inc.ID, Time: inc.Time, Kind: inc.Kind, Trigger: inc.Trigger, Triage: inc.Triage, Review: inc.Review, ActionRun: inc.ActionRun})
 	}
 	return out, nil
 }

@@ -118,3 +118,25 @@ func TestReportOfAnUnratedIncident(t *testing.T) {
 		t.Errorf("text report:\n%s", text)
 	}
 }
+
+// Once an approved action has been carried out, the report says how it went.
+func TestReportOfACarriedOutAction(t *testing.T) {
+	s := NewStore(t.TempDir())
+	inc := approved(t, s, reviewTime, "restart_component")
+	if err := s.update(inc.ID, func(i *Incident) error {
+		i.ActionRun = &ActionRun{Action: "restart_component", Status: ActionFailed, Reason: "did not become healthy", Start: reviewTime}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := testReporter(s).Report(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Incidents[0].State; got != "action failed" {
+		t.Errorf("state = %q, want %q", got, "action failed")
+	}
+	if text := r.Text(); !strings.Contains(text, "did not become healthy") {
+		t.Errorf("the text report lacks the action's outcome:\n%s", text)
+	}
+}

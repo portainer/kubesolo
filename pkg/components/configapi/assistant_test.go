@@ -340,3 +340,78 @@ func TestReportWhenTheAssistantIsDisabled(t *testing.T) {
 		t.Errorf("expected a 404 telling how to enable it, got %v", err)
 	}
 }
+
+type fakeActions struct {
+	started []string
+	err     error
+}
+
+func (f *fakeActions) Start(_ context.Context, id string) error {
+	f.started = append(f.started, id)
+	return f.err
+}
+
+func actionsAPI(t *testing.T, actions Actions) (*Client, string, string) {
+	t.Helper()
+	store := assistant.NewStore(t.TempDir())
+	base := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	var ids []string
+	for i, p := range []float64{0.97, 0.75} {
+		at := base.Add(time.Duration(i) * time.Minute)
+		rating := assistant.RatingHigh
+		if p < assistant.ActionThreshold {
+			rating = assistant.RatingMedium
+		}
+		inc := assistant.Incident{ID: at.Format("20060102T150405.000000000Z"), Time: at, Kind: assistant.KindKubeSolo, Trigger: "unhealthy for 5m0s: kubelet",
+			Triage: &assistant.Triage{Status: assistant.TriageDone, Diagnosis: assistant.Diagnosis{Summary: "s", Action: "restart_component", ActionProbability: p, Rating: rating}}}
+		if err := store.Save(inc); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, inc.ID)
+	}
+	dir := shortTempDir(t)
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := config.Write(configPath, config.Defaults()); err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(dir, "c.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	svc := NewService(ctx, cancel, make(chan struct{}), Options{SocketPath: socket, ConfigPath: configPath, Incidents: store, Actions: actions})
+	done := make(chan error, 1)
+	go func() { done <- svc.Run() }()
+	<-svc.readyCh
+	t.Cleanup(func() { cancel(); <-done })
+	return NewClient(socket), ids[0], ids[1]
+}
+
+// Approving an offered action carries it out; rejecting carries out nothing.
+func TestApprovalCarriesOutTheAction(t *testing.T) {
+	actions := &fakeActions{}
+	c, high, medium := actionsAPI(t, actions)
+
+	if _, err := c.Approve(high, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Reject(medium, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(actions.started) != 1 || actions.started[0] != high {
+		t.Errorf("started %v, want only the approved incident", actions.started)
+	}
+}
+
+// While another action runs, the approval is kept, and the caller told to
+// approve again shortly.
+func TestApprovalWhileAnotherActionRuns(t *testing.T) {
+	c, high, _ := actionsAPI(t, &fakeActions{err: assistant.ErrActionRunning})
+
+	_, err := c.Approve(high, "")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict || !strings.Contains(err.Error(), "approve it again") {
+		t.Fatalf("got %v, want a 409", err)
+	}
+	inc, err := c.Incident(high)
+	if err != nil || inc.Review == nil || inc.Review.Verdict != assistant.VerdictApproved {
+		t.Errorf("the approval should be kept: %+v, %v", inc, err)
+	}
+}

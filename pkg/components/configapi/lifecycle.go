@@ -248,73 +248,29 @@ func (s *Service) handleRestart(w http.ResponseWriter, r *http.Request) {
 	}, nil)
 }
 
-// accept records the run, starts the executor and answers 202. Taking the lock
-// is what makes this the only writer: a second request, or kubesoloctl, finds
-// it held or finds the run recorded and in flight.
+// accept records the run, starts the executor and answers 202. Queueing takes
+// the lock, which is what makes this the only writer: a second request, or
+// kubesoloctl, finds it held or finds the run recorded and in flight.
 func (s *Service) accept(w http.ResponseWriter, r *http.Request, job upgrade.Job, target *upgrade.Manifest) {
-	l := s.layout()
-	lock, err := upgrade.TryLock(l)
-	if errors.Is(err, upgrade.ErrBusy) {
-		writeErrorFor(w, r, http.StatusConflict, ErrorResponse{Error: upgrade.ErrBusy.Error()})
-		return
-	}
-	if err != nil {
-		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
-		return
-	}
-	defer lock.Unlock()
-
-	state, err := upgrade.LoadState(l)
-	if err != nil {
-		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
-		return
-	}
-	if state.InFlight() {
-		writeErrorFor(w, r, http.StatusConflict, ErrorResponse{
-			Error: fmt.Sprintf("%s (run %s, %s to %s, %s)", upgrade.ErrBusy, state.Current.ID, state.Current.From, state.Current.To, state.Current.Phase),
-		})
-		return
-	}
-
-	jobFile, err := upgrade.WriteJob(l, job)
-	if err != nil {
-		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
-		return
-	}
-
-	now := time.Now().UTC()
-	run := &upgrade.Run{
-		ID: job.ID, Operation: job.Operation, From: job.From, To: job.Request.Version,
-		Phase: upgrade.PhaseQueued, Started: now, Updated: now,
-	}
-	run.Log("accepted by the API")
+	notes := []string{"accepted by the API"}
 	if target != nil {
-		run.Log("rolling back to %s restores the datastore as it was when %s was installed; changes made since are lost", target.From, target.To)
+		notes = append(notes, fmt.Sprintf("rolling back to %s restores the datastore as it was when %s was installed; changes made since are lost", target.From, target.To))
 	}
-	previous := state.Current
-	state.Current = run
-	if err := upgrade.SaveState(l, state); err != nil {
-		_ = os.Remove(jobFile)
-		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+	accepted, err := upgrade.Queue(s.layout(), job, s.opts.Lifecycle.Spawn, notes...)
+	switch {
+	case errors.Is(err, upgrade.ErrBusy):
+		writeErrorFor(w, r, http.StatusConflict, ErrorResponse{Error: err.Error()})
 		return
-	}
-
-	if err := s.opts.Lifecycle.Spawn(jobFile); err != nil {
-		state.Current = previous
-		_ = upgrade.SaveState(l, state)
-		_ = os.Remove(jobFile)
-		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: "could not start the " + string(job.Operation) + ": " + err.Error()})
+	case err != nil:
+		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	record(r, func(rl *requestLog) {
 		rl.changed = []string{string(job.Operation) + " " + job.From + " -> " + job.Request.Version}
 	})
-	w.Header().Set("Location", "/api/v1/status")
-	writeJSON(w, http.StatusAccepted, upgrade.Accepted{
-		ID: job.ID, Operation: job.Operation, From: job.From, To: job.Request.Version,
-		StatusPath: "/api/v1/status",
-	})
+	w.Header().Set("Location", accepted.StatusPath)
+	writeJSON(w, http.StatusAccepted, accepted)
 }
 
 // handleStatus reports the running version, health, the Portainer agent image

@@ -90,6 +90,10 @@ type kubesolo struct {
 	// assistant triages the incidents; nil when the assistant is disabled or
 	// cannot run.
 	assistant *assistant.Assistant
+
+	// actions carries out approved actions; nil when the assistant is
+	// disabled, or in container mode, where KubeSolo cannot restart itself.
+	actions *assistant.Runner
 }
 
 // the channels for the kubesolo application
@@ -503,8 +507,15 @@ func (s *kubesolo) run() {
 	if s.incidents != nil {
 		s.wg.Go(func() { s.watchComponents(ctx) })
 		s.wg.Go(func() { s.watchWorkloads(ctx) })
+		if s.actions != nil {
+			s.wg.Go(func() { s.settleActions(ctx) })
+		}
 		if s.assistant != nil {
-			s.wg.Go(func() { (&assistant.Triager{Assistant: s.assistant, Store: s.incidents}).Run(ctx) })
+			triager := &assistant.Triager{Assistant: s.assistant, Store: s.incidents}
+			if s.cfg.Assistant.AutoRestart && s.actions != nil {
+				triager.OnTriaged = func(inc assistant.Incident) { s.actions.Auto(ctx, inc) }
+			}
+			s.wg.Go(func() { triager.Run(ctx) })
 		}
 	}
 
@@ -902,6 +913,7 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 		Assistant: s.newAssistant(ctx),
 		Incidents: s.incidentsForAPI(),
 		Reporter:  s.reporterForAPI(),
+		Actions:   s.actionsForAPI(),
 		Lifecycle: &configapi.Lifecycle{
 			Version:       Version,
 			Commit:        Commit,
@@ -1121,6 +1133,42 @@ func (s *kubesolo) assistantChecks() map[string]func(context.Context) error {
 	checks := metrics.Probers(s.embedded)
 	maps.Copy(checks, assistant.HostChecks(s.cfg.Path))
 	return checks
+}
+
+// actionsForAPI carries out approved actions, or is nil when they are not. It
+// must be an untyped nil, which the API reads as not carried out.
+func (s *kubesolo) actionsForAPI() configapi.Actions {
+	if s.incidents == nil || s.embedded.ContainerMode {
+		return nil
+	}
+	s.actions = &assistant.Runner{
+		Actor: &node.Actor{
+			Checks:  s.assistantChecks(),
+			Layout:  upgrade.NewLayout(s.cfg.Path, *flags.Config),
+			Version: Version,
+			Spawn:   spawnUpgradeExecutor,
+
+			RuntimeEndpoint: s.embedded.RuntimeEndpoint,
+			CgroupRoot:      "/sys/fs/cgroup",
+		},
+		Store: s.incidents,
+	}
+	return s.actions
+}
+
+// settleActions records how actions left running ended: a restart, which
+// outlives the KubeSolo that asked for it, or one cut short by a stop.
+func (s *kubesolo) settleActions(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		s.actions.Settle(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // reporterForAPI writes the assistant's report, or is nil when the assistant

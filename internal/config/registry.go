@@ -432,6 +432,12 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Assistant.ContextSize, v) },
 		},
 		{
+			ConfigPath: "assistant.autoRestart",
+			Envar:      "KUBESOLO_ASSISTANT_AUTO_RESTART",
+			Get:        func(c *types.Config) any { return c.Assistant.AutoRestart },
+			Set:        func(c *types.Config, v string) error { return setBool(&c.Assistant.AutoRestart, v) },
+		},
+		{
 			ConfigPath: "metrics.enabled",
 			Flag:       "metrics-server",
 			Envar:      "KUBESOLO_METRICS_SERVER",

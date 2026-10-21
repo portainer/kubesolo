@@ -55,7 +55,7 @@ func (s *service) repairWALIfCorrupt() {
 func (s *service) handleCorruption(dbPath string, format string, args ...any) {
 	if s.dbWALRepair {
 		log.Warn().Str("component", "kine").Msgf(format+", removing WAL artefacts to recover from unclean shutdown", args...)
-		removeWALArtefacts(dbPath)
+		RemoveWALArtefacts(dbPath)
 		return
 	}
 
@@ -66,7 +66,9 @@ func (s *service) handleCorruption(dbPath string, format string, args ...any) {
 	)
 }
 
-func removeWALArtefacts(dbPath string) {
+// RemoveWALArtefacts removes the database's WAL and shared-memory files, so
+// that SQLite falls back to the last cleanly checkpointed state.
+func RemoveWALArtefacts(dbPath string) {
 	for _, suffix := range []string{"-wal", "-shm"} {
 		path := dbPath + suffix
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {

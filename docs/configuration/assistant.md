@@ -37,6 +37,7 @@ assistant:
 | `assistant.model` | `KUBESOLO_ASSISTANT_MODEL` | `""` |
 | `assistant.knowledge` | `KUBESOLO_ASSISTANT_KNOWLEDGE` | `""` |
 | `assistant.contextSize` | `KUBESOLO_ASSISTANT_CONTEXT_SIZE` | `8192` |
+| `assistant.autoRestart` | `KUBESOLO_ASSISTANT_AUTO_RESTART` | `false` |
 
 Changes take effect when KubeSolo restarts. `contextSize` is the context window in tokens: raising it lets longer questions through and raises the memory held while answering.
 
@@ -175,7 +176,23 @@ IDs sort in time order, and incidents are served in that order, so a poller asks
 
 ### Reviews
 
-A person can say whether a diagnosis was right. Reviews are kept with the incident, as the labelled data the model and its knowledge are measured — and later trained — against. **No action is carried out yet**: approving only records agreement.
+A person can say whether a diagnosis was right. Reviews are kept with the incident, as the labelled data the model and its knowledge are measured — and later trained — against.
+
+**Approving an action carries it out.** First its preconditions are checked again against the node as it is now, not as it was at the incident; if they no longer hold, the action is refused and nothing is done. The incident's `actionRun` says how it went: `running`, `succeeded`, `failed` or `refused`, with the reason. One action is carried out at a time; approving while another runs keeps the approval and answers `409` — approve again shortly.
+
+| Action | Carried out as | Only when |
+|---|---|---|
+| `restart_component` | KubeSolo is restarted by the upgrade executor, from outside it, and checked healthy, as `POST /api/v1/restart` does: it reads the configuration file again, and if KubeSolo or the Portainer agent does not come back, the configuration it last ran healthy on is put back. Pods keep running across it, as across an upgrade. It has succeeded only once every component passes its health check again; one still failing 5 minutes later fails it | A component still fails its health check |
+| `repair_database` | As a restart, with the datastore's WAL files dropped while KubeSolo is stopped, as `storage.dbWALRepair` does at start. The datastore as it was is kept under `/var/lib/kubesolo/upgrade/repair-<id>/` | SQLite's integrity check fails now: a sound datastore is never repaired, as repairing drops its latest writes |
+| `prune_images` | Images that no container uses, running or stopped, are removed; pinned ones, such as the pause image, are kept. **An image imported on an air-gapped node cannot be pulled again** | The disk is 90% or more used, and some image is unused |
+| `clean_orphaned_containers` | The processes of each container whose cgroup outlives it — the runtime reports it exited, or no longer knows it, while the kubelet may have started a second copy — are killed. Its pod is left alone | Such containers are found in two scans 10 seconds apart |
+| `free_disk_space`, `report_only` | Not carried out: a person must act | — |
+
+With `assistant.autoRestart: true`, a `restart_component` rated `high` is carried out without approval, when a component still fails, at most once an hour; its `actionRun` says `"auto": true`. Every other action waits for approval.
+
+A datastore damaged badly enough usually stops KubeSolo from starting, so the assistant cannot run to repair it; `storage.dbWALRepair: true` repairs it at start.
+
+Actions are not carried out in container mode, where KubeSolo cannot restart itself.
 
 ```bash
 sudo kubesoloctl assistant approve <id> --note "kubelet was wedged"
@@ -220,6 +237,7 @@ sudo kubesoloctl assistant report --json   # for a program
 |---|---|
 | `awaiting approval` | The action is rated `high` and nobody has reviewed it yet |
 | `approved` / `rejected` | Reviewed |
+| `action running` / `succeeded` / `failed` / `refused` | The approved action, carried out |
 | `not offered` | The action is rated below `high`, so it is only reported |
 | `report only` | The model found nothing to do, or something a person must do |
 | `triage failed` / `triage skipped` | No diagnosis; the triage's `reason` says why |

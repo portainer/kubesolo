@@ -27,6 +27,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/process"
 	"github.com/portainer/kubesolo/internal/upgrade"
+	"github.com/portainer/kubesolo/pkg/kine"
 	"github.com/rs/zerolog/log"
 )
 
@@ -551,10 +552,18 @@ func (e *executor) rollback() (upgrade.Result, error) {
 // back, the configuration KubeSolo last ran healthy on is put back: the agent
 // is the only way to reach most edge devices, and a configuration that loses
 // it cannot be corrected from Portainer.
+//
+// It is also the assistant's restart_component, and, with RepairDatastore,
+// its repair_database.
 func (e *executor) restart() (upgrade.Result, error) {
 	e.phase(upgrade.PhasePreflight)
 	if err := upgrade.ValidateHealthTimeout(e.job.Request.HealthTimeoutSeconds); err != nil {
 		return upgrade.ResultAborted, err
+	}
+	// The boot guard counts starts while a new version is being proven, and
+	// would take a restart for a failed one.
+	if _, err := os.Stat(e.l.PendingFile()); err == nil {
+		return upgrade.ResultAborted, errors.New("an upgrade is still being proven; KubeSolo is not restarted meanwhile")
 	}
 	if err := e.detectHost(); err != nil {
 		return upgrade.ResultAborted, err
@@ -653,6 +662,14 @@ func (e *executor) apply(h restartHost, timeout time.Duration) error {
 	if err := h.stop(e.ctx); err != nil {
 		return notStopped{fmt.Errorf("stop KubeSolo: %w", err)}
 	}
+	if e.job.Request.RepairDatastore && e.run.Phase != upgrade.PhaseRollingBack {
+		if err := e.repairDatastore(); err != nil {
+			// Nothing was changed: KubeSolo is started again as it was.
+			e.logf("the datastore was not repaired: %v", err)
+			_ = h.start()
+			return notStopped{fmt.Errorf("repair the datastore: %w", err)}
+		}
+	}
 	e.step(upgrade.PhaseStarting)
 	if err := h.start(); err != nil {
 		return fmt.Errorf("start KubeSolo %s: %w", e.from, err)
@@ -727,6 +744,33 @@ func later(a, b time.Time) time.Time {
 		return a
 	}
 	return b
+}
+
+// repairDatastore backs the datastore up, then drops its WAL artefacts as
+// storage.dbWALRepair does at start. The backup is kept, for recovery by hand
+// if the repair is not enough.
+func (e *executor) repairDatastore() error {
+	backup := e.l.RepairBackupDir(e.job.ID)
+	if err := os.MkdirAll(backup, 0o700); err != nil {
+		return err
+	}
+	db := e.l.Datastore()
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		src := db + suffix
+		info, err := os.Stat(src)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := CloneFile(src, filepath.Join(backup, filepath.Base(src)), info.Mode()); err != nil {
+			return fmt.Errorf("back up %s: %w", src, err)
+		}
+	}
+	kine.RemoveWALArtefacts(db)
+	e.logf("repaired the datastore by dropping its WAL artefacts; the datastore as it was is in %s", backup)
+	return nil
 }
 
 func (e *executor) verifyBackupBinary(m *upgrade.Manifest) error {

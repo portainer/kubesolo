@@ -388,3 +388,17 @@ func TestTheModelDoesNotRateItself(t *testing.T) {
 		t.Errorf("the model is still asked for its confidence: %s", raw)
 	}
 }
+
+// Each incident is handed on once triaged, for an automatic restart.
+func TestTriagedIncidentsAreHandedOn(t *testing.T) {
+	tr, _ := newTestTriager(t, "diagnose")
+	var handed []Incident
+	tr.OnTriaged = func(inc Incident) { handed = append(handed, inc) }
+	inc := pendingIncident(t, tr.Store, tr.now(), "kine")
+
+	tr.triagePending(context.Background(), tr.now())
+
+	if len(handed) != 1 || handed[0].ID != inc.ID || handed[0].Triage == nil || handed[0].Triage.Status != TriageDone {
+		t.Errorf("handed on %+v", handed)
+	}
+}

@@ -248,6 +248,12 @@ type AssistantConfig struct {
 	// ContextSize is the context window in tokens. It sizes the memory held
 	// while answering.
 	ContextSize int `json:"contextSize"`
+
+	// AutoRestart lets the assistant restart KubeSolo without approval, when
+	// an incident calls for restart_component rated high and a component
+	// still fails: at most once an hour. Every other action waits for
+	// approval.
+	AutoRestart bool `json:"autoRestart"`
 }
 
 // ConfigAPI covers the config API itself.

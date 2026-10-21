@@ -3,6 +3,7 @@ api:
   socketPath: ""
 apiVersion: kubesolo.io/v1alpha1
 assistant:
+  autoRestart: false
   contextSize: 8192
   enabled: false
   knowledge: ""

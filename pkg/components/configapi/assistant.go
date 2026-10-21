@@ -90,6 +90,11 @@ type ReviewRequest struct {
 // reviewVerbs maps each verb on an incident to its review verdict.
 var reviewVerbs = map[string]string{"approve": assistant.VerdictApproved, "reject": assistant.VerdictRejected}
 
+// Actions carries out an incident's approved action, in the background.
+type Actions interface {
+	Start(ctx context.Context, id string) error
+}
+
 // Reporter writes the assistant's report on the node.
 type Reporter interface {
 	Report(ctx context.Context) (assistant.Report, error)
@@ -130,8 +135,8 @@ func (s *Service) handleIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleReview records a review: POST /api/v1/assistant/incidents/{id}:approve
-// or {id}:reject. Approving agrees with the suggested action; nothing is
-// carried out yet.
+// or {id}:reject. Approving agrees with the suggested action, and carries it
+// out when actions are; the incident's actionRun says how it went.
 func (s *Service) handleReview(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Incidents == nil {
 		writeErrorFor(w, r, http.StatusNotFound, assistantDisabled)
@@ -170,6 +175,20 @@ func (s *Service) handleReview(w http.ResponseWriter, r *http.Request) {
 		writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 	default:
 		record(r, func(rl *requestLog) { rl.changed = []string{"assistant.incidents." + id + ".review"} })
+		if verdict == assistant.VerdictApproved && s.opts.Actions != nil {
+			// The action outlives the request.
+			switch err := s.opts.Actions.Start(context.WithoutCancel(r.Context()), id); {
+			case errors.Is(err, assistant.ErrActionRunning):
+				writeErrorFor(w, r, http.StatusConflict, ErrorResponse{Error: "approved, but " + err.Error() + ": approve it again to carry it out"})
+				return
+			case err != nil && !errors.Is(err, assistant.ErrAlreadyCarriedOut):
+				writeErrorFor(w, r, http.StatusInternalServerError, ErrorResponse{Error: "approved, but the action could not be started: " + err.Error()})
+				return
+			}
+			if updated, err := s.opts.Incidents.Get(id); err == nil {
+				inc = updated
+			}
+		}
 		writeJSON(w, http.StatusOK, inc)
 	}
 }

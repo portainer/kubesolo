@@ -263,6 +263,7 @@ assistant:
   model: ""               # "" = the default model; or a GGUF path, or a model artifact
   knowledge: ""           # "" = the default knowledge; or a Markdown path, or an artifact
   contextSize: 8192
+  autoRestart: false      # restart KubeSolo without approval, for a high-rated restart
 ```
 
 Only `kubernetes:` groups its contents, because that family grows: the API
@@ -282,6 +283,7 @@ of KubeSolo's own on the same port are refused before anything starts.
 |---|---|---|---|
 | `api.enabled` | `boolean` | `false` |
 | `api.socketPath` | `string` | `""` |
+| `assistant.autoRestart` | `boolean` | `false` |
 | `assistant.contextSize` | `integer` | `8192` |
 | `assistant.enabled` | `boolean` | `false` |
 | `assistant.knowledge` | `string` | `""` |

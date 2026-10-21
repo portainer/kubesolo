@@ -138,6 +138,10 @@ func (l Layout) AttemptsFile() string { return filepath.Join(l.Dir(), "attempts"
 // binary, so that the next KubeSolo can report what happened.
 func (l Layout) GuardLog() string { return filepath.Join(l.Dir(), "guard.log") }
 
+// RepairBackupDir keeps the datastore as it was before restart id repaired
+// it.
+func (l Layout) RepairBackupDir(id string) string { return filepath.Join(l.Dir(), "repair-"+id) }
+
 // DatastoreDir is kine's database directory.
 func (l Layout) DatastoreDir() string {
 	return filepath.Join(l.DataDir, types.DefaultKineDir, "db")

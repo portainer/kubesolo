@@ -55,6 +55,10 @@ type Options struct {
 	// Reporter writes the assistant's report; nil when the assistant is
 	// disabled.
 	Reporter Reporter
+
+	// Actions carries out approved actions; nil when they are not carried
+	// out, as in container mode.
+	Actions Actions
 }
 
 // Service is the configuration API. It follows the same NewService/Run + readyCh
