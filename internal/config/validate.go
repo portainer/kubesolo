@@ -11,6 +11,7 @@ import (
 	"github.com/distribution/reference"
 	"github.com/portainer/kubesolo/internal/config/cpumanager"
 	"github.com/portainer/kubesolo/internal/runtime/cri"
+	"github.com/portainer/kubesolo/pkg/assistant"
 	"github.com/portainer/kubesolo/types"
 )
 
@@ -103,7 +104,7 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 			return warnings, fmt.Errorf("assistant.model: %w", err)
 		}
 		cfg.Assistant.Model = model
-		if !filepath.IsAbs(model) && cfg.Runtime.Endpoint != "" {
+		if isArtifact(model) && cfg.Runtime.Endpoint != "" {
 			return warnings, fmt.Errorf("assistant.model: a model artifact is fetched through KubeSolo's own containerd, which runtime.endpoint replaces; use an absolute path to a GGUF file instead")
 		}
 		knowledge, err := normaliseAssistantSource(cfg.Assistant.Knowledge, ".md")
@@ -111,7 +112,7 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 			return warnings, fmt.Errorf("assistant.knowledge: %w", err)
 		}
 		cfg.Assistant.Knowledge = knowledge
-		if !filepath.IsAbs(knowledge) && cfg.Runtime.Endpoint != "" {
+		if isArtifact(knowledge) && cfg.Runtime.Endpoint != "" {
 			return warnings, fmt.Errorf("assistant.knowledge: a knowledge artifact is fetched through KubeSolo's own containerd, which runtime.endpoint replaces; use an absolute path to a knowledge file instead")
 		}
 		if cfg.Assistant.ContextSize <= 0 {
@@ -336,13 +337,23 @@ func assistantUnsupported(host Host) string {
 	return ""
 }
 
+// isArtifact reports whether an assistant source is an artifact reference,
+// fetched through KubeSolo's own containerd. "" is the default artifact.
+func isArtifact(source string) bool {
+	return !filepath.IsAbs(source) && !strings.HasPrefix(source, assistant.VolumePrefix)
+}
+
 // normaliseAssistantSource accepts "" (the default artifact), an absolute path
-// to a file, or an artifact reference, which it fully qualifies. A relative
+// to a file, a file in a PersistentVolumeClaim (pvc:<namespace>/<claim>/<path>),
+// or an artifact reference, which it fully qualifies. A relative
 // path, recognised by the file's extension, is refused.
 func normaliseAssistantSource(source, ext string) (string, error) {
 	switch {
 	case source == "" || filepath.IsAbs(source):
 		return source, nil
+	case strings.HasPrefix(source, assistant.VolumePrefix):
+		_, err := assistant.ParseVolumeSource(source)
+		return source, err
 	case strings.HasSuffix(source, ext):
 		return "", fmt.Errorf("%q must be an absolute path", source)
 	}

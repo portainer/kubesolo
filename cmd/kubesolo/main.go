@@ -49,6 +49,7 @@ import (
 	"github.com/portainer/kubesolo/pkg/runtime/containerd"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 )
 
@@ -967,16 +968,65 @@ func (s *kubesolo) newAssistant(ctx context.Context) configapi.Asker {
 		cfg.Knowledge = knowledge
 	}
 	a := assistant.New(cfg)
-	if cfg.Model == "" {
+	switch {
+	case cfg.Model != "":
+	case strings.HasPrefix(model, assistant.VolumePrefix):
+		s.wg.Go(func() { s.fetchAssistantVolume(ctx, "model", model, node.ModelInVolume, a.SetModel, node.ErrNotAModel) })
+	default:
 		s.wg.Go(func() { s.fetchAssistantArtifact(ctx, "model", model, node.FetchModel, a.SetModel, node.ErrNotAModel) })
 	}
-	if cfg.Knowledge == "" {
+	switch {
+	case cfg.Knowledge != "":
+	case strings.HasPrefix(knowledge, assistant.VolumePrefix):
+		s.wg.Go(func() {
+			s.fetchAssistantVolume(ctx, "knowledge", knowledge, node.KnowledgeInVolume, a.SetKnowledge, node.ErrNotKnowledge)
+		})
+	default:
 		s.wg.Go(func() {
 			s.fetchAssistantArtifact(ctx, "knowledge", knowledge, node.FetchKnowledge, a.SetKnowledge, node.ErrNotKnowledge)
 		})
 	}
 	s.assistant = a
 	return a
+}
+
+// fetchAssistantVolume finds the model or knowledge in its
+// PersistentVolumeClaim, retrying until the claim is bound and the file is
+// there: a Job may be filling it. A file that is notUsable is not retried.
+func (s *kubesolo) fetchAssistantVolume(ctx context.Context, what, ref string,
+	find func(context.Context, kubernetes.Interface, assistant.VolumeSource) (string, error),
+	set func(string, error), notUsable error) {
+	src, err := assistant.ParseVolumeSource(ref)
+	if err != nil {
+		set("", err)
+		return
+	}
+	for {
+		path, err := func() (string, error) {
+			cs, err := kubesolokubernetes.GetKubernetesClient(s.embedded.AdminKubeconfigFile)
+			if err != nil {
+				return "", err
+			}
+			return find(ctx, cs, src)
+		}()
+		if err == nil || errors.Is(err, notUsable) {
+			set(path, err)
+		}
+		if err == nil {
+			log.Info().Str("component", "assistant").Str(what, ref).Str("path", path).Msgf("%s is ready", what)
+			return
+		}
+		if errors.Is(err, notUsable) {
+			log.Error().Str("component", "assistant").Str(what, ref).Err(err).Msgf("cannot use the %s", what)
+			return
+		}
+		log.Info().Str("component", "assistant").Str(what, ref).Err(err).Msgf("the %s is not in its volume yet, retrying in a minute", what)
+		select {
+		case <-time.After(time.Minute):
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // fetchAssistantArtifact fetches the model or knowledge artifact once

@@ -52,6 +52,7 @@ KubeSolo only ever reads the model. `assistant.model` takes one of three forms:
 | `""` (default) | Qwen3.5-2B at 4-bit (about 1.3 GB), fetched from `docker.io/portainerci/kubesolo-assistant-model`, pinned by digest |
 | `/var/lib/kubesolo-models/mine.gguf` | A GGUF file on the host |
 | `registry.example.com/models/mine:v1` | A model artifact in a registry |
+| `pvc:ai/models/mine.gguf` | A GGUF file in a PersistentVolumeClaim: `pvc:<namespace>/<claim>/<path in the volume>` |
 
 A model from a registry is fetched once containerd is up, in the background; a question asked before it arrives is answered with "the model is still being downloaded". If the registry cannot be reached, KubeSolo retries every minute. Once fetched, the model is kept in containerd's store, in a namespace of its own that the kubelet's image cleanup does not touch, and is used from there on every later start without contacting the registry.
 
@@ -60,6 +61,26 @@ journalctl -u kubesolo | grep "model is ready"
 ```
 
 Registry mirrors and credentials come from the same [`hosts.toml` files](registry.md) as the rest of the node. A model artifact cannot be fetched with `runtime.endpoint` set, since it goes through KubeSolo's own containerd; use a file path there.
+
+A model in a PersistentVolumeClaim lets a Kubernetes Job download or build it. KubeSolo reads it in place, from the volume's directory on the host, once the claim is bound and the file is there, and looks again every minute until then. The volume must be a directory on the host, as the local-path provisioner's are; a path that leads out of the volume, through `..` or a link, is refused.
+
+### Without a registry
+
+An air-gapped node takes the model and the knowledge as files. On a machine that can reach the registry:
+
+```bash
+oras pull docker.io/portainerci/kubesolo-assistant-model:qwen3.5-2b-q4_k_m -o model/
+oras pull docker.io/portainerci/kubesolo-assistant-knowledge:v1 -o knowledge/
+```
+
+Copy `model/model.gguf` and `knowledge/knowledge.md` to the node, and name them:
+
+```yaml
+assistant:
+  enabled: true
+  model: /var/lib/kubesolo-models/model.gguf
+  knowledge: /var/lib/kubesolo-models/knowledge.md
+```
 
 ### Publishing a model artifact
 
@@ -80,6 +101,7 @@ To triage an incident, the model is given a **knowledge file**: a Markdown descr
 | `""` (default) | [`build/assistant/knowledge.md`](../../build/assistant/knowledge.md), fetched from `docker.io/portainerci/kubesolo-assistant-knowledge` |
 | `/etc/kubesolo/knowledge.md` | A Markdown file on the host |
 | `registry.example.com/kubesolo/knowledge:v2` | A knowledge artifact in a registry |
+| `pvc:ai/models/knowledge.md` | A Markdown file in a PersistentVolumeClaim |
 
 Its `## Harmless lines` section lists, in quotes, text that healthy nodes log routinely — startup noise a small model would otherwise take for the cause. KubeSolo removes any log line or event containing one of those texts before the model reads an incident, so quote only exact text that never shows a fault. The incident itself keeps every line.
 

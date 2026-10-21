@@ -640,6 +640,28 @@ func TestAssistantModelRejected(t *testing.T) {
 	}
 }
 
+// A model or knowledge in a PersistentVolumeClaim is named
+// pvc:<namespace>/<claim>/<path in the volume>.
+func TestAssistantSourceInAVolume(t *testing.T) {
+	for _, ok := range []string{"pvc:ai/models/qwen/model.gguf", "pvc:default/k/knowledge.md"} {
+		cfg := assistantEnabled()
+		cfg.Assistant.Model = ok
+		if _, err := Validate(cfg, testHost()); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+		if cfg.Assistant.Model != ok {
+			t.Errorf("%q was changed to %q", ok, cfg.Assistant.Model)
+		}
+	}
+	for _, bad := range []string{"pvc:", "pvc:ai/models", "pvc:ai/models/", "pvc:ai/Models/m.gguf", "pvc:ai/models/../etc/passwd", "pvc:ai/models//m.gguf", "pvc:ai/models/a/../m.gguf"} {
+		cfg := assistantEnabled()
+		cfg.Assistant.Model = bad
+		if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), "pvc:") {
+			t.Errorf("%q: got %v, want an error about the pvc: form", bad, err)
+		}
+	}
+}
+
 func TestAssistantKnowledge(t *testing.T) {
 	for _, tc := range []struct {
 		knowledge, want string

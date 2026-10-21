@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"unicode/utf8"
 
@@ -77,8 +78,7 @@ func fetch(ctx context.Context, c *client.Client, ref, registryDir, containerdRo
 // without unpacking a second copy, so it is refused.
 func modelFile(ctx context.Context, cs content.Provider, target ocispec.Descriptor, contentDir string) (string, error) {
 	return layerFile(ctx, cs, target, contentDir, ErrNotAModel, func(ra content.ReaderAt) error {
-		magic := make([]byte, len(ggufMagic))
-		if _, err := ra.ReadAt(magic, 0); err != nil || string(magic) != ggufMagic {
+		if !isGGUF(ra) {
 			return errors.New("its layer is not a GGUF file; push the .gguf itself as the layer, e.g. with oras push")
 		}
 		return nil
@@ -90,15 +90,8 @@ func modelFile(ctx context.Context, cs content.Provider, target ocispec.Descript
 // layer is stored.
 func knowledgeFile(ctx context.Context, cs content.Provider, target ocispec.Descriptor, contentDir string) (string, error) {
 	return layerFile(ctx, cs, target, contentDir, ErrNotKnowledge, func(ra content.ReaderAt) error {
-		if ra.Size() > assistant.MaxKnowledgeBytes {
-			return fmt.Errorf("its layer is %d bytes, and can be at most %d", ra.Size(), assistant.MaxKnowledgeBytes)
-		}
-		b := make([]byte, ra.Size())
-		if _, err := ra.ReadAt(b, 0); err != nil {
-			return err
-		}
-		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
-			return errors.New("its layer is not text; push the Markdown file itself as the layer, e.g. with oras push")
+		if err := checkKnowledge(ra, ra.Size()); err != nil {
+			return fmt.Errorf("its layer %w; push the Markdown file itself as the layer, e.g. with oras push", err)
 		}
 		return nil
 	})
@@ -133,4 +126,27 @@ func layerFile(ctx context.Context, cs content.Provider, target ocispec.Descript
 	}
 
 	return filepath.Join(contentDir, "blobs", layer.Digest.Algorithm().String(), layer.Digest.Encoded()), nil
+}
+
+// isGGUF reports whether r starts as a GGUF file does.
+func isGGUF(r io.ReaderAt) bool {
+	magic := make([]byte, len(ggufMagic))
+	_, err := r.ReadAt(magic, 0)
+	return err == nil && string(magic) == ggufMagic
+}
+
+// checkKnowledge says why r, of size bytes, cannot be the knowledge: too large
+// for the model's prompt, or not text.
+func checkKnowledge(r io.ReaderAt, size int64) error {
+	if size > assistant.MaxKnowledgeBytes {
+		return fmt.Errorf("is %d bytes, and can be at most %d", size, assistant.MaxKnowledgeBytes)
+	}
+	b := make([]byte, size)
+	if _, err := r.ReadAt(b, 0); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
+		return errors.New("is not text")
+	}
+	return nil
 }
