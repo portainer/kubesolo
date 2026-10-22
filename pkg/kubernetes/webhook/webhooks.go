@@ -196,6 +196,32 @@ func (w *Service) processJobMutation(admissionReview *admissionv1.AdmissionRevie
 		Str("namespace", job.Namespace).
 		Msg("processing job")
 
+	nodeSelector := job.Spec.Template.Spec.NodeSelector
+	if _, exists := nodeSelector["kubernetes.io/hostname"]; exists {
+		log.Debug().Str("component", "webhook").
+			Str("job", job.Name).
+			Str("namespace", job.Namespace).
+			Msg("job already has hostname node selector")
+		return nil
+	}
+
+	if nodeSelector != nil {
+		log.Info().Str("component", "webhook").
+			Str("job", job.Name).
+			Str("namespace", job.Namespace).
+			Str("node", w.nodeName).
+			Msg("setting node selector for job")
+
+		// Adding the whole map would replace the job's existing node selector, so add only the key ("/" escaped as "~1")
+		return []map[string]any{
+			{
+				"op":    "add",
+				"path":  "/spec/template/spec/nodeSelector/kubernetes.io~1hostname",
+				"value": w.nodeName,
+			},
+		}
+	}
+
 	log.Info().Str("component", "webhook").
 		Str("job", job.Name).
 		Str("namespace", job.Namespace).

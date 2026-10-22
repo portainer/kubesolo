@@ -84,3 +84,52 @@ func TestPVCMutationKeepsAnnotations(t *testing.T) {
 		})
 	}
 }
+
+func TestJobMutationKeepsNodeSelector(t *testing.T) {
+	tests := []struct {
+		name         string
+		nodeSelector string
+		want         map[string]string
+	}{
+		{
+			name: "no node selector",
+			want: map[string]string{"kubernetes.io/hostname": testNodeName},
+		},
+		{
+			name:         "empty node selector",
+			nodeSelector: `"nodeSelector":{}`,
+			want:         map[string]string{"kubernetes.io/hostname": testNodeName},
+		},
+		{
+			name:         "user node selector",
+			nodeSelector: `"nodeSelector":{"nvidia.com/gpu.present":"true"}`,
+			want: map[string]string{
+				"nvidia.com/gpu.present": "true",
+				"kubernetes.io/hostname": testNodeName,
+			},
+		},
+		{
+			name:         "hostname already set",
+			nodeSelector: `"nodeSelector":{"kubernetes.io/hostname":"other"}`,
+			want:         map[string]string{"kubernetes.io/hostname": "other"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := `{"apiVersion":"batch/v1","kind":"Job","metadata":{"name":"probe","namespace":"default"},"spec":{"template":{"spec":{` + tt.nodeSelector + `}}}}`
+
+			var got struct {
+				Spec struct {
+					Template struct {
+						Spec struct {
+							NodeSelector map[string]string `json:"nodeSelector"`
+						} `json:"spec"`
+					} `json:"template"`
+				} `json:"spec"`
+			}
+			require.NoError(t, json.Unmarshal(mutate(t, "Job", raw), &got))
+			require.Equal(t, tt.want, got.Spec.Template.Spec.NodeSelector)
+		})
+	}
+}
