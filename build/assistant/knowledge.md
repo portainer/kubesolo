@@ -2,24 +2,25 @@
 
 ## Reading an incident
 - trigger: "did not shut down cleanly" means the previous run crashed, hit a fatal error, was killed or lost power; recentErrors are that run's last errors. "unhealthy for 5m0s: X" names components that failed every health check for 5 minutes.
-- components: runtime = containerd, kine = the SQLite datastore (in place of etcd), apiserver, controller, kubelet, coredns, webhook. "ok" is healthy.
+- components: runtime = containerd, kine = the SQLite datastore (in place of etcd), apiserver, controller, kubelet, coredns, webhook. "ok" is healthy. disk and memory are checks of the host: disk fails at 90% used, memory under 200 MiB available.
+- Start from components: a failing component names the fault, and the incident is about it. Errors and events about single pods outside kube-system (BackOff, CrashLoopBackOff, ErrImagePull, ImagePullBackOff) are workloads failing on their own: never the cause of a component incident, and no evidence of disk or memory trouble.
 - When several components fail, find the first in this chain: runtime and kine, then apiserver, then controller, kubelet, coredns and webhook. kine down takes the apiserver down with it.
-- host: diskUsedPercent of 90 or more is a problem by itself; memoryAvailableMiB under 200 means memory pressure; a small uptimeSeconds means the host just booted.
-- Base the diagnosis on the evidence. If nothing below matches, say so: action report_only, confidence low.
+- host: diskUsedPercent of 90 or more is a problem by itself, and under 90 the disk is not full; memoryAvailableMiB under 200 means memory pressure; uptimeSeconds under 600 means the host just booted. When the disk is full, diskUsageMiB says what fills it: images, assistantModel, podLogs, volumes, datastore, other.
+- Base the diagnosis on the evidence. If nothing below matches, say so: action report_only.
 
 ## Actions
 - restart_component: a component is stuck but its data is sound.
 - repair_database: the kine database is damaged. KubeSolo repairs it on start with storage.dbWALRepair: true.
-- prune_images: the disk is full of unused images.
+- prune_images: the disk is full, and images are its largest use.
 - clean_orphaned_containers: pods run twice, or containers outlive KubeSolo.
-- free_disk_space: the disk is full of anything other than images.
+- free_disk_space: the disk is full of anything else.
 - report_only: a person must act: host configuration, hardware, network or an unsupported OS.
 
 ## Harmless lines
 These are logged by every healthy start and never show a fault. KubeSolo removes any log line or event containing one of the quoted texts below before you read the incident, so quote only exact text that is never a fault.
-- "Failed to parse etcd version", "checkpoint is not found", "required revision has been compacted", "Too large resource version".
+- "Failed to parse etcd version", "checkpoint is not found", "required revision has been compacted", "Too large resource version", "The resourceVersion for the provided list is too old".
 - "Could not construct pre-rendered responses", "Error removing old endpoints from kubernetes service", "namespaces \"kube-system\" not found", "namespaces \"default\" not found".
-- "Image garbage collection failed once. Stats initialization may not have completed yet", "Skipping pod synchronization", "PLEG is not healthy: pleg has yet to be successful", "eviction manager: failed to check if we have separate container filesystem", "Kube-proxy configuration may be incomplete".
+- "Error getting the current node from lister", "Image garbage collection failed once. Stats initialization may not have completed yet", "Skipping pod synchronization", "PLEG is not healthy: pleg has yet to be successful", "eviction manager: failed to check if we have separate container filesystem", "Kube-proxy configuration may be incomplete".
 - "cleaned stale containerd artifact", "removed stale system containerd socket", "Housekeeping took longer than expected".
 - Event "InvalidDiskCapacity: invalid capacity 0 on image filesystem" at node start.
 - "Failed to create existing container".
@@ -28,8 +29,8 @@ These are logged by every healthy start and never show a fault. KubeSolo removes
 
 ### Stopped without a fault
 Signs: trigger "did not shut down cleanly", and recentErrors hold only harmless lines, or none.
-Cause: KubeSolo was killed, or the host lost power or was reset. Nothing points to damage.
-Action: report_only, confidence low.
+Cause: KubeSolo was killed, or the host lost power or was reset. Nothing points to damage, and KubeSolo has already started again: there is nothing to restart.
+Action: report_only.
 
 ### Damaged datastore
 Signs: at least one of these errors: "database disk image is malformed", "file is not a database", "UID in precondition", "Failed to update lease", "poststarthook/rbac/bootstrap-roles failed", "provided IP is already allocated" for CoreDNS.
@@ -37,17 +38,17 @@ Cause: SQLite was left inconsistent by a power loss or kill.
 Action: repair_database.
 
 ### Datastore unreachable or too slow
-Signs: apiserver fails with "context deadline exceeded" or "connection refused" to 127.0.0.1:2379, "Error creating leases", "apiserver /healthz check failed", "shutdown requested before apiserver was ready"; KubeSolo restarts in a loop; kine unhealthy.
-Cause: kine cannot answer in time: slow storage such as an SD card, a full disk, or a blocked loopback port.
-Action: free_disk_space if the disk is 90% or more used, otherwise restart_component; report_only if it keeps recurring (slow storage).
+Signs: kine unhealthy; apiserver fails with "context deadline exceeded" or "connection refused" to 127.0.0.1:2379, "http: Handler timeout", "Post-timeout activity", "Error creating leases", "apiserver /healthz check failed", "shutdown requested before apiserver was ready"; KubeSolo restarts in a loop.
+Cause: kine cannot answer in time: slow storage such as an SD card, or a blocked loopback port. Timeouts and refused connections are not damage: repair_database is only for the errors under Damaged datastore. A full disk is an incident of its own, under Disk full.
+Action: restart_component.
 
 ### Container runtime stuck or slow
-Signs: runtime unhealthy; "containerd.sock: connect: connection refused" repeated; "failed to import images", "(*service).Write failed", "failed to prepare extraction snapshot", "context deadline exceeded" while importing; "StopContainer ... failed", "ttrpc: received message on inactive stream".
-Cause: containerd is overloaded, on slow storage, or out of disk.
-Action: free_disk_space or prune_images when the disk is 90% or more used, otherwise restart_component.
+Signs: runtime unhealthy; "containerd.sock: connect: connection refused" repeated, or "stat /var/lib/kubesolo/containerd/containerd.sock: no such file or directory"; "failed to import images", "(*service).Write failed", "failed to prepare extraction snapshot", "context deadline exceeded" while importing; "StopContainer ... failed", "ttrpc: received message on inactive stream".
+Cause: containerd is overloaded or on slow storage.
+Action: restart_component.
 
 ### Orphaned or duplicate pods
-Signs: pods running twice after a restart or upgrade; containers left in kubepods.slice after KubeSolo stopped; "ErrImageNeverPull" for images imported with ctr.
+Signs: pods running twice after a restart or upgrade; a pod failing with "bind: address already in use" on its own port after KubeSolo restarted, held by the copy left running; containers left in kubepods.slice after KubeSolo stopped; "ErrImageNeverPull" for images imported with ctr.
 Cause: containers outlived KubeSolo, and the new run started them again.
 Action: clean_orphaned_containers.
 
@@ -94,7 +95,10 @@ Action: report_only.
 ### Disk full
 Signs: diskUsedPercent 90 or more; "no space left on device"; events "FreeDiskSpaceFailed", "ImageGCFailed", "EvictionThresholdMet" or "Evicted" with ephemeral-storage.
 Cause: images, logs or volumes filled the disk.
-Action: prune_images when image garbage collection failed, otherwise free_disk_space.
+Action: prune_images only when diskUsageMiB shows images as the largest use; otherwise, or without diskUsageMiB, free_disk_space.
+
+## Workload incidents
+A trigger such as "shop/deployment/api failing for 5m0s: CrashLoopBackOff" means a workload on KubeSolo is failing, not KubeSolo. workload holds its pod's containers, how each last ended, and the failing container's last log lines. Say what the logs and events show: the error the application printed, the image that cannot be pulled, the missing config map or secret. Action: report_only.
 
 ## Common Kubernetes problems (from events)
 - "ErrImagePull", "ImagePullBackOff", "Failed to pull image": a wrong image name, missing registry credentials, or no network. report_only.
