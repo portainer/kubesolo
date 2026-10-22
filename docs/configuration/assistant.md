@@ -70,7 +70,7 @@ An air-gapped node takes the model and the knowledge as files. On a machine that
 
 ```bash
 oras pull docker.io/portainerci/kubesolo-assistant-model:qwen3.5-2b-q4_k_m -o model/
-oras pull docker.io/portainerci/kubesolo-assistant-knowledge:v1 -o knowledge/
+oras pull docker.io/portainerci/kubesolo-assistant-knowledge:0.1.0 -o knowledge/
 ```
 
 Copy `model/model.gguf` and `knowledge/knowledge.md` to the node, and name them:

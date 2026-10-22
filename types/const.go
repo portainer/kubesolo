@@ -91,7 +91,7 @@ const (
 	// assistant.knowledge is empty, pinned by digest. Its single layer is the
 	// Markdown file build/assistant/knowledge.md; it is published by the
 	// assistant-knowledge workflow.
-	DefaultAssistantKnowledge = "docker.io/portainerci/kubesolo-assistant-knowledge:v1@sha256:e1fddec3f782da531bd09d203f48c1c5af58868d699d48330b6900385e3fd30d"
+	DefaultAssistantKnowledge = "docker.io/portainerci/kubesolo-assistant-knowledge:0.1.0@sha256:0be9480383a295363ae9a9a4abaf131d898f9794219c6f44452342f7f0d6a1a6"
 
 	// DefaultAssistantStartTimeout bounds loading the model, which on slow
 	// storage such as an SD card takes minutes.

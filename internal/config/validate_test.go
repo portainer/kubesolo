@@ -668,7 +668,7 @@ func TestAssistantKnowledge(t *testing.T) {
 	}{
 		{"", ""}, // the default knowledge artifact
 		{"/etc/kubesolo/knowledge.md", "/etc/kubesolo/knowledge.md"},
-		{"portainerci/kubesolo-assistant-knowledge:v1", "docker.io/portainerci/kubesolo-assistant-knowledge:v1"},
+		{"portainerci/kubesolo-assistant-knowledge:0.1.0", "docker.io/portainerci/kubesolo-assistant-knowledge:0.1.0"},
 	} {
 		cfg := assistantEnabled()
 		cfg.Assistant.Knowledge = tc.knowledge
