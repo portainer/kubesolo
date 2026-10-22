@@ -291,8 +291,14 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 		return
 	}
 
+	// The agent was deployed from what KubeSolo started with, so until it has
+	// started with an agent configured, its settings can still be corrected.
+	base := current
+	if lc := s.opts.Lifecycle; lc != nil && lc.StartedWith != nil {
+		base = lc.StartedWith
+	}
 	var setOnce *config.SetOnceError
-	if err := config.CheckSetOnce(current, next); errors.As(err, &setOnce) {
+	if err := config.CheckSetOnce(base, next); errors.As(err, &setOnce) {
 		writeErrorFor(w, r, http.StatusConflict, ErrorResponse{Field: setOnce.Field, Error: err.Error()})
 		return
 	}

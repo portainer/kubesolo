@@ -206,7 +206,8 @@ Everything lives under `<path>/upgrade/`:
 | `pending`, `attempts` | Present while a new version is being verified. |
 | `guard.log` | Restores made by the boot guard. |
 | `config.good.yaml` | The configuration KubeSolo last ran healthy on. A failed `POST /api/v1/restart` puts it back. |
-| `started` | The PID of the KubeSolo that last finished starting. A restart is judged only once the restarted KubeSolo has written it. |
+| `started`, `started.yaml` | The PID of the KubeSolo that last finished starting, and the configuration file it started with. A restart is judged only once the restarted KubeSolo has written them, and the Portainer agent's set-once settings are checked against the configuration. |
+| `config.failed.yaml` | The configuration the last reverted restart failed on. |
 
 ## See also
 

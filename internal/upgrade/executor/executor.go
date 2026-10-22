@@ -698,8 +698,8 @@ func (e *executor) revert(h restartHost, cause error) (upgrade.Result, error) {
 	}
 	if failed, err := os.ReadFile(e.l.ConfigFile); err == nil {
 		// Readable by root only, whatever the file's mode: it holds the edge key.
-		if err := upgrade.WriteFileAtomic(e.l.FailedConfig(e.run.ID), failed, 0o600); err == nil {
-			e.logf("the configuration that failed is kept as %s", e.l.FailedConfig(e.run.ID))
+		if err := upgrade.WriteFileAtomic(e.l.FailedConfig(), failed, 0o600); err == nil {
+			e.logf("the configuration that failed is kept as %s", e.l.FailedConfig())
 		}
 	}
 	if err := upgrade.WriteFileAtomic(e.l.ConfigFile, e.good, mode); err != nil {

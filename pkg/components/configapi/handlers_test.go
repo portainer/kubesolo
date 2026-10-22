@@ -449,7 +449,7 @@ func TestAgentSettingsAreSetOnce(t *testing.T) {
 				t.Fatalf("status = %d, want 409: %s", resp.StatusCode, raw)
 			}
 			var apiErr ErrorResponse
-			if err := json.Unmarshal(raw, &apiErr); err != nil || apiErr.Field != tc.field || !strings.Contains(apiErr.Error, "once a Portainer agent is configured") {
+			if err := json.Unmarshal(raw, &apiErr); err != nil || apiErr.Field != tc.field || !strings.Contains(apiErr.Error, "once a Portainer agent is deployed") {
 				t.Errorf("error = %+v, %v", apiErr, err)
 			}
 			assertUnchanged(t, configPath, func(c *types.Config) bool {

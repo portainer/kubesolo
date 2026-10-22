@@ -14,6 +14,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/service"
 	"github.com/portainer/kubesolo/internal/cli/ui"
 	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/pkg/components/configapi"
 	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
@@ -343,7 +344,7 @@ func configSetCmd(path *string) *cobra.Command {
 
 			// Validation runs before the file is touched, so a rejected value
 			// leaves the existing configuration exactly as it was.
-			if err := kubesoloconfig.CheckSetOnce(&current, cfg); err != nil {
+			if err := kubesoloconfig.CheckSetOnce(setOnceBase(&current, *path), cfg); err != nil {
 				return err
 			}
 			warnings, err := kubesoloconfig.Validate(cfg, validationHost())
@@ -459,7 +460,7 @@ func runConfigEdit(path string) error {
 		return nil
 	}
 
-	if err := kubesoloconfig.CheckSetOnce(cfg, edited); err != nil {
+	if err := kubesoloconfig.CheckSetOnce(setOnceBase(cfg, path), edited); err != nil {
 		return fmt.Errorf("%w\n\nyour edits are kept at %s", err, tmpName)
 	}
 	warnings, err := kubesoloconfig.Validate(edited, validationHost())
@@ -629,6 +630,18 @@ func (b *backend) read(withSecrets bool) (*types.Config, error) {
 	}
 
 	return b.file, nil
+}
+
+// setOnceBase is what the Portainer agent's set-once settings are checked
+// against: the configuration file KubeSolo last started with, which its agent
+// was deployed from. Until KubeSolo has recorded one, it is file, the
+// configuration being changed.
+func setOnceBase(file *types.Config, configPath string) *types.Config {
+	started := kubesoloconfig.Defaults()
+	if found, _, err := kubesoloconfig.Read(upgrade.NewLayout(file.Path, configPath).StartedConfig(), started); err != nil || !found {
+		return file
+	}
+	return started
 }
 
 // describe names the backend, so output says where a value came from.

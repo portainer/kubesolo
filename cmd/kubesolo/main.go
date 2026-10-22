@@ -467,7 +467,7 @@ func (s *kubesolo) run() {
 
 	// A restart is judged from here: before it, the node and pod statuses are
 	// the previous process's.
-	if err := upgrade.RecordStarted(upgrade.NewLayout(s.cfg.Path, *flags.Config)); err != nil {
+	if err := upgrade.RecordStarted(upgrade.NewLayout(s.cfg.Path, *flags.Config), s.startupConfig); err != nil {
 		log.Warn().Str("component", "upgrade").Err(err).Msg("could not record that KubeSolo has started")
 	}
 
@@ -637,9 +637,11 @@ func (s *kubesolo) verifyPendingUpgrade(ctx context.Context) {
 
 	raw, _ := os.ReadFile(l.PendingFile())
 	pendingHere := strings.TrimSpace(string(raw)) == Version
+	// A run's executor may still be alive, as it is through a restart, which
+	// starts this KubeSolo before it finishes. Its run is watched until the
+	// executor ends it or dies, when it is closed here.
 	st, _ := upgrade.LoadState(l)
-	interrupted := st != nil && st.Current != nil && !st.InFlight()
-	if !pendingHere && !interrupted {
+	if !pendingHere && (st == nil || st.Current == nil) {
 		return
 	}
 	if pendingHere {
@@ -669,9 +671,14 @@ func (s *kubesolo) verifyPendingUpgrade(ctx context.Context) {
 			continue
 		}
 
-		// An executor holding the lock is verifying this version itself.
+		// An executor holding the lock is verifying this version itself, and
+		// one queued is about to take it.
 		lock, err := upgrade.TryLock(l)
 		if err != nil {
+			continue
+		}
+		if st, err := upgrade.LoadState(l); err == nil && st.InFlight() {
+			lock.Unlock()
 			continue
 		}
 		if raw, _ := os.ReadFile(l.PendingFile()); strings.TrimSpace(string(raw)) == Version {

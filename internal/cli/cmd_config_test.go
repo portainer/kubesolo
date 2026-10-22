@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/types"
 	"sigs.k8s.io/yaml"
 )
@@ -362,7 +363,7 @@ func TestConfigSetAgentSettingsAreSetOnce(t *testing.T) {
 			}
 
 			_, err = runConfig(t, "set", tc.setting, tc.value, "--config", path)
-			if err == nil || !strings.Contains(err.Error(), tc.setting+" cannot be changed once a Portainer agent is configured") {
+			if err == nil || !strings.Contains(err.Error(), tc.setting+" cannot be changed once a Portainer agent is deployed") {
 				t.Fatalf("err = %v", err)
 			}
 			if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
@@ -398,5 +399,35 @@ func TestConfigEditAgentSettingsAreSetOnce(t *testing.T) {
 	}
 	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
 		t.Error("a refused edit modified the configuration file")
+	}
+}
+
+// The agent is deployed from the configuration KubeSolo starts with, which it
+// records. Until it has started with an agent configured, the settings can be
+// corrected; a typo is not locked in before it was ever used.
+func TestConfigSetAgentSettingsFollowWhatKubeSoloStartedWith(t *testing.T) {
+	data := t.TempDir()
+	path := seed(t, func(c *types.Config) {
+		c.Path = data
+		c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id-typo", "edge-key"
+	})
+	l := upgrade.NewLayout(data, path)
+
+	if err := upgrade.RecordStarted(l, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runConfig(t, "set", "portainer.edgeID", "edge-id", "--config", path); err != nil {
+		t.Errorf("before KubeSolo started with an agent: %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := upgrade.RecordStarted(l, raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runConfig(t, "set", "portainer.edgeID", "other-id", "--config", path); err == nil || !strings.Contains(err.Error(), "portainer.edgeID cannot be changed") {
+		t.Errorf("after KubeSolo started with an agent: %v", err)
 	}
 }

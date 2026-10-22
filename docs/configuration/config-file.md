@@ -26,10 +26,11 @@ cluster database and all container state live below it, and nothing moves them.
 
 ### The Portainer agent's settings are set once
 
-`portainer.edgeID`, `portainer.edgeKey` and `portainer.async` can be set while
-no Portainer agent is configured, which is how an agent is added after install.
-Once both `portainer.edgeID` and `portainer.edgeKey` are set, none of the three
-can change, and that includes clearing them.
+`portainer.edgeID`, `portainer.edgeKey` and `portainer.async` can be set, and
+corrected, until KubeSolo has deployed a Portainer agent from them, which is how
+an agent is added after install. Once KubeSolo has started with both
+`portainer.edgeID` and `portainer.edgeKey` set, none of the three can change,
+and that includes clearing them.
 
 KubeSolo writes them into the agent's `portainer-agent-edge` ConfigMap and
 `portainer-agent-edge-key` Secret when it first deploys the agent, and never
@@ -267,7 +268,7 @@ and stays at the top level.
 | `storage.localPath.enabled` | `boolean` | `true` |
 | `storage.localPath.sharedPath` | `string` | `""` |
 
-**set-once** settings can be set until a Portainer agent is configured, and not
+**set-once** settings can be set until a Portainer agent is deployed, and not
 changed after; see [above](#the-portainer-agents-settings-are-set-once).
 
 `runtime.containerMode` is deliberately three-state: unset means auto-detect,

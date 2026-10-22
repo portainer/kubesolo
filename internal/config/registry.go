@@ -47,11 +47,12 @@ type SetOnceError struct {
 }
 
 func (e *SetOnceError) Error() string {
-	return e.Field + " cannot be changed once a Portainer agent is configured: KubeSolo creates the agent's configuration from it when it first deploys the agent and never updates it, so the change would be saved but never applied"
+	return e.Field + " cannot be changed once a Portainer agent is deployed: KubeSolo created the agent's configuration from it when it deployed the agent and never updates it, so the change would be saved but never applied"
 }
 
 // CheckSetOnce returns a *SetOnceError for the first set-once setting next
-// changes, when current already configures a Portainer agent.
+// changes, when current configures a Portainer agent. Callers pass as current
+// the configuration KubeSolo started with, which the agent was deployed from.
 func CheckSetOnce(current, next *types.Config) error {
 	if current.Portainer.EdgeID == "" || current.Portainer.EdgeKey == "" {
 		return nil

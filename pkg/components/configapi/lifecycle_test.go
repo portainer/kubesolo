@@ -714,3 +714,23 @@ func TestConfigChangesWaitForARunToEnd(t *testing.T) {
 		t.Errorf("change once the restart has ended: %d %s", resp.StatusCode, raw)
 	}
 }
+
+// The agent is deployed from the configuration KubeSolo starts with. Until it
+// has started with one, a mistyped edge ID or key can still be corrected.
+func TestAgentSettingsCanBeCorrectedUntilKubeSoloStartsWithThem(t *testing.T) {
+	agent := func(c *types.Config) { c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id-typo", "edge-key" }
+	patch := map[string]string{"Content-Type": "application/merge-patch+json"}
+	fix := `{"portainer":{"edgeID":"edge-id"}}`
+
+	notStarted := newLifecycleAPI(t, "v1.2.2", agent, func(lc *Lifecycle) { lc.StartedWith = config.Defaults() })
+	if resp, raw := do(t, notStarted.client, "PATCH", "/api/v1/config", fix, patch); resp.StatusCode != http.StatusOK {
+		t.Errorf("before KubeSolo started with an agent: %d %s", resp.StatusCode, raw)
+	}
+
+	started := config.Defaults()
+	agent(started)
+	deployed := newLifecycleAPI(t, "v1.2.2", agent, func(lc *Lifecycle) { lc.StartedWith = started })
+	if resp, raw := do(t, deployed.client, "PATCH", "/api/v1/config", fix, patch); resp.StatusCode != http.StatusConflict {
+		t.Errorf("after KubeSolo started with an agent: %d %s", resp.StatusCode, raw)
+	}
+}

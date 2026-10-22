@@ -74,12 +74,19 @@ pods() {
 setting() { agent_api http://localhost/api/v1/config | json "d['config']$1"; }
 
 # restart starts a restart through the agent socket and waits for it to end,
-# printing its result. The socket is gone while KubeSolo restarts, and kubectl
-# exec with it, so failed polls are expected.
+# printing its result. KubeSolo takes the upgrade lock for a moment when it
+# records the known-good configuration, so a 409 for a run in progress is
+# retried briefly, as any client would. The socket is gone while KubeSolo
+# restarts, and kubectl exec with it, so failed polls are expected.
 restart() {
-  local body="$1" resp id deadline st
-  resp=$(agent_api -X POST -d "$body" http://localhost/api/v1/restart)
-  id=$(echo "$resp" | json "d.get('id','')")
+  local resp id try deadline st
+  for try in 1 2 3 4 5; do
+    resp=$(agent_api -X POST -d "$1" http://localhost/api/v1/restart)
+    id=$(echo "$resp" | json "d.get('id','')")
+    [ -n "$id" ] && break
+    grep -q 'in progress' <<<"$resp" || break
+    sleep 2
+  done
   [ -n "$id" ] || fail "restart not accepted: $resp"
   log "restart $id accepted" >&2
   deadline=$((SECONDS + RUN_TIMEOUT))
@@ -149,7 +156,8 @@ expect_same_pods() {
 # ── setup and cleanup ───────────────────────────────────────────────────────
 BACKUP=$(mktemp)
 cp -p "$CONFIG" "$BACKUP"
-FAILED_BEFORE=$(ls "$CONFIG".failed-* 2>/dev/null || true)
+FAILED="$DATA/upgrade/config.failed.yaml"
+FAILED_BEFORE=$([ -e "$FAILED" ] && echo yes || true)
 
 cleanup() {
   local rc=$?
@@ -169,9 +177,7 @@ cleanup() {
     deadline=$((SECONDS + RUN_TIMEOUT))
     until k get --raw /readyz >/dev/null 2>&1 || [ $SECONDS -ge $deadline ]; do sleep 5; done
   fi
-  for f in "$CONFIG".failed-*; do
-    [ -e "$f" ] && ! grep -qxF "$f" <<<"$FAILED_BEFORE" && rm -f "$f"
-  done
+  [ -n "$FAILED_BEFORE" ] || rm -f "$FAILED"
   k delete namespace "$NS" --ignore-not-found --wait=false >/dev/null 2>&1
   rm -f "$BACKUP"
   exit $rc
@@ -234,11 +240,12 @@ expect_same_pods "$before" "1: a pod or container changed across the restart"
 finished=$(date -d "$(agent_api http://localhost/api/v1/status | json "d['upgrade']['last']['finished']" | sed 's/\.[0-9]*//')" +%s)
 [ "$(cat "$DATA/upgrade/started")" = "$(systemctl show -p MainPID --value kubesolo)" ] || fail "1: the running KubeSolo did not record that it started"
 [ "$finished" -ge "$(stat -c %Y "$DATA/upgrade/started")" ] || fail "1: the restart was judged before KubeSolo finished starting"
+# kubesoloctl checks the agent's set-once settings against this copy.
+cmp -s "$DATA/upgrade/started.yaml" "$CONFIG" || fail "1: started.yaml is not the configuration KubeSolo started with"
 code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9105/metrics || true)
 if [ "$want" = true ]; then [ "$code" = 200 ] || fail "1: metrics not served after enabling them ($code)"
 else [ "$code" != 200 ] || fail "1: metrics still served after disabling them"; fi
 ok "1: metrics.enabled=$want applied; every pod kept its container"
-wait_known_good
 
 # ── 2. an agent image that cannot run is reverted ───────────────────────────
 image=$(setting "['portainer']['image']")
@@ -248,6 +255,7 @@ before=$(pods | grep -v '^portainer/')
 result=$(restart "{\"healthTimeoutSeconds\":$HEALTH_TIMEOUT}")
 [[ "$result" == rolled-back*"Portainer agent"* ]] || fail "2: restart ended: $result"
 [ "$(setting "['portainer']['image']")" = "$image" ] || fail "2: portainer.image was not put back"
+grep -q 'e2e-does-not-exist' "$FAILED" && [ "$(stat -c %a "$FAILED")" = 600 ] || fail "2: the configuration that failed was not kept, readable by root only, at $FAILED"
 k -n portainer rollout status deploy/portainer-agent --timeout=180s >/dev/null || fail "2: the agent did not come back"
 after=$(pods | grep -v '^portainer/')
 [ "$before" = "$after" ] || fail "2: a pod other than the agent's changed"
@@ -257,7 +265,8 @@ ok "2: reverted ($result); agent running $image again"
 log "3: pointing runtime.endpoint at a socket that does not exist"
 agent_api -X PATCH -H 'Content-Type: application/merge-patch+json' -d '{"runtime":{"endpoint":"unix:///run/e2e-no-such-runtime.sock"}}' http://localhost/api/v1/config >/dev/null
 before=$(pods)
-result=$(restart "{\"healthTimeoutSeconds\":$HEALTH_TIMEOUT}")
+# KubeSolo never comes up on this, so the shortest timeout is enough.
+result=$(restart '{"healthTimeoutSeconds":60}')
 [[ "$result" == rolled-back*"did not become healthy"* ]] || fail "3: restart ended: $result"
 [ "$(setting "['runtime']['endpoint']")" = "" ] || fail "3: runtime.endpoint was not put back"
 expect_same_pods "$before" "3: a pod or container changed across the reverted restart"

@@ -264,10 +264,13 @@ runit, SysV and Upstart are not yet tested.
 ### When it fails
 
 KubeSolo records the configuration file as **known-good** once it, and the
-Portainer agent if one is configured, have run healthy on it for a minute, in `<path>/upgrade/config.good.yaml`. If a restart
-leaves KubeSolo unhealthy, or the agent not running, the executor puts the
-known-good configuration back and restarts KubeSolo on it. The configuration
-that failed is kept beside the original, as `config.yaml.failed-<id>`.
+Portainer agent if one is configured, have run healthy on it for a minute, in
+`<path>/upgrade/config.good.yaml`. If a restart leaves KubeSolo unhealthy, or
+the agent not running, the executor puts the known-good configuration back and
+restarts KubeSolo on it. The configuration that failed is kept as
+`<path>/upgrade/config.failed.yaml`, replacing the one an earlier revert kept.
+Both files hold the edge key, so they are readable by root only, and they are
+removed with the rest of KubeSolo's data on uninstall.
 
 That is what keeps an edge device reachable: a change that takes down KubeSolo
 or the agent would otherwise cut off the only way to correct it from Portainer.
@@ -282,9 +285,10 @@ be stopped.
 
 `portainer.edgeID`, `portainer.edgeKey` and `portainer.async` are
 [set once](config-file.md#the-portainer-agents-settings-are-set-once): KubeSolo
-gives them to the agent when it first deploys it, and never again. Once an agent
-is configured, a `PATCH` or `PUT` that changes any of them, or clears them, is
-refused with `409` and the setting named in `field`. A `DELETE` keeps them, as
+gives them to the agent when it first deploys it, and never again. Once KubeSolo
+has started with an agent configured, a `PATCH` or `PUT` that changes any of
+them, or clears them, is refused with `409` and the setting named in `field`.
+Before that, a mistyped value can still be corrected. A `DELETE` keeps them, as
 it keeps `path`. If the file is edited by hand to change one, a restart is
 refused with `409` rather than reporting success while the agent keeps the old
 value. Changing them on an existing agent is not supported.

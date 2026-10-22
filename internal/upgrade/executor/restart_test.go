@@ -167,7 +167,7 @@ func TestFailedRestartRevertsToKnownGood(t *testing.T) {
 			if configFile(t, e) != string(goodConfig) {
 				t.Errorf("configuration file after the revert = %q", configFile(t, e))
 			}
-			if kept, err := os.ReadFile(e.l.FailedConfig("r1")); err != nil || string(kept) != string(badConfig) {
+			if kept, err := os.ReadFile(e.l.FailedConfig()); err != nil || string(kept) != string(badConfig) {
 				t.Errorf("the configuration that failed was not kept: %q, %v", kept, err)
 			}
 			if fi, err := os.Stat(e.l.ConfigFile); err != nil || fi.Mode().Perm() != 0o600 {
@@ -206,7 +206,7 @@ func TestStopFailureIsNotReverted(t *testing.T) {
 	if last.Result != upgrade.ResultFailed || configFile(t, e) != string(badConfig) {
 		t.Errorf("result %s, configuration %q", last.Result, configFile(t, e))
 	}
-	if _, err := os.Stat(e.l.FailedConfig("r1")); !os.IsNotExist(err) {
+	if _, err := os.Stat(e.l.FailedConfig()); !os.IsNotExist(err) {
 		t.Error("a failed copy was kept for a restart that was not reverted")
 	}
 }
