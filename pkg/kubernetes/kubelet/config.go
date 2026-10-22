@@ -54,6 +54,11 @@ func (s *service) writeKubeletConfigFile() error {
 		return fmt.Errorf("failed to create kubelet directory: %v", err)
 	}
 
+	// The kubelet refuses to start when --config-dir names a missing directory.
+	if err := filesystem.EnsureDirectoryExists(s.kubeletDropInDir); err != nil {
+		return fmt.Errorf("failed to create kubelet drop-in directory: %v", err)
+	}
+
 	yamlConfig, err := yaml.Marshal(s.generateKubeletConfig())
 	if err != nil {
 		log.Error().Str("component", "kubelet").Msgf("failed to marshal kubelet config: %v", err)

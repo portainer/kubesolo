@@ -142,6 +142,7 @@ type Embedded struct {
 	KubeletDir            string
 	KubeletConfigDir      string
 	KubeletConfigFile     string
+	KubeletDropInDir      string
 	KubeletKubeConfigFile string
 	KubeletPluginsDir     string
 

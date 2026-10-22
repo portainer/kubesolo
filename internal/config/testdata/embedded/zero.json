@@ -69,6 +69,7 @@
   "KubeletDir": "kubelet",
   "KubeletConfigDir": "kubelet/config",
   "KubeletConfigFile": "kubelet/config/config.yaml",
+  "KubeletDropInDir": "kubelet/config.d",
   "KubeletKubeConfigFile": "pki/kubelet/kubelet.kubeconfig",
   "KubeletPluginsDir": "kubelet/volumeplugins",
   "APIServerDir": "apiserver",

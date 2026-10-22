@@ -16,6 +16,7 @@ type service struct {
 	kubeletDir            string
 	kubeletConfigDir      string
 	kubeletConfigFile     string
+	kubeletDropInDir      string
 	kubeletKubeConfigFile string
 	runtimeEndpoint       string
 	runtimeSocketPath     string
@@ -49,6 +50,7 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeletReady cha
 		nodeIP:                embedded.NodeIP,
 		kubeletCertPath:       embedded.PKIAdminDir,
 		kubeletConfigFile:     embedded.KubeletConfigFile,
+		kubeletDropInDir:      embedded.KubeletDropInDir,
 		kubeletKubeConfigFile: embedded.KubeletKubeConfigFile,
 		runtimeEndpoint:       embedded.RuntimeEndpoint,
 		runtimeSocketPath:     embedded.RuntimeSocketPath,

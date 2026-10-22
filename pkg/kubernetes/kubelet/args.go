@@ -10,6 +10,7 @@ import (
 func (s *service) configureKubeletArgs(command *cobra.Command) {
 	args := []string{
 		"--config", s.kubeletConfigFile,
+		"--config-dir", s.kubeletDropInDir,
 		"--hostname-override", s.nodeName,
 		"--root-dir", s.kubeletDir,
 		"--kubeconfig", s.kubeletKubeConfigFile,

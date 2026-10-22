@@ -137,6 +137,7 @@ func writeConfigWith(t *testing.T, dir string, cpuManager types.CPUManagerConfig
 		kubeletDir:        dir,
 		kubeletConfigDir:  filepath.Join(dir, "config"),
 		kubeletConfigFile: filepath.Join(dir, "config", "config.yaml"),
+		kubeletDropInDir:  filepath.Join(dir, "config.d"),
 		containerMode:     true, // avoids reading the host /etc/resolv.conf
 		cpuManager:        cpuManager,
 	}
@@ -248,4 +249,14 @@ func TestGenerateKubeletConfig_ContainerModeKeepsSystemReserved(t *testing.T) {
 
 	assert.Equal(t, map[string]string{"memory": "500Mi"}, cfg["systemReserved"])
 	assert.Equal(t, map[string]string{}, cfg["kubeReserved"])
+}
+
+func TestWriteKubeletConfigFile_CreatesDropInDir(t *testing.T) {
+	// The kubelet refuses to start when --config-dir names a missing directory.
+	dir := t.TempDir()
+	writeConfigWith(t, dir, types.CPUManagerConfig{Policy: types.CPUManagerPolicyNone})
+
+	info, err := os.Stat(filepath.Join(dir, "config.d"))
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
 }

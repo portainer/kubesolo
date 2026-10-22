@@ -157,6 +157,7 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		KubeletDir:            filepath.Join(cfg.Path, types.DefaultKubeletDir),
 		KubeletConfigDir:      filepath.Join(cfg.Path, types.DefaultKubeletDir, "config"),
 		KubeletConfigFile:     filepath.Join(cfg.Path, types.DefaultKubeletDir, "config", "config.yaml"),
+		KubeletDropInDir:      filepath.Join(cfg.Path, types.DefaultKubeletDir, "config.d"),
 		KubeletKubeConfigFile: filepath.Join(cfg.Path, types.DefaultPKIDir, "kubelet", "kubelet.kubeconfig"),
 		KubeletPluginsDir:     filepath.Join(cfg.Path, types.DefaultKubeletDir, "volumeplugins"),
 
