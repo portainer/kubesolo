@@ -169,7 +169,18 @@ func (w *Service) processPVCMutation(admissionReview *admissionv1.AdmissionRevie
 		Str("node", w.nodeName).
 		Msg("setting node annotation for PVC")
 
-	return w.pvcAnnotationPatch
+	if pvc.Annotations == nil {
+		return w.pvcAnnotationPatch
+	}
+
+	// Adding the whole map would replace the PVC's existing annotations, so add only the key ("/" escaped as "~1")
+	return []map[string]any{
+		{
+			"op":    "add",
+			"path":  "/metadata/annotations/volume.kubernetes.io~1selected-node",
+			"value": w.nodeName,
+		},
+	}
 }
 
 // processJobMutation processes the job mutation
