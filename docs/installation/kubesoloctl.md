@@ -113,6 +113,7 @@ Common flags:
 | `--node-ip` | `KUBESOLO_NODE_IP` | _(auto-detect)_ | Override the detected node IP |
 | `--mtu` | `KUBESOLO_MTU` | _(auto-detect)_ | Override the detected MTU (ignored in container mode) |
 | `--portainer-edge-image` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | `docker.io/portainer/agent:lts` | Image deployed for the Portainer edge agent |
+| `--api-enabled` | `KUBESOLO_API_ENABLED` | `false` | Enable the [configuration API](../configuration/config-api.md), and mount its socket into the Portainer edge agent when an edge ID and key are set (KubeSolo v1.2.1 or later; ignored in container mode) |
 | `--offline-install` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ | Install from a local tarball/binary instead of downloading (host mode only) |
 | `--proxy` | `KUBESOLO_PROXY` | _(none)_ | HTTP/HTTPS proxy injected into the service environment, or the container's in container mode (kept across `upgrade` and `reset`) |
 | `--cpu-manager-policy` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` | `static` gives Guaranteed-QoS pods exclusive cores (ignored in container mode) |

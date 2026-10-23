@@ -15,12 +15,14 @@ import (
 	"github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/types"
+	"github.com/rs/zerolog"
 )
 
 // lifecycleAPI is a running API with the lifecycle endpoints, whose executor
 // spawns are recorded instead of run.
 type lifecycleAPI struct {
 	client *http.Client
+	agent  *http.Client
 	layout upgrade.Layout
 	lc     *Lifecycle
 
@@ -71,13 +73,14 @@ func newLifecycleAPI(t *testing.T, running string, seed func(*types.Config), twe
 	}
 	a.layout = upgrade.NewLayout(a.lc.DataDir, configPath)
 
-	socket := filepath.Join(dir, "c.sock")
+	socket, agentSocket := filepath.Join(dir, "c.sock"), filepath.Join(dir, "agent", "k.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := NewService(ctx, cancel, make(chan struct{}), Options{
-		SocketPath: socket,
-		ConfigPath: configPath,
-		Host:       config.Host{NumCPU: 4, GOARCH: "amd64"},
-		Lifecycle:  a.lc,
+		SocketPath:      socket,
+		AgentSocketPath: agentSocket,
+		ConfigPath:      configPath,
+		Host:            config.Host{NumCPU: 4, GOARCH: "amd64"},
+		Lifecycle:       a.lc,
 	})
 	done := make(chan error, 1)
 	go func() { done <- svc.Run() }()
@@ -85,6 +88,7 @@ func newLifecycleAPI(t *testing.T, running string, seed func(*types.Config), twe
 	t.Cleanup(func() { cancel(); <-done })
 
 	a.client = unixClient(socket)
+	a.agent = unixClient(agentSocket)
 	return a
 }
 
@@ -221,6 +225,115 @@ func TestUpgradeRequestValidation(t *testing.T) {
 	resp, raw := do(t, a.client, "POST", "/api/v1/upgrade", upgrade.Request{Version: "v1.2.0", Force: true, Source: existing}, nil)
 	if resp.StatusCode != http.StatusAccepted {
 		t.Errorf("forced downgrade: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// The agent's socket installs newer published releases only: a source would
+// let it run any binary as root, and force an older release.
+func TestAgentSocketUpgradesToReleasesOnly(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.1", nil, nil)
+	existing := filepath.Join(shortTempDir(t), "kubesolo.tar.gz")
+	if err := os.WriteFile(existing, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		name string
+		req  upgrade.Request
+		want string
+	}{
+		{"source", upgrade.Request{Version: "v1.2.2", Source: existing, SHA256: strings.Repeat("a", 64)}, "source"},
+		{"force", upgrade.Request{Version: "v1.2.0", Force: true}, "force"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			resp, raw := do(t, a.agent, "POST", "/api/v1/upgrade", c.req, nil)
+			if resp.StatusCode != http.StatusForbidden || !strings.HasPrefix(errorOf(t, raw), c.want+" is not accepted") {
+				t.Errorf("status = %d, body %s; want 403 refusing %s", resp.StatusCode, raw, c.want)
+			}
+		})
+	}
+	if len(a.spawned()) != 0 {
+		t.Fatal("a refused request started the executor")
+	}
+
+	resp, raw := do(t, a.agent, "POST", "/api/v1/upgrade", upgrade.Request{Version: "v1.2.2"}, nil)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Errorf("release upgrade over the agent's socket: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// The configuration is read-only on the agent's socket, even for a setting
+// sent back unchanged; the host socket still writes it.
+func TestAgentSocketConfigIsReadOnly(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", func(c *types.Config) {
+		c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key"
+		c.API.Enabled = true
+	}, nil)
+
+	for _, c := range []struct {
+		name, method string
+		body         any
+	}{
+		{"put", "PUT", `{}`},
+		{"patch", "PATCH", `{"logging":{"debug":true}}`},
+		{"unchanged value", "PATCH", `{"logging":{"debug":false}}`},
+		{"agent image", "PATCH", `{"portainer":{"image":"example.com/agent:evil"}}`},
+		{"reset everything", "DELETE", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			resp, raw := do(t, a.agent, c.method, "/api/v1/config", c.body, nil)
+			if resp.StatusCode != http.StatusForbidden || !strings.Contains(errorOf(t, raw), "cannot be changed on the Portainer agent's socket") {
+				t.Errorf("status = %d, body %s; want 403", resp.StatusCode, raw)
+			}
+		})
+	}
+
+	if resp, raw := do(t, a.agent, "GET", "/api/v1/config", nil, nil); resp.StatusCode != http.StatusOK {
+		t.Errorf("agent GET: %d %s", resp.StatusCode, raw)
+	}
+	if resp, raw := do(t, a.client, "PATCH", "/api/v1/config", `{"portainer":{"image":"example.com/agent:1"}}`, nil); resp.StatusCode != http.StatusOK {
+		t.Errorf("host PATCH of portainer.image: %d %s", resp.StatusCode, raw)
+	}
+
+	_, raw := do(t, a.client, "GET", "/api/v1/config", nil, nil)
+	var saved Response
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if c := saved.Config; c.Portainer.EdgeID != "edge-id" || !c.API.Enabled || c.Logging.Debug || c.Portainer.Image != "example.com/agent:1" {
+		t.Errorf("saved configuration: edgeID %q, api.enabled %v, logging.debug %v, image %q", c.Portainer.EdgeID, c.API.Enabled, c.Logging.Debug, c.Portainer.Image)
+	}
+}
+
+// Rollback stays open to the agent: it only restores the release the last
+// upgrade replaced.
+func TestAgentSocketCanRollBack(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+	writeTestBackup(t, a.layout, upgrade.Manifest{From: "v1.2.1", To: "v1.2.2"})
+
+	if resp, raw := do(t, a.agent, "POST", "/api/v1/rollback", nil, nil); resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("rollback over the agent's socket: %d %s", resp.StatusCode, raw)
+	}
+	if len(a.spawned()) != 1 {
+		t.Errorf("executor started %d times, want 1", len(a.spawned()))
+	}
+}
+
+// Each request's log line says which socket it came in on, so a change made
+// through Portainer can be told from one made on the host.
+func TestLogNamesTheSocket(t *testing.T) {
+	a := newLifecycleAPI(t, "v1.2.2", nil, nil)
+	logs := captureLogs(t, zerolog.InfoLevel)
+
+	do(t, a.agent, "PATCH", "/api/v1/config", `{"logging":{"debug":true}}`, nil)
+	do(t, a.client, "PATCH", "/api/v1/config", `{"logging":{"debug":true}}`, nil)
+
+	var got []any
+	for _, e := range logs.entries(t) {
+		got = append(got, e["agent_socket"])
+	}
+	if len(got) != 2 || got[0] != true || got[1] != false {
+		t.Errorf("agent_socket per request = %v, want [true false]", got)
 	}
 }
 
