@@ -427,3 +427,78 @@ func assertUnchanged(t *testing.T, configPath string, ok func(*types.Config) boo
 		t.Errorf("the configuration file was modified by a rejected request: %+v", stored)
 	}
 }
+
+func withAgent(c *types.Config) {
+	c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key"
+}
+
+// With an agent configured, its set-once settings cannot change: KubeSolo
+// would save the change and never apply it.
+func TestAgentSettingsAreSetOnce(t *testing.T) {
+	merge := map[string]string{"Content-Type": "application/merge-patch+json"}
+	for _, tc := range []struct{ field, patch string }{
+		{"portainer.edgeID", `{"portainer":{"edgeID":"other-id"}}`},
+		{"portainer.edgeKey", `{"portainer":{"edgeKey":"other-key"}}`},
+		{"portainer.async", `{"portainer":{"async":true}}`},
+		{"portainer.edgeID", `{"portainer":{"edgeID":null}}`},
+	} {
+		t.Run(tc.patch, func(t *testing.T) {
+			client, configPath := api(t, withAgent)
+			resp, raw := do(t, client, "PATCH", "/api/v1/config", tc.patch, merge)
+			if resp.StatusCode != http.StatusConflict {
+				t.Fatalf("status = %d, want 409: %s", resp.StatusCode, raw)
+			}
+			var apiErr ErrorResponse
+			if err := json.Unmarshal(raw, &apiErr); err != nil || apiErr.Field != tc.field || !strings.Contains(apiErr.Error, "once a Portainer agent is deployed") {
+				t.Errorf("error = %+v, %v", apiErr, err)
+			}
+			assertUnchanged(t, configPath, func(c *types.Config) bool {
+				return c.Portainer.EdgeID == "edge-id" && c.Portainer.EdgeKey == "edge-key" && !c.Portainer.Async
+			})
+		})
+	}
+
+	// Everything else stays changeable.
+	client, _ := api(t, withAgent)
+	if resp, raw := do(t, client, "PATCH", "/api/v1/config", `{"network":{"mtu":1400},"portainer":{"image":"portainer/agent:2.31.0"}}`, merge); resp.StatusCode != http.StatusOK {
+		t.Errorf("other settings with an agent configured: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// Setting up the agent is what the settings are for.
+func TestAgentSettingsCanBeSetBeforeAnAgentIsConfigured(t *testing.T) {
+	client, _ := api(t, nil)
+	resp, raw := do(t, client, "PATCH", "/api/v1/config", `{"portainer":{"edgeID":"edge-id","edgeKey":"edge-key","async":true}}`,
+		map[string]string{"Content-Type": "application/merge-patch+json"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d: %s", resp.StatusCode, raw)
+	}
+}
+
+// A PUT that leaves the edge key out would clear it, which is a change too.
+func TestPutWithoutTheEdgeKeyIsRefusedOnceAnAgentIsConfigured(t *testing.T) {
+	client, _ := api(t, withAgent)
+	document := config.Defaults()
+	document.Portainer.EdgeID = "edge-id"
+	resp, raw := do(t, client, "PUT", "/api/v1/config", document, nil)
+	if resp.StatusCode != http.StatusConflict || !strings.Contains(string(raw), "portainer.edgeKey") {
+		t.Errorf("status = %d: %s", resp.StatusCode, raw)
+	}
+}
+
+// A reset carries the agent's settings over, as it carries path, rather than
+// being refused for changing them.
+func TestDeleteKeepsTheAgentSettings(t *testing.T) {
+	client, configPath := api(t, func(c *types.Config) {
+		withAgent(c)
+		c.Portainer.Async = true
+		c.Network.NodeIP = "10.0.0.5"
+	})
+	resp, raw := do(t, client, "DELETE", "/api/v1/config", nil, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d: %s", resp.StatusCode, raw)
+	}
+	assertUnchanged(t, configPath, func(c *types.Config) bool {
+		return c.Network.NodeIP == "" && c.Portainer.EdgeID == "edge-id" && c.Portainer.EdgeKey == "edge-key" && c.Portainer.Async
+	})
+}

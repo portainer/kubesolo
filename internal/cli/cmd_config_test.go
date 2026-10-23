@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/types"
 	"sigs.k8s.io/yaml"
 )
@@ -341,5 +342,125 @@ func TestConfigEditRejectedLeavesFileUntouched(t *testing.T) {
 	}
 	if !bytes.Equal(before, after) {
 		t.Error("a rejected edit modified the installed configuration")
+	}
+}
+
+// The agent's settings are applied once, when KubeSolo first deploys the agent.
+// With an agent configured, a change would be saved and never applied, so it is
+// refused before the file is touched.
+func TestConfigSetAgentSettingsAreSetOnce(t *testing.T) {
+	agent := func(c *types.Config) { c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key" }
+	for _, tc := range []struct{ setting, value string }{
+		{"portainer.edgeID", "other-id"},
+		{"portainer.edgeKey", "other-key"},
+		{"portainer.async", "true"},
+	} {
+		t.Run(tc.setting, func(t *testing.T) {
+			path := seed(t, agent)
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = runConfig(t, "set", tc.setting, tc.value, "--config", path)
+			if err == nil || !strings.Contains(err.Error(), tc.setting+" cannot be changed once a Portainer agent is deployed") {
+				t.Fatalf("err = %v", err)
+			}
+			if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+				t.Error("a refused change modified the configuration file")
+			}
+		})
+	}
+
+	// Configuring the agent in the first place is what the settings are for.
+	path := seed(t, nil)
+	for _, kv := range [][2]string{{"portainer.edgeID", "edge-id"}, {"portainer.edgeKey", "edge-key"}} {
+		if _, err := runConfig(t, "set", kv[0], kv[1], "--config", path); err != nil {
+			t.Fatalf("setting %s before an agent is configured: %v", kv[0], err)
+		}
+	}
+	// Other settings stay changeable with an agent configured.
+	if _, err := runConfig(t, "set", "network.mtu", "1400", "--config", path); err != nil {
+		t.Errorf("network.mtu with an agent configured: %v", err)
+	}
+}
+
+func TestConfigEditAgentSettingsAreSetOnce(t *testing.T) {
+	path := seed(t, func(c *types.Config) { c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id", "edge-key" })
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptedEditor(t, "s|^  edgeID: .*|  edgeID: other-id|")
+
+	_, err = runConfig(t, "edit", "--config", path)
+	if err == nil || !strings.Contains(err.Error(), "portainer.edgeID cannot be changed") || !strings.Contains(err.Error(), "your edits are kept at") {
+		t.Fatalf("err = %v", err)
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+		t.Error("a refused edit modified the configuration file")
+	}
+}
+
+// The agent is deployed from the configuration KubeSolo starts with, which it
+// records. Until it has started with an agent configured, the settings can be
+// corrected; a typo is not locked in before it was ever used.
+func TestConfigSetAgentSettingsFollowWhatKubeSoloStartedWith(t *testing.T) {
+	data := t.TempDir()
+	path := seed(t, func(c *types.Config) {
+		c.Path = data
+		c.Portainer.EdgeID, c.Portainer.EdgeKey = "edge-id-typo", "edge-key"
+	})
+	l := upgrade.NewLayout(data, path)
+
+	if err := upgrade.RecordStarted(l, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runConfig(t, "set", "portainer.edgeID", "edge-id", "--config", path); err != nil {
+		t.Errorf("before KubeSolo started with an agent: %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := upgrade.RecordStarted(l, raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runConfig(t, "set", "portainer.edgeID", "other-id", "--config", path); err == nil || !strings.Contains(err.Error(), "portainer.edgeID cannot be changed") {
+		t.Errorf("after KubeSolo started with an agent: %v", err)
+	}
+}
+
+// A run may revert or restore the file, so a change made while one is in flight
+// would be lost. Without the API to refuse it, kubesoloctl does.
+func TestConfigChangesWaitForARunToEnd(t *testing.T) {
+	data := t.TempDir()
+	path := seed(t, func(c *types.Config) { c.Path = data })
+	l := upgrade.NewLayout(data, path)
+	if err := upgrade.SaveState(l, &upgrade.State{Current: &upgrade.Run{ID: "r1", Operation: upgrade.OpRestart, PID: os.Getpid()}}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := runConfig(t, "set", "network.mtu", "1400", "--config", path); err == nil || !strings.Contains(err.Error(), "in progress") {
+		t.Errorf("set during a run: %v", err)
+	}
+	scriptedEditor(t, "s|^  mtu: .*|  mtu: 1400|")
+	if _, err := runConfig(t, "edit", "--config", path); err == nil || !strings.Contains(err.Error(), "in progress") {
+		t.Errorf("edit during a run: %v", err)
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+		t.Error("a change during a run modified the configuration file")
+	}
+
+	if err := upgrade.SaveState(l, &upgrade.State{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runConfig(t, "set", "network.mtu", "1400", "--config", path); err != nil {
+		t.Errorf("set once the run has ended: %v", err)
 	}
 }

@@ -20,6 +20,10 @@ type Operation string
 const (
 	OpUpgrade  Operation = "upgrade"
 	OpRollback Operation = "rollback"
+
+	// OpRestart stops and starts the installed version, which is how a change
+	// to the configuration takes effect.
+	OpRestart Operation = "restart"
 )
 
 // Phase is where a run has got to. The phases before PhaseStopping change
@@ -210,9 +214,10 @@ func processAlive(pid int) bool {
 }
 
 // CloseInterrupted finishes s.Current, a run whose executor stopped before it
-// did, now that running is the version KubeSolo is running and healthy. It
-// returns false when there is no such run.
-func (s *State) CloseInterrupted(running string, guardEvent string) bool {
+// did, now that running is the version KubeSolo is running and healthy.
+// agentProblem says why the Portainer agent is not running, "" when it is or
+// there is none. It returns false when there is no such run.
+func (s *State) CloseInterrupted(running string, guardEvent string, agentProblem string) bool {
 	run := s.Current
 	if run == nil || s.InFlight() {
 		return false
@@ -224,6 +229,29 @@ func (s *State) CloseInterrupted(running string, guardEvent string) bool {
 		guardEvent = ""
 	}
 	switch {
+	case run.Operation == OpRestart && run.Phase == PhaseRollingBack && agentProblem != "":
+		run.Result = ResultFailed
+		run.Error = fmt.Sprintf("the executor stopped while reverting to the known-good configuration; KubeSolo %s came up healthy on it, but %s", running, agentProblem)
+		run.Log("%s", run.Error)
+	case run.Operation == OpRestart && run.Phase == PhaseRollingBack:
+		// The configuration that failed had been replaced by the known-good
+		// one already.
+		run.Result = ResultRolledBack
+		run.Error = "the executor stopped while reverting to the known-good configuration, which the configuration file holds again"
+		run.Log("%s", run.Error)
+	case run.Operation == OpRestart && run.To == running && run.HostChanged && agentProblem != "":
+		// A restart is judged on the agent too, which keeps the device reachable.
+		run.Result = ResultFailed
+		run.Error = fmt.Sprintf("the executor stopped before it finished; KubeSolo %s came up healthy, but %s", running, agentProblem)
+		run.Log("%s", run.Error)
+	case run.Operation == OpRestart && run.To == running && run.HostChanged:
+		run.Result, run.Error = ResultSucceeded, ""
+		run.Log("the executor stopped before it finished, but KubeSolo %s came up healthy", running)
+	case run.Operation == OpRestart && run.To == running:
+		// KubeSolo was never stopped, so the configuration was not applied.
+		run.Result = ResultAborted
+		run.Error = "the executor stopped before it restarted KubeSolo"
+		run.Log("%s", run.Error)
 	case run.To == running && run.Operation == OpUpgrade:
 		run.Result, run.Error = ResultSucceeded, ""
 		run.Log("the executor stopped before it finished, but %s came up healthy", running)
@@ -250,7 +278,7 @@ func (s *State) CloseInterrupted(running string, guardEvent string) bool {
 }
 
 // ErrBusy is returned when another upgrade or rollback holds the lock.
-var ErrBusy = errors.New("another upgrade or rollback is in progress")
+var ErrBusy = errors.New("another upgrade, rollback or restart is in progress")
 
 // Lock is the exclusive lock on the upgrade directory. Whoever holds it is the
 // only writer of the binary, the datastore backup and the state file — the API,
