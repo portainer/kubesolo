@@ -22,6 +22,10 @@ func (s *service) configureControllerManagerFlags(command *cobra.Command) {
 	_ = flags.Set("tls-private-key-file", s.controllerManagerKeyFile)
 	_ = flags.Set("leader-elect", "false")
 	_ = flags.Set("use-service-account-credentials", "true")
+	// Delete finished pods past this many, not the upstream 12,500: on one
+	// small node, failed pods held in the API server's memory by the thousand
+	// can exhaust it.
+	_ = flags.Set("terminated-pod-gc-threshold", "100")
 
 	// logging - write through the kubesolo logger
 	_ = flags.Set("logging-format", logging.K8sLogFormat)
