@@ -22,13 +22,47 @@ const (
 	// is immutable: every certificate, the kine database and all containerd
 	// state live below it, and nothing migrates them.
 	MutabilityImmutable
+
+	// MutabilitySetOnce means the setting can be set while no Portainer agent
+	// is configured, and not changed after. KubeSolo creates the agent's
+	// ConfigMap and Secret from these when it first deploys the agent and
+	// never updates them, so a later change would be saved but never applied.
+	MutabilitySetOnce
 )
 
 func (m Mutability) String() string {
-	if m == MutabilityImmutable {
+	switch m {
+	case MutabilityImmutable:
 		return "immutable"
+	case MutabilitySetOnce:
+		return "set-once"
 	}
 	return "restart"
+}
+
+// SetOnceError is a change to a set-once setting after the Portainer agent is
+// configured.
+type SetOnceError struct {
+	Field string
+}
+
+func (e *SetOnceError) Error() string {
+	return e.Field + " cannot be changed once a Portainer agent is deployed: KubeSolo created the agent's configuration from it when it deployed the agent and never updates it, so the change would be saved but never applied"
+}
+
+// CheckSetOnce returns a *SetOnceError for the first set-once setting next
+// changes, when current configures a Portainer agent. Callers pass as current
+// the configuration KubeSolo started with, which the agent was deployed from.
+func CheckSetOnce(current, next *types.Config) error {
+	if current.Portainer.EdgeID == "" || current.Portainer.EdgeKey == "" {
+		return nil
+	}
+	for _, f := range Registry() {
+		if f.Mutability == MutabilitySetOnce && f.Get(current) != f.Get(next) {
+			return &SetOnceError{Field: f.ConfigPath}
+		}
+	}
+	return nil
 }
 
 // Field describes one configurable setting once, so that the config path, the
@@ -248,6 +282,7 @@ func buildRegistry() []Field {
 			ConfigPath: "portainer.edgeID",
 			Flag:       "portainer-edge-id",
 			Envar:      "KUBESOLO_PORTAINER_EDGE_ID",
+			Mutability: MutabilitySetOnce,
 			Get:        func(c *types.Config) any { return c.Portainer.EdgeID },
 			Set:        func(c *types.Config, v string) error { c.Portainer.EdgeID = v; return nil },
 		},
@@ -256,6 +291,7 @@ func buildRegistry() []Field {
 			Flag:       "portainer-edge-key",
 			Envar:      "KUBESOLO_PORTAINER_EDGE_KEY",
 			Secret:     true,
+			Mutability: MutabilitySetOnce,
 			Get:        func(c *types.Config) any { return c.Portainer.EdgeKey },
 			Set:        func(c *types.Config, v string) error { c.Portainer.EdgeKey = v; return nil },
 		},
@@ -263,6 +299,7 @@ func buildRegistry() []Field {
 			ConfigPath: "portainer.async",
 			Flag:       "portainer-edge-async",
 			Envar:      "KUBESOLO_PORTAINER_EDGE_ASYNC",
+			Mutability: MutabilitySetOnce,
 			Get:        func(c *types.Config) any { return c.Portainer.Async },
 			Set:        func(c *types.Config, v string) error { return setBool(&c.Portainer.Async, v) },
 		},

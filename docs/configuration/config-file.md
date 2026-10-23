@@ -24,6 +24,33 @@ sudo systemctl restart kubesolo
 The one setting that cannot be changed at all is `path`. Every certificate, the
 cluster database and all container state live below it, and nothing moves them.
 
+### The Portainer agent's settings are set once
+
+`portainer.edgeID`, `portainer.edgeKey` and `portainer.async` can be set, and
+corrected, until KubeSolo has deployed a Portainer agent from them, which is how
+an agent is added after install. Once KubeSolo has started with both
+`portainer.edgeID` and `portainer.edgeKey` set, none of the three can change,
+and that includes clearing them.
+
+KubeSolo writes them into the agent's `portainer-agent-edge` ConfigMap and
+`portainer-agent-edge-key` Secret when it first deploys the agent, and never
+updates those afterwards. Portainer manages them from then on. A changed value
+would be saved in this file but never reach the agent, so it is refused instead:
+
+- the [configuration API](config-api.md) answers `409`, naming the setting;
+- `kubesoloctl config set` and `kubesoloctl config edit` refuse to save it;
+- a hand edit is not prevented, but `POST /api/v1/restart` then answers `409`
+  rather than restart KubeSolo while ignoring it.
+
+Changing these on an existing agent is not supported. `portainer.image` is not
+affected: a change to it is applied when KubeSolo restarts.
+
+Removing them by hand and restarting KubeSolo does not remove the agent:
+KubeSolo stops managing it, and its Deployment stays. If that agent is not
+running, KubeSolo's log names it as left from an earlier configuration. Put the
+settings back, or delete it with
+`kubectl -n portainer delete deployment portainer-agent`.
+
 ---
 
 ## Precedence
@@ -237,15 +264,18 @@ and stays at the top level.
 | `network.mtu` | `integer` | `0` |
 | `network.nodeIP` | `string` | `""` |
 | `path` | `string` | `/var/lib/kubesolo` | **immutable**
-| `portainer.async` | `boolean` | `false` |
-| `portainer.edgeID` | `string` | `""` |
-| `portainer.edgeKey` | `string` | `—` | *(secret)*
+| `portainer.async` | `boolean` | `false` | **set-once**
+| `portainer.edgeID` | `string` | `""` | **set-once**
+| `portainer.edgeKey` | `string` | `—` | *(secret)*, **set-once**
 | `portainer.image` | `string` | `docker.io/portainer/agent:lts` |
 | `runtime.containerMode` | `boolean` | `<nil>` |
 | `runtime.endpoint` | `string` | `""` |
 | `storage.dbWALRepair` | `boolean` | `false` |
 | `storage.localPath.enabled` | `boolean` | `true` |
 | `storage.localPath.sharedPath` | `string` | `""` |
+
+**set-once** settings can be set until a Portainer agent is deployed, and not
+changed after; see [above](#the-portainer-agents-settings-are-set-once).
 
 `runtime.containerMode` is deliberately three-state: unset means auto-detect,
 while `true` and `false` force the answer. That is why its default is shown as
