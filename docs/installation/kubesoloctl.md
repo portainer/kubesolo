@@ -81,7 +81,7 @@ kubesoloctl kubeconfig fetch
 | Command | Purpose |
 |---|---|
 | `install` | Install KubeSolo and configure the service / start the container |
-| `check` | Run pre-flight checks only, without installing |
+| `check` | Run pre-flight checks only, without installing (`--json` runs every check and reports each result) |
 | `upgrade --version=<v>` | Upgrade to a newer version, with a backup and automatic rollback |
 | `rollback` | Restore the version, datastore and configuration from before the last upgrade |
 | `status` | Show the running version, health, and the last upgrade or rollback |

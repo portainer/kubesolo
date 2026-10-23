@@ -6,6 +6,8 @@
 # Usage:
 #   KUBESOLOCTL=./dist/kubesoloctl KUBESOLO=./dist/kubesolo test/firewall/run.sh SCENARIO
 #
+# Needs jq on the machine running it.
+#
 # SCENARIO: rocky-iptables, rocky-firewalld, ubuntu-ufw, debian-nftables
 set -euo pipefail
 
@@ -78,14 +80,35 @@ expect() {
   fi
 }
 
+# expect_json WANT runs kubesoloctl check --json and checks it prints one
+# report whose firewall result is WANT, with the firewall's help when it fails,
+# and exits non-zero only when it fails.
+expect_json() {
+  local want="$1" out rc=0 got msg
+  out="$(docker exec "$name" kubesoloctl check --json 2>/dev/null)" || rc=$?
+  got="$(jq -r '.checks[] | select(.name == "host firewall") | .result' <<<"$out" 2>/dev/null)"
+  msg="$(jq -r '.checks[] | select(.name == "host firewall") | .message // ""' <<<"$out" 2>/dev/null)"
+  if [ "$got" = "$want" ] &&
+     { { [ "$want" = pass ] && [ "$rc" -eq 0 ]; } ||
+       { [ "$want" = fail ] && [ "$rc" -ne 0 ] && grep -q "pods cannot reach" <<<"$msg"; }; }; then
+    echo "ok    $scenario: kubesoloctl check --json ($want)"
+  else
+    echo "FAIL  $scenario: kubesoloctl check --json should report the firewall as $want (exit $rc, got '$got'):"
+    sed 's/^/      /' <<<"$out"
+    failed=1
+  fi
+}
+
 docker exec "$name" sh -c "$setup"
 
 expect fail "kubesoloctl check"
+expect_json fail
 expect fail "kubesolo --check-firewall"
 
 docker exec "$name" sh -c "$fix"
 
 expect pass "kubesoloctl check"
+expect_json pass
 expect pass "kubesolo --check-firewall"
 
 exit "$failed"

@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 
@@ -9,19 +11,26 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
 )
 
 func checkCmd(cfg *config.Config) *cobra.Command {
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Run pre-flight checks without installing",
 		Long:  `Validates that this host meets all requirements for KubeSolo. Exits 0 on success.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if asJSON {
+				return runCheckJSON(cfg)
+			}
 			return runCheck(cfg)
 		},
 	}
 	f := cmd.Flags()
+	f.BoolVar(&asJSON, "json", false,
+		"Run every check, even after one fails, and print each result as JSON")
 	f.BoolVar(&cfg.InstallPrereqs, "install-prereqs",
 		envBool("KUBESOLO_INSTALL_PREREQS", false),
 		"Automatically install missing OS prerequisites (e.g. iptables/nftables)")
@@ -60,5 +69,27 @@ func runCheck(cfg *config.Config) error {
 	p.OK(fmt.Sprintf("All %d checks passed", len(checks)), "")
 
 	p.Done("Host is ready for KubeSolo.")
+	return nil
+}
+
+func runCheckJSON(cfg *config.Config) error {
+	checks := preflight.ContainerSuite()
+	if runtime.GOOS != "darwin" {
+		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
+	}
+	return writeCheckReport(os.Stdout, preflight.Report(checks))
+}
+
+// writeCheckReport prints report and, when a check failed, returns an error
+// with nothing more to say so the command exits non-zero.
+func writeCheckReport(w io.Writer, report types.PreflightReport) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(report); err != nil {
+		return err
+	}
+	if report.Failed() {
+		return ui.ErrAlreadyReported
+	}
 	return nil
 }
