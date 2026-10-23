@@ -354,3 +354,89 @@ func TestValidateRejectsMalformedAddresses(t *testing.T) {
 		}
 	}
 }
+
+func TestGPUDisabledOnUnsupportedArch(t *testing.T) {
+	for _, tc := range []struct{ vendor, arch string }{
+		{types.GPUVendorAMD, "arm64"},
+		{types.GPUVendorAMD, "arm"},
+		{types.GPUVendorNVIDIA, "arm"},
+		{types.GPUVendorNVIDIA, "riscv64"},
+	} {
+		t.Run(tc.vendor+"/"+tc.arch, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.GPU.Vendor = tc.vendor
+
+			host := testHost()
+			host.GOARCH = tc.arch
+			warnings, err := Validate(cfg, host)
+			if err != nil {
+				t.Fatalf("unsupported architecture should warn, not fail: %v", err)
+			}
+			if cfg.GPU.Vendor != "" {
+				t.Error("gpu support should have been disabled")
+			}
+			if len(warnings) == 0 {
+				t.Error("expected a warning explaining why gpu support was disabled")
+			}
+		})
+	}
+}
+
+func TestGPUSupportedArch(t *testing.T) {
+	for _, tc := range []struct{ vendor, arch string }{
+		{types.GPUVendorNVIDIA, "amd64"},
+		{types.GPUVendorNVIDIA, "arm64"},
+		{types.GPUVendorAMD, "amd64"},
+	} {
+		t.Run(tc.vendor+"/"+tc.arch, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.GPU.Vendor = tc.vendor
+
+			host := testHost()
+			host.GOARCH = tc.arch
+			warnings, err := Validate(cfg, host)
+			if err != nil || len(warnings) != 0 {
+				t.Fatalf("warnings %v, err %v", warnings, err)
+			}
+		})
+	}
+}
+
+func TestGPUVendorRejected(t *testing.T) {
+	cfg := Defaults()
+	cfg.GPU.Vendor = "intel"
+	if _, err := Validate(cfg, testHost()); err == nil || !strings.Contains(err.Error(), "gpu.vendor") {
+		t.Errorf("an unknown vendor should be rejected, got %v", err)
+	}
+}
+
+// GPU sharing is NVIDIA's time-slicing: AMD's device plugin has none.
+func TestGPUSharing(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		vendor   string
+		replicas int
+		want     string // "" means valid
+	}{
+		{"nvidia, shared by 4", types.GPUVendorNVIDIA, 4, ""},
+		{"nvidia, not shared", types.GPUVendorNVIDIA, 0, ""},
+		{"no vendor, not shared", "", 0, ""},
+		{"negative", types.GPUVendorNVIDIA, -1, "gpu.sharing.replicas"},
+		{"too many", types.GPUVendorNVIDIA, 101, "gpu.sharing.replicas"},
+		{"amd", types.GPUVendorAMD, 2, "nvidia"},
+		{"no vendor", "", 2, "gpu.vendor"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.GPU.Vendor = tc.vendor
+			cfg.GPU.Sharing.Replicas = tc.replicas
+			_, err := Validate(cfg, testHost())
+			if tc.want == "" && err != nil {
+				t.Errorf("got %v", err)
+			}
+			if tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
+				t.Errorf("got %v, want an error mentioning %q", err, tc.want)
+			}
+		})
+	}
+}

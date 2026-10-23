@@ -178,6 +178,21 @@ d2k:
   # Verify: kubectl get ns
   namespace: d2k
 
+gpu:
+  # Make an NVIDIA or AMD GPU available to pods through the vendor's device
+  # plugin. "" = off. The host provides the driver (and, for nvidia, the
+  # NVIDIA Container Toolkit); if it is missing, KubeSolo logs why and starts
+  # without GPU support.
+  # Verify: kubectl get node -o jsonpath='{.items[0].status.allocatable}'
+  vendor: ""
+
+  sharing:
+    # How many pods can share each NVIDIA GPU, by time-slicing: they take
+    # turns on it, with no isolation of memory or faults between them.
+    # 0 = no sharing: the first pod that requests a GPU holds it.
+    # Verify: allocatable nvidia.com/gpu equals replicas
+    replicas: 0
+
 metrics:
   # Prometheus endpoint with control plane health gauges.
   # Verify: curl -s 127.0.0.1:9105/metrics | grep kubesolo_component_up

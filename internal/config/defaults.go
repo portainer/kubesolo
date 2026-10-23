@@ -70,6 +70,11 @@ func Defaults() *types.Config {
 			Namespace: types.DefaultD2KNamespace,
 		},
 
+		GPU: types.GPUConfig{
+			Vendor:  "", // no GPU support
+			Sharing: types.GPUSharing{Replicas: 0},
+		},
+
 		Metrics: types.MetricsConfig{
 			Enabled:     false,
 			BindAddress: types.DefaultMetricsBindAddress,

@@ -34,6 +34,7 @@ type Config struct {
 	Storage    StorageConfig    `json:"storage"`
 	Portainer  PortainerConfig  `json:"portainer"`
 	D2K        D2KConfig        `json:"d2k"`
+	GPU        GPUConfig        `json:"gpu"`
 	Metrics    MetricsConfig    `json:"metrics"`
 	API        ConfigAPI        `json:"api"`
 }
@@ -159,6 +160,24 @@ type D2KConfig struct {
 	// Namespace is the single namespace d2k is deployed into and translates
 	// Docker API calls against.
 	Namespace string `json:"namespace"`
+}
+
+// GPUConfig makes the node's GPU available to pods, through the vendor's
+// device plugin.
+type GPUConfig struct {
+	// Vendor is "nvidia", "amd", or empty for no GPU support.
+	Vendor string `json:"vendor"`
+
+	Sharing GPUSharing `json:"sharing"`
+}
+
+// GPUSharing lets pods share a GPU, which the device plugin otherwise gives
+// to one pod whole.
+type GPUSharing struct {
+	// Replicas is how many pods can share each GPU, by NVIDIA's time-slicing:
+	// they take turns on it, with no isolation of memory or faults between
+	// them. 0 or 1 means no sharing.
+	Replicas int `json:"replicas"`
 }
 
 // ConfigAPI covers the config API itself.

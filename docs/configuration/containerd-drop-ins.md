@@ -50,6 +50,8 @@ containerd ignores tables that use version 2 names, and it doesn't report an err
 
 ## NVIDIA GPUs
 
+> KubeSolo can set up NVIDIA and AMD GPUs itself, without a drop-in or a RuntimeClass: see [GPUs](gpu.md). The steps below are the manual alternative; do not combine the two.
+
 This setup uses the NVIDIA driver and NVIDIA Container Toolkit that are already installed on the host. It adds an `nvidia` runtime to KubeSolo's containerd and then installs the NVIDIA device plugin (or the GPU Operator) with its driver and toolkit installation turned off.
 
 ### 1. Check the host

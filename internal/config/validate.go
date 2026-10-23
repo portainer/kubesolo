@@ -70,6 +70,31 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 		return warnings, fmt.Errorf("d2k.enabled requires network.loadBalancer.enabled: the d2k Service endpoint is populated by the LoadBalancer webhook")
 	}
 
+	// The NVIDIA device plugin is published for amd64 and arm64, the AMD one
+	// for amd64 only.
+	switch cfg.GPU.Vendor {
+	case "":
+	case types.GPUVendorNVIDIA, types.GPUVendorAMD:
+		if host.GOARCH != "amd64" && (cfg.GPU.Vendor == types.GPUVendorAMD || host.GOARCH != "arm64") {
+			warnings = append(warnings, Warning{
+				Field:   "gpu.vendor",
+				Message: fmt.Sprintf("%s GPUs are not supported on %s, disabling gpu support", cfg.GPU.Vendor, host.GOARCH),
+			})
+			cfg.GPU.Vendor = ""
+		}
+	default:
+		return warnings, fmt.Errorf("gpu.vendor: %q is not one of %q, %q or empty", cfg.GPU.Vendor, types.GPUVendorNVIDIA, types.GPUVendorAMD)
+	}
+
+	switch r := cfg.GPU.Sharing.Replicas; {
+	case r < 0 || r > types.MaxGPUSharingReplicas:
+		return warnings, fmt.Errorf("gpu.sharing.replicas: %d is not between 0 and %d", r, types.MaxGPUSharingReplicas)
+	case r > 1 && cfg.GPU.Vendor == "":
+		return warnings, fmt.Errorf("gpu.sharing.replicas needs gpu.vendor set to %q", types.GPUVendorNVIDIA)
+	case r > 1 && cfg.GPU.Vendor != types.GPUVendorNVIDIA:
+		return warnings, fmt.Errorf("gpu.sharing.replicas: GPU sharing is time-slicing, which only the nvidia device plugin has")
+	}
+
 	if ResolveContainerMode(cfg, host.ContainerMode) && cfg.Kubernetes.Kubelet.CPUManager.Policy == types.CPUManagerPolicyStatic {
 		return warnings, fmt.Errorf("kubernetes.kubelet.cpuManager.policy=%s is not supported in container mode: exclusive cores are bounded by the container's own cpuset, which KubeSolo does not control", types.CPUManagerPolicyStatic)
 	}

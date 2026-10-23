@@ -9,6 +9,8 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
+	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
 )
 
@@ -51,6 +53,7 @@ func runCheck(cfg *config.Config) error {
 	} else {
 		p.OK("System detected", fmt.Sprintf("%s · %s · %s", info.Arch, info.LibC, info.InitSystem))
 		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
+		checks = append(checks, preflight.GPUChecks(configuredGPUVendor())...)
 	}
 
 	p.Step("Pre-flight checks")
@@ -61,4 +64,18 @@ func runCheck(cfg *config.Config) error {
 
 	p.Done("Host is ready for KubeSolo.")
 	return nil
+}
+
+// configuredGPUVendor is the gpu.vendor KubeSolo will start with: from its
+// configuration file and environment, as KubeSolo reads them. gpu.vendor is
+// set in the file, not by an install flag.
+func configuredGPUVendor() string {
+	if _, err := os.Stat(types.DefaultConfigFile); err != nil {
+		return os.Getenv("KUBESOLO_GPU_VENDOR")
+	}
+	cfg, _, err := kubesoloconfig.Load(types.DefaultConfigFile, kubesoloconfig.FlagValues{})
+	if err != nil {
+		return ""
+	}
+	return cfg.GPU.Vendor
 }

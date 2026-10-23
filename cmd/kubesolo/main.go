@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/syslog"
 	"os"
@@ -30,6 +31,7 @@ import (
 	"github.com/portainer/kubesolo/pkg/components/configapi"
 	"github.com/portainer/kubesolo/pkg/components/coredns"
 	"github.com/portainer/kubesolo/pkg/components/d2k"
+	"github.com/portainer/kubesolo/pkg/components/gpu"
 	"github.com/portainer/kubesolo/pkg/components/localpath"
 	"github.com/portainer/kubesolo/pkg/components/metrics"
 	"github.com/portainer/kubesolo/pkg/components/portainer"
@@ -447,6 +449,30 @@ func (s *kubesolo) run() {
 			log.Error().Err(err).Msg("failed to deploy d2k, continuing without it")
 		}
 
+	}
+
+	if vendor := s.cfg.GPU.Vendor; vendor != "" {
+		log.Info().Str("component", "kubesolo").Str("vendor", vendor).Msg("deploying gpu device plugin...")
+		if err := gpu.CheckHost(vendor); err != nil {
+			log.Error().Err(err).Str("vendor", vendor).Msg("host is not ready for gpu support, continuing without it")
+		} else if err := gpu.Deploy(s.embedded.AdminKubeconfigFile, vendor, s.cfg.GPU.Sharing.Replicas); err != nil {
+			log.Error().Err(err).Msg("failed to deploy gpu device plugin, continuing without it")
+		} else {
+			s.wg.Go(func() {
+				found, err := gpu.Verify(ctx, s.embedded.AdminKubeconfigFile, s.embedded.NodeName, vendor)
+				switch {
+				case errors.Is(err, gpu.ErrInUse):
+					log.Warn().Str("component", "gpu").Err(err).Msg("the GPU could not be checked")
+					return
+				case err != nil:
+					log.Error().Str("component", "gpu").Err(err).Msg("the GPU is not usable by pods")
+					return
+				}
+				log.Info().Str("component", "gpu").Str("found", found).Msg("the GPU is usable by pods")
+			})
+		}
+	} else if err := gpu.Remove(s.embedded.AdminKubeconfigFile); err != nil {
+		log.Error().Err(err).Msg("failed to remove gpu device plugin")
 	}
 
 	s.wg.Go(func() { s.verifyPendingUpgrade(ctx) })
