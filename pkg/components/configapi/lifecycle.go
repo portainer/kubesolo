@@ -80,6 +80,17 @@ func (s *Service) handleUpgrade(w http.ResponseWriter, r *http.Request) {
 		writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
+	// A source with a checksum the caller supplies installs any binary as root,
+	// and force installs an older release. The agent acts for a remote Portainer
+	// server, so it may only install a newer published release.
+	if fromAgentSocket(r) && (req.Source != "" || req.Force) {
+		field := "source"
+		if req.Source == "" {
+			field = "force"
+		}
+		writeErrorFor(w, r, http.StatusForbidden, ErrorResponse{Field: field, Error: field + " is not accepted on the Portainer agent's socket; run kubesoloctl upgrade on the host instead"})
+		return
+	}
 	if req.Source != "" {
 		if fi, err := os.Stat(req.Source); err != nil || !fi.Mode().IsRegular() {
 			writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Field: "source", Error: fmt.Sprintf("%s is not a file on this host", req.Source)})
