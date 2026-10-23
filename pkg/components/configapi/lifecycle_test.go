@@ -415,6 +415,7 @@ func TestRestartRequestValidation(t *testing.T) {
 		want   string
 	}{
 		{"not JSON", "{", http.StatusBadRequest, "not a valid restart request"},
+		{"trailing data", "{} {}", http.StatusBadRequest, "not a valid restart request"},
 		{"unknown field", map[string]any{"version": "v1.2.3"}, http.StatusBadRequest, "not a valid restart request"},
 		{"timeout too short", map[string]any{"healthTimeoutSeconds": 1}, http.StatusBadRequest, "at least"},
 		{"negative timeout", map[string]any{"healthTimeoutSeconds": -1}, http.StatusBadRequest, "negative"},
@@ -732,5 +733,21 @@ func TestAgentSettingsCanBeCorrectedUntilKubeSoloStartsWithThem(t *testing.T) {
 	deployed := newLifecycleAPI(t, "v1.2.2", agent, func(lc *Lifecycle) { lc.StartedWith = started })
 	if resp, raw := do(t, deployed.client, "PATCH", "/api/v1/config", fix, patch); resp.StatusCode != http.StatusConflict {
 		t.Errorf("after KubeSolo started with an agent: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// path cannot change on an existing install. The API refuses the change, but
+// the file can be edited by hand; a restart would then start KubeSolo on a new,
+// empty data directory, so it is refused.
+func TestRestartRefusesAHandEditedPath(t *testing.T) {
+	started := config.Defaults()
+	a := newLifecycleAPI(t, "v1.2.2", func(c *types.Config) { c.Path = "/var/lib/elsewhere" }, func(lc *Lifecycle) { lc.StartedWith = started })
+	resp, raw := do(t, a.client, "POST", "/api/v1/restart", nil, nil)
+	var apiErr ErrorResponse
+	if err := json.Unmarshal(raw, &apiErr); err != nil || resp.StatusCode != http.StatusConflict || apiErr.Field != "path" {
+		t.Errorf("hand-edited path: %d %s", resp.StatusCode, raw)
+	}
+	if len(a.spawned()) != 0 {
+		t.Error("the executor was started")
 	}
 }

@@ -20,9 +20,15 @@ type fakeAgent struct {
 	before   *agentState
 	verdicts []error
 	verified int
+
+	// onSnapshot, when set, runs as the agent is read before the stop.
+	onSnapshot func()
 }
 
 func (a *fakeAgent) snapshot(context.Context) (*agentState, error) {
+	if a.onSnapshot != nil {
+		a.onSnapshot()
+	}
 	if a.before != nil {
 		return a.before, nil
 	}
@@ -278,5 +284,26 @@ func TestAgentNotRunningSteadilyIsNotChecked(t *testing.T) {
 				t.Errorf("logged that the agent was not running: %v, want %v", logged, c.logged)
 			}
 		})
+	}
+}
+
+// HostChanged is saved as KubeSolo is stopped, not before: a run whose executor
+// dies earlier, while it reads the agent, did not restart anything.
+func TestHostChangedIsSavedAtTheStop(t *testing.T) {
+	e := newRestartExecutor(t, nil)
+	saved := func() bool {
+		st, err := upgrade.LoadState(e.l)
+		if err != nil || st.Current == nil {
+			t.Fatalf("state: %+v, %v", st, err)
+		}
+		return st.Current.HostChanged
+	}
+	var atSnapshot, atStop bool
+	h := host(gates(), &fakeAgent{onSnapshot: func() { atSnapshot = saved() }})
+	h.stop = func(context.Context) error { atStop = saved(); return nil }
+
+	finished(t, e, h)
+	if atSnapshot || !atStop {
+		t.Errorf("HostChanged saved: %v while reading the agent, %v at the stop; want false, true", atSnapshot, atStop)
 	}
 }

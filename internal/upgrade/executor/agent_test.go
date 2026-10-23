@@ -252,14 +252,29 @@ func TestAgentCheckInterrupted(t *testing.T) {
 	}
 }
 
-func TestAgentRunning(t *testing.T) {
+func TestAgentProblem(t *testing.T) {
+	ctx := context.Background()
 	c := newAgentCluster(t)
-	if !c.agent.running(context.Background()) {
-		t.Error("a ready agent on its current template is not running")
+	if p := c.agent.problem(ctx, true); p != "" {
+		t.Errorf("a ready agent on its current template: %q", p)
 	}
+
 	c.changeImage(newImage)
 	c.rollOut(2, 1, 1)
-	if c.agent.running(context.Background()) {
-		t.Error("an agent whose new pod is not ready is running")
+	if p := c.agent.problem(ctx, true); !strings.Contains(p, "the Portainer agent is not running: no ready pod runs "+newImage) || strings.Contains(p, "earlier configuration") {
+		t.Errorf("an agent whose new pod is not ready: %q", p)
+	}
+
+	// The edge settings were removed by hand: KubeSolo no longer manages the
+	// agent it deployed, and says so.
+	if p := c.agent.problem(ctx, false); !strings.Contains(p, "left from an earlier configuration") || !strings.Contains(p, "kubectl -n portainer delete deployment portainer-agent") {
+		t.Errorf("a broken agent left from an earlier configuration: %q", p)
+	}
+
+	if err := c.client.AppsV1().Deployments(portainer.PortainerNamespace).Delete(ctx, portainer.PortainerEdgeAgentDeploymentName, metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if p := c.agent.problem(ctx, false); p != "" {
+		t.Errorf("no agent: %q", p)
 	}
 }

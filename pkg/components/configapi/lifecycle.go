@@ -132,7 +132,7 @@ func readTimeoutRequest(w http.ResponseWriter, r *http.Request, op upgrade.Opera
 	if len(bytes.TrimSpace(body)) > 0 {
 		dec := json.NewDecoder(bytes.NewReader(body))
 		dec.DisallowUnknownFields()
-		if err := dec.Decode(&tr); err != nil {
+		if err := dec.Decode(&tr); err != nil || dec.More() {
 			writeErrorFor(w, r, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("body is not a valid %s request", op)})
 			return tr, false
 		}
@@ -195,6 +195,11 @@ func (s *Service) handleRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Serialised with configuration changes, so that none lands between the
+	// checks below and the run being recorded, after which they are refused.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	cfg, err := s.read()
 	if err != nil {
 		writeErrorFor(w, r, http.StatusUnprocessableEntity, ErrorResponse{Error: "KubeSolo would not start with the stored configuration: " + err.Error()})
@@ -205,9 +210,17 @@ func (s *Service) handleRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The API refuses these changes, but the file can be edited by hand. A
-	// restart that would report success while ignoring one is refused instead.
+	// restart that would start KubeSolo on a new, empty data directory, or
+	// report success while ignoring a change, is refused instead.
 	var setOnce *config.SetOnceError
 	if lc.StartedWith != nil {
+		if field, ok := immutableChange(lc.StartedWith, cfg); ok {
+			writeErrorFor(w, r, http.StatusConflict, ErrorResponse{
+				Field: field,
+				Error: fmt.Sprintf("the configuration file changes %s from the value KubeSolo started with, and %s cannot be changed on an existing installation. Put back the value it started with", field, field),
+			})
+			return
+		}
 		if err := config.CheckSetOnce(lc.StartedWith, cfg); errors.As(err, &setOnce) {
 			writeErrorFor(w, r, http.StatusConflict, ErrorResponse{
 				Field: setOnce.Field,

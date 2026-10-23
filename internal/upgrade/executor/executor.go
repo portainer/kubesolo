@@ -584,7 +584,7 @@ func (e *executor) restart() (upgrade.Result, error) {
 	applied, _ := os.ReadFile(e.l.ConfigFile)
 	switch {
 	case good == nil:
-		e.logf("no configuration is known to be good yet, so a restart that fails cannot be reverted")
+		e.logf("no configuration is known to be good yet, so a restart that fails cannot be reverted. KubeSolo records one once it, and the Portainer agent if there is one, have run healthy on it for a minute; its log says why it has not")
 	case bytes.Equal(good, applied):
 		e.logf("the configuration file is the known-good one, so a restart that fails has nothing to revert to")
 		good = nil
@@ -620,7 +620,6 @@ type notStopped struct{ error }
 // configuration file and verify it, and revert to the known-good one if it
 // fails.
 func (e *executor) cycle(h restartHost) (upgrade.Result, error) {
-	e.run.HostChanged = true
 	err := e.apply(h, e.job.Request.HealthTimeout())
 	var ns notStopped
 	switch {
@@ -647,6 +646,9 @@ func (e *executor) apply(h restartHost, timeout time.Duration) error {
 		before = nil
 	}
 
+	// Saved with the step, so that a run whose executor dies from here on is
+	// not taken for one that never stopped KubeSolo.
+	e.run.HostChanged = true
 	e.step(upgrade.PhaseStopping)
 	if err := h.stop(e.ctx); err != nil {
 		return notStopped{fmt.Errorf("stop KubeSolo: %w", err)}

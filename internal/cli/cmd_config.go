@@ -344,6 +344,9 @@ func configSetCmd(path *string) *cobra.Command {
 
 			// Validation runs before the file is touched, so a rejected value
 			// leaves the existing configuration exactly as it was.
+			if err := refuseDuringRun(&current, *path); err != nil {
+				return err
+			}
 			if err := kubesoloconfig.CheckSetOnce(setOnceBase(&current, *path), cfg); err != nil {
 				return err
 			}
@@ -460,6 +463,9 @@ func runConfigEdit(path string) error {
 		return nil
 	}
 
+	if err := refuseDuringRun(cfg, path); err != nil {
+		return fmt.Errorf("%w\n\nyour edits are kept at %s", err, tmpName)
+	}
 	if err := kubesoloconfig.CheckSetOnce(setOnceBase(cfg, path), edited); err != nil {
 		return fmt.Errorf("%w\n\nyour edits are kept at %s", err, tmpName)
 	}
@@ -642,6 +648,17 @@ func setOnceBase(file *types.Config, configPath string) *types.Config {
 		return file
 	}
 	return started
+}
+
+// refuseDuringRun refuses a change to the file while an upgrade, rollback or
+// restart is in flight, as the configuration API does: the run may revert or
+// restore the file, losing the change. The API is not there to ask while
+// KubeSolo is stopped, or when it is disabled.
+func refuseDuringRun(file *types.Config, configPath string) error {
+	if st, err := upgrade.LoadState(upgrade.NewLayout(file.Path, configPath)); err == nil && st.InFlight() {
+		return fmt.Errorf("%w; change the configuration once it has finished", upgrade.ErrBusy)
+	}
+	return nil
 }
 
 // describe names the backend, so output says where a value came from.

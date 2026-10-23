@@ -431,3 +431,36 @@ func TestConfigSetAgentSettingsFollowWhatKubeSoloStartedWith(t *testing.T) {
 		t.Errorf("after KubeSolo started with an agent: %v", err)
 	}
 }
+
+// A run may revert or restore the file, so a change made while one is in flight
+// would be lost. Without the API to refuse it, kubesoloctl does.
+func TestConfigChangesWaitForARunToEnd(t *testing.T) {
+	data := t.TempDir()
+	path := seed(t, func(c *types.Config) { c.Path = data })
+	l := upgrade.NewLayout(data, path)
+	if err := upgrade.SaveState(l, &upgrade.State{Current: &upgrade.Run{ID: "r1", Operation: upgrade.OpRestart, PID: os.Getpid()}}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := runConfig(t, "set", "network.mtu", "1400", "--config", path); err == nil || !strings.Contains(err.Error(), "in progress") {
+		t.Errorf("set during a run: %v", err)
+	}
+	scriptedEditor(t, "s|^  mtu: .*|  mtu: 1400|")
+	if _, err := runConfig(t, "edit", "--config", path); err == nil || !strings.Contains(err.Error(), "in progress") {
+		t.Errorf("edit during a run: %v", err)
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+		t.Error("a change during a run modified the configuration file")
+	}
+
+	if err := upgrade.SaveState(l, &upgrade.State{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runConfig(t, "set", "network.mtu", "1400", "--config", path); err != nil {
+		t.Errorf("set once the run has ended: %v", err)
+	}
+}

@@ -45,6 +45,12 @@ would be saved in this file but never reach the agent, so it is refused instead:
 Changing these on an existing agent is not supported. `portainer.image` is not
 affected: a change to it is applied when KubeSolo restarts.
 
+Removing them by hand and restarting KubeSolo does not remove the agent:
+KubeSolo stops managing it, and its Deployment stays. If that agent is not
+running, KubeSolo's log names it as left from an earlier configuration. Put the
+settings back, or delete it with
+`kubectl -n portainer delete deployment portainer-agent`.
+
 ---
 
 ## Precedence

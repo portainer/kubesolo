@@ -74,15 +74,37 @@ func newClusterAgent(kubeconfig string) *clusterAgent {
 	}
 }
 
-// AgentRunning reports whether the Portainer agent, if there is one, runs its
-// current pod template and is ready.
-func AgentRunning(ctx context.Context, kubeconfig string) bool {
-	return newClusterAgent(kubeconfig).running(ctx)
+// AgentProblem says why the Portainer agent is not running: its pod is not
+// ready, or does not yet run the Deployment's current template. It is "" when
+// the agent is running, or when there is none. configured is whether
+// KubeSolo's configuration sets up an agent; an agent Deployment without one is
+// left from an earlier configuration, which the answer says, with what to do.
+func AgentProblem(ctx context.Context, kubeconfig string, configured bool) string {
+	return newClusterAgent(kubeconfig).problem(ctx, configured)
 }
 
-func (a *clusterAgent) running(ctx context.Context) bool {
+func (a *clusterAgent) problem(ctx context.Context, configured bool) string {
 	st, err := a.snapshot(ctx)
-	return err == nil && (st.deployment == nil || (st.ready && rolloutPending(st) == ""))
+	if err != nil {
+		return "the Portainer agent could not be read: " + err.Error()
+	}
+	if st.deployment == nil {
+		return ""
+	}
+	reason := rolloutPending(st)
+	switch {
+	case reason != "":
+	case st.pod == "":
+		reason = "no agent pod is running"
+	case !st.ready:
+		reason = "the agent's pod is not ready"
+	default:
+		return ""
+	}
+	if !configured {
+		reason += "; the agent Deployment is left from an earlier configuration that set portainer.edgeID and portainer.edgeKey: put them back, or delete it with `kubectl -n portainer delete deployment portainer-agent`"
+	}
+	return "the Portainer agent is not running: " + reason
 }
 
 func (a *clusterAgent) snapshot(ctx context.Context) (*agentState, error) {
