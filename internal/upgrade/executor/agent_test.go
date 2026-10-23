@@ -277,4 +277,7 @@ func TestAgentProblem(t *testing.T) {
 	if p := c.agent.problem(ctx, false); p != "" {
 		t.Errorf("no agent: %q", p)
 	}
+	if p := c.agent.problem(ctx, true); !strings.Contains(p, "its Deployment does not exist") {
+		t.Errorf("a configured agent with no Deployment: %q", p)
+	}
 }

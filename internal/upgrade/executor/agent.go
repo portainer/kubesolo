@@ -76,7 +76,7 @@ func newClusterAgent(kubeconfig string) *clusterAgent {
 
 // AgentProblem says why the Portainer agent is not running: its pod is not
 // ready, or does not yet run the Deployment's current template. It is "" when
-// the agent is running, or when there is none. configured is whether
+// the agent is running, or when there is none and none is configured. configured is whether
 // KubeSolo's configuration sets up an agent; an agent Deployment without one is
 // left from an earlier configuration, which the answer says, with what to do.
 func AgentProblem(ctx context.Context, kubeconfig string, configured bool) string {
@@ -89,6 +89,9 @@ func (a *clusterAgent) problem(ctx context.Context, configured bool) string {
 		return "the Portainer agent could not be read: " + err.Error()
 	}
 	if st.deployment == nil {
+		if configured {
+			return "the Portainer agent is not running: its Deployment does not exist"
+		}
 		return ""
 	}
 	reason := rolloutPending(st)

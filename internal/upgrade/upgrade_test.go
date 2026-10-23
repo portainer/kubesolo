@@ -531,6 +531,14 @@ func TestCloseInterruptedRestartWithTheAgentDown(t *testing.T) {
 		t.Errorf("result %s, error %q", st.Last.Result, st.Last.Error)
 	}
 
+	back := &State{Current: &Run{ID: "b", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: time.Now().Add(-time.Minute), PID: deadPID(t), HostChanged: true, Phase: PhaseRollingBack}}
+	if !back.CloseInterrupted("v1.2.2", "", problem) {
+		t.Fatal("not closed")
+	}
+	if back.Last.Result != ResultFailed || !strings.HasSuffix(back.Last.Error, "came up healthy on it, but "+problem) {
+		t.Errorf("reverting: result %s, error %q", back.Last.Result, back.Last.Error)
+	}
+
 	// Other runs are judged as before.
 	up := &State{Current: &Run{ID: "u", Operation: OpUpgrade, From: "v1.2.1", To: "v1.2.2", Started: time.Now().Add(-time.Minute), PID: deadPID(t), HostChanged: true}}
 	if !up.CloseInterrupted("v1.2.2", "", problem) || up.Last.Result != ResultSucceeded {

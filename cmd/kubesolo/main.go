@@ -752,10 +752,13 @@ func (s *kubesolo) recordKnownGoodConfig(ctx context.Context) {
 		}
 		wrote, err := upgrade.SaveKnownGoodConfig(l, s.startupConfig)
 		lock.Unlock()
-		switch {
-		case err != nil:
-			log.Warn().Str("component", "upgrade").Err(err).Msg("could not record the known-good configuration")
-		case wrote:
+		if err != nil {
+			// Retried after another settle, rather than every tick.
+			log.Warn().Str("component", "upgrade").Err(err).Msg("could not record the known-good configuration; trying again")
+			healthySince = time.Time{}
+			continue
+		}
+		if wrote {
 			log.Info().Str("component", "upgrade").Msg("recorded the configuration KubeSolo is running healthy on as known-good")
 		}
 		return

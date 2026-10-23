@@ -229,6 +229,10 @@ func (s *State) CloseInterrupted(running string, guardEvent string, agentProblem
 		guardEvent = ""
 	}
 	switch {
+	case run.Operation == OpRestart && run.Phase == PhaseRollingBack && agentProblem != "":
+		run.Result = ResultFailed
+		run.Error = fmt.Sprintf("the executor stopped while reverting to the known-good configuration; KubeSolo %s came up healthy on it, but %s", running, agentProblem)
+		run.Log("%s", run.Error)
 	case run.Operation == OpRestart && run.Phase == PhaseRollingBack:
 		// The configuration that failed had been replaced by the known-good
 		// one already.
