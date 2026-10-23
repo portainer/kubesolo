@@ -90,16 +90,21 @@ func TestFieldByPath(t *testing.T) {
 	}
 }
 
-// TestOnlyPathIsImmutable pins the mutability classification. Path is the one
-// setting that cannot be changed on an existing install; anything else becoming
-// immutable is a decision that should be made deliberately, not by a typo.
-func TestOnlyPathIsImmutable(t *testing.T) {
+// TestImmutableSettings pins the mutability classification. Path cannot be
+// changed on an existing install, nor can the cluster networks, which the node,
+// every Service and the API server certificate were given addresses from;
+// anything else becoming immutable is a decision that should be made
+// deliberately, not by a typo.
+func TestImmutableSettings(t *testing.T) {
+	immutable := map[string]bool{
+		"path":                   true,
+		"kubernetes.podCIDR":     true,
+		"kubernetes.serviceCIDR": true,
+		"kubernetes.clusterDNS":  true,
+	}
 	for _, f := range Registry() {
-		if f.Mutability == MutabilityImmutable && f.ConfigPath != "path" {
-			t.Errorf("%s is marked immutable; only path should be", f.ConfigPath)
-		}
-		if f.ConfigPath == "path" && f.Mutability != MutabilityImmutable {
-			t.Error("path must be immutable")
+		if got := f.Mutability == MutabilityImmutable; got != immutable[f.ConfigPath] {
+			t.Errorf("%s: immutable = %v, want %v", f.ConfigPath, got, immutable[f.ConfigPath])
 		}
 	}
 }
@@ -110,6 +115,33 @@ func TestSecretsAreMarked(t *testing.T) {
 	for _, f := range Registry() {
 		if f.Secret != want[f.ConfigPath] {
 			t.Errorf("%s: Secret = %v, want %v", f.ConfigPath, f.Secret, want[f.ConfigPath])
+		}
+	}
+}
+
+// TestKeepImmutable is what lets a reset of the whole document through its own
+// immutability check: every immutable setting is carried over, nothing else is.
+func TestKeepImmutable(t *testing.T) {
+	current := Defaults()
+	current.Path = "/data/kubesolo"
+	current.Kubernetes.PodCIDR = "10.50.0.0/16"
+	current.Kubernetes.ServiceCIDR = "10.51.0.0/16"
+	current.Kubernetes.ClusterDNS = "10.51.0.53"
+	current.Logging.Debug = true
+
+	next := Defaults()
+	KeepImmutable(next, current)
+
+	if next.Path != current.Path || next.Kubernetes.PodCIDR != current.Kubernetes.PodCIDR ||
+		next.Kubernetes.ServiceCIDR != current.Kubernetes.ServiceCIDR || next.Kubernetes.ClusterDNS != current.Kubernetes.ClusterDNS {
+		t.Errorf("immutable settings not carried over: %+v", next.Kubernetes)
+	}
+	if next.Logging.Debug {
+		t.Error("a mutable setting was carried over")
+	}
+	for _, f := range Registry() {
+		if f.Mutability == MutabilityImmutable && f.Unchangeable == "" {
+			t.Errorf("%s is immutable but does not say why", f.ConfigPath)
 		}
 	}
 }

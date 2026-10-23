@@ -25,8 +25,8 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/dockerhost"
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	hostnetwork "github.com/portainer/kubesolo/internal/runtime/network"
-	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -275,7 +275,7 @@ func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, configD
 			Image:        img,
 			Hostname:     hostname,
 			Cmd:          cmdArgs,
-			Env:          proxyEnv(proxyFor(cfg, prev), subnets),
+			Env:          proxyEnv(proxyFor(cfg, prev), subnets, clusterNetworks(configDoc)),
 			ExposedPorts: exposedPorts,
 		},
 		// The cgroup namespace is left to the engine: private on cgroup v2, where
@@ -350,18 +350,34 @@ func proxyFor(cfg *config.Config, prev *container.InspectResponse) string {
 	return ""
 }
 
+// clusterNetworks returns the pod and service CIDRs of a container's
+// configuration document (kubernetes.podCIDR, kubernetes.serviceCIDR): the
+// defaults when there is none, as for a release that predates the configuration
+// file, or when it cannot be read, which the container itself reports on start.
+func clusterNetworks(configDoc []byte) []string {
+	cfg := kubesoloconfig.Defaults()
+	if configDoc != nil {
+		if _, err := kubesoloconfig.Parse(configDoc, cfg); err != nil {
+			cfg = kubesoloconfig.Defaults()
+		}
+	}
+	return []string{cfg.Kubernetes.PodCIDR, cfg.Kubernetes.ServiceCIDR}
+}
+
 // proxyEnv returns the proxy environment of the KubeSolo container, as the
 // service definition of a host install sets it. Unlike there, the node's own
 // addresses are not localhost: KubeSolo reaches its API server on the address
 // it has on the instance network, and pods and services on their own ranges,
 // none of which a proxy outside the container can reach. As kind does, these
-// are excluded alongside the cluster's DNS suffixes.
-func proxyEnv(proxy string, subnets []string) []string {
+// are excluded alongside the cluster's DNS suffixes. clusterNetworks are the
+// pod and service ranges of the container's configuration.
+func proxyEnv(proxy string, subnets, clusterNetworks []string) []string {
 	if proxy == "" {
 		return nil
 	}
 	noProxy := append([]string{"localhost", "127.0.0.1"}, subnets...)
-	noProxy = append(noProxy, types.DefaultPodCIDR, types.DefaultServiceClusterIPRange, ".svc", ".cluster.local")
+	noProxy = append(noProxy, clusterNetworks...)
+	noProxy = append(noProxy, ".svc", ".cluster.local")
 	return []string{
 		"HTTP_PROXY=" + proxy,
 		"HTTPS_PROXY=" + proxy,

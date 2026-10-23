@@ -8,6 +8,13 @@ const (
 	DefaultSystemCNIDir              = "/opt/cni"
 	DefaultEmbeddedCNIDir            = "bin/cni"
 	DefaultWebhookPort               = 10443
+	DefaultAPIServerPort             = 6443
+	DefaultControllerManagerPort     = 10257
+	DefaultKubeletPort               = 10250
+	DefaultKubeletHealthzPort        = 10248
+	DefaultKubeProxyHealthzPort      = 10256
+	DefaultKinePort                  = 2379
+	DefaultPprofPort                 = 6060
 	DefaultPKIDir                    = "pki"
 	DefaultContainerdDir             = "containerd"
 	DefaultContainerdSocket          = "containerd.sock"
@@ -19,7 +26,6 @@ const (
 	DefaultK8sNamespace              = "k8s.io"
 	DefaultKubeletDir                = "kubelet"
 	DefaultAPIServerDir              = "apiserver"
-	DefaultKineEndpoint              = "127.0.0.1:2379"
 	DefaultPodCIDR                   = "10.42.0.0/16"
 	DefaultServiceClusterIPRange     = "10.43.0.0/16"
 	DefaultCoreDNSIP                 = "10.43.0.10"

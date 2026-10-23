@@ -35,10 +35,11 @@ type Service struct {
 	adminKubeconfig         string
 	loadBalancer            bool
 	loadBalancerUpdateLocks sync.Map
+	port                    int
 }
 
 // NewService creates a new webhook server
-func NewService(nodeName, loadBalancerIP, pkiPath, adminKubeconfig string, loadBalancer bool) *Service {
+func NewService(nodeName, loadBalancerIP, pkiPath, adminKubeconfig string, loadBalancer bool, port int) *Service {
 	// define struct form first, marshal from it — no round trip
 	nodeNamePatchObj := []map[string]any{
 		{
@@ -96,6 +97,7 @@ func NewService(nodeName, loadBalancerIP, pkiPath, adminKubeconfig string, loadB
 		pvcAnnotationPatch:      pvcAnnotationPatch,
 		loadBalancerStatusPatch: loadBalancerStatusPatch,
 		loadBalancer:            loadBalancer,
+		port:                    port,
 	}
 }
 

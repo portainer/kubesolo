@@ -13,7 +13,9 @@ import (
 	"regexp"
 	"strings"
 
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/internal/runtime/network"
+	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -26,8 +28,10 @@ type Check struct {
 // Suite returns the ordered list of pre-flight checks to run before installation.
 // installPrereqs controls whether missing OS packages are installed automatically
 // (e.g. iptables or nftables). pprofServer mirrors the --pprof-server flag;
-// when true, port 6060 is added to the port availability check. nodeIP mirrors
-// the --node-ip flag and is the address the firewall check connects to.
+// when true, the pprof port is added to the port availability check. nodeIP
+// mirrors the --node-ip flag and is the address the firewall check connects to.
+// The ports and the pod network checked are the installed configuration's
+// (its defaults when there is none).
 func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
 	return []Check{
 		{Name: "root privileges", Run: CheckRoot},
@@ -39,7 +43,10 @@ func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
 		{Name: "cgroups controllers", Run: func() error { return CheckCgroups(installPrereqs) }},
 		{Name: "required ports available", Run: func() error { return CheckPorts(pprofServer) }},
 		// After the port check: it listens on the API server port itself.
-		{Name: "host firewall", Run: func() error { return network.CheckFirewall(nodeIP) }},
+		{Name: "host firewall", Run: func() error {
+			cfg := kubesoloconfig.Installed(types.DefaultConfigFile)
+			return network.CheckFirewall(nodeIP, cfg.Kubernetes.PodCIDR, cfg.Kubernetes.APIServer.Port)
+		}},
 	}
 }
 
@@ -347,29 +354,21 @@ func CheckCgroups(installPrereqs bool) error {
 	return checkRequiredControllers(available)
 }
 
-// CheckPorts verifies that KubeSolo's required ports are not in use.
+// CheckPorts verifies that KubeSolo's required ports are not in use: the ones
+// the installed configuration sets, its defaults when there is none.
 // We probe via net.Listen rather than shelling out to lsof/ss/netstat.
-// pprofServer should match the --pprof-server flag; when true, port 6060 is
+// pprofServer should match the --pprof-server flag; when true, the pprof port is
 // also checked so a conflict is caught at preflight rather than at runtime.
 func CheckPorts(pprofServer bool) error {
-	type portEntry struct {
-		port int
-		name string
-	}
-	entries := []portEntry{
-		{2379, "Kine (etcd replacement)"},
-		{6443, "Kubernetes API server"},
-		{10443, "Webhook server"},
-	}
-	if pprofServer {
-		entries = append(entries, portEntry{6060, "pprof HTTP server"})
-	}
+	cfg := kubesoloconfig.Installed(types.DefaultConfigFile)
+	cfg.Logging.Pprof = cfg.Logging.Pprof || pprofServer
+
 	var conflicts []string
-	for _, e := range entries {
-		addr := fmt.Sprintf(":%d", e.port)
+	for _, e := range kubesoloconfig.HostPorts(cfg) {
+		addr := fmt.Sprintf(":%d", e.Port)
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
-			conflicts = append(conflicts, fmt.Sprintf("port %d (%s)", e.port, e.name))
+			conflicts = append(conflicts, fmt.Sprintf("port %d (%s, %s)", e.Port, e.Name, e.ConfigPath))
 			continue
 		}
 		_ = ln.Close()
@@ -377,8 +376,9 @@ func CheckPorts(pprofServer bool) error {
 	if len(conflicts) > 0 {
 		return fmt.Errorf(
 			"the following ports required by KubeSolo are in use: %s. "+
-				"Stop the conflicting processes (or run the installer which will stop existing KubeSolo processes automatically)",
-			strings.Join(conflicts, ", "),
+				"Stop the conflicting processes (or run the installer which will stop existing KubeSolo processes automatically), "+
+				"or move KubeSolo's port in %s",
+			strings.Join(conflicts, ", "), types.DefaultConfigFile,
 		)
 	}
 	return nil
