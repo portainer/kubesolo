@@ -1,0 +1,22 @@
+{
+  "checks": [
+    {
+      "name": "passes",
+      "result": "pass"
+    },
+    {
+      "name": "warns",
+      "result": "warn",
+      "message": "could be better"
+    },
+    {
+      "name": "fails",
+      "result": "fail",
+      "message": "broken"
+    },
+    {
+      "name": "passes after a failure",
+      "result": "pass"
+    }
+  ]
+}
