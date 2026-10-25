@@ -26,6 +26,7 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	_ = flags.Set("service-account-signing-key-file", s.serviceAccountKeyFile)
 	_ = flags.Set("service-account-key-file", s.serviceAccountKeyFile)
 	_ = flags.Set("api-audiences", "kubernetes.default.svc")
+	_ = flags.Set("authentication-config", s.authenticationConfigFile)
 
 	// request header authentication (aggregation layer)
 	_ = flags.Set("requestheader-client-ca-file", s.requestHeaderCAFile)

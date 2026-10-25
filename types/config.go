@@ -105,6 +105,10 @@ type APIServerConfig struct {
 	// certificate, as IP addresses or DNS names.
 	ExtraSANs []string `json:"extraSANs,omitempty"`
 
+	// AuthenticationConfigFile names the kube-apiserver AuthenticationConfiguration
+	// file. JWT configuration changes are reloaded by kube-apiserver.
+	AuthenticationConfigFile string `json:"authenticationConfigFile,omitempty"`
+
 	// StartupTimeoutSeconds bounds how long each component may take to pass its
 	// health check at startup. Raise it on slow storage such as SD cards.
 	StartupTimeoutSeconds int `json:"startupTimeoutSeconds"`
