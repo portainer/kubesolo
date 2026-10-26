@@ -1619,7 +1619,7 @@ if env | grep -qE '^KUBESOLO_(PATH|APISERVER_EXTRA_SANS|PORTAINER_[A-Z_]+|LOAD_B
 fi
 
 # Default configuration from environment variables
-KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.2.2}"
+KUBESOLO_VERSION="${KUBESOLO_VERSION:-v1.2.3}"
 KUBESOLO_SHA256="${KUBESOLO_SHA256:-}"      # expected checksum of the archive or binary
 KUBESOLO_FORCE="${KUBESOLO_FORCE:-false}"     # allow installing an older version over a newer one
 KUBESOLO_HEALTH_TIMEOUT="${KUBESOLO_HEALTH_TIMEOUT:-0}"  # seconds an upgrade has to become healthy; 0 = 600

@@ -45,9 +45,9 @@ func Install(offlineSrc, archiveName, version string) error {
 // what an offline install or upgrade on that machine checks the archive
 // against.
 //
-//   - archiveName   is the kubesolo release tarball, e.g. "kubesolo-v1.2.2-linux-amd64.tar.gz"
+//   - archiveName   is the kubesolo release tarball, e.g. "kubesolo-v1.2.3-linux-amd64.tar.gz"
 //   - installerName is the target's kubesoloctl asset, e.g. "kubesoloctl-linux-arm64"
-//   - version       is the kubesolo release tag, e.g. "v1.2.2"
+//   - version       is the kubesolo release tag, e.g. "v1.2.3"
 //
 // When the target is this host, the running kubesoloctl is copied rather than
 // downloaded. Otherwise the target's own build is downloaded: a copy of this

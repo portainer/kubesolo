@@ -38,8 +38,8 @@ When KubeSolo serves its API, the upgrade goes through it, so it cannot collide
 with one Portainer started. Otherwise kubesoloctl runs the same upgrade itself.
 
 Examples:
-  sudo kubesoloctl upgrade --version=v1.2.2
-  sudo kubesoloctl upgrade --version=v1.2.2 --offline-install=/tmp/kubesolo-v1.2.2-linux-amd64.tar.gz`,
+  sudo kubesoloctl upgrade --version=v1.2.3
+  sudo kubesoloctl upgrade --version=v1.2.3 --offline-install=/tmp/kubesolo-v1.2.3-linux-amd64.tar.gz`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUpgrade(cfg, opts)
 		},

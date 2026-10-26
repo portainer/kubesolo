@@ -74,19 +74,19 @@ This covers the host losing power, or rebooting, partway through an upgrade.
 
 ```bash
 curl --unix-socket /var/lib/kubesolo/config.sock -X POST http://localhost/api/v1/upgrade \
-  -H 'Content-Type: application/json' -d '{"version": "v1.2.2"}'
+  -H 'Content-Type: application/json' -d '{"version": "v1.2.3"}'
 ```
 
 | Field | Required | Meaning |
 |---|---|---|
-| `version` | yes | Release to install, e.g. `v1.2.2`. |
+| `version` | yes | Release to install, e.g. `v1.2.3`. |
 | `source` | no | Absolute path to a release archive (`.tar.gz`) or binary already on the host — for air-gapped upgrades. |
 | `sha256` | no | Expected checksum of the archive or binary. Otherwise taken from `SHA256SUMS`. |
 | `force` | no | Allow a version that is not newer than the running one. |
 | `healthTimeoutSeconds` | no | How long the new version has to become healthy. Default 600, minimum 60. If it is rolled back, the restored version gets at least the default. |
 
 ```json
-{"id": "3f9c2a1b7e40", "operation": "upgrade", "from": "v1.2.1", "to": "v1.2.2", "statusPath": "/api/v1/status"}
+{"id": "3f9c2a1b7e40", "operation": "upgrade", "from": "v1.2.2", "to": "v1.2.3", "statusPath": "/api/v1/status"}
 ```
 
 | Status | When |
@@ -100,18 +100,18 @@ curl --unix-socket /var/lib/kubesolo/config.sock -X POST http://localhost/api/v1
 ### Air-gapped upgrades
 
 Put the release archive on the host with its `SHA256SUMS` beside it —
-`kubesoloctl download --version=v1.2.2 --arch=arm64` produces exactly that — and
+`kubesoloctl download --version=v1.2.3 --arch=arm64` produces exactly that — and
 name it as `source`:
 
 ```json
-{"version": "v1.2.2", "source": "/var/tmp/bundle/kubesolo-v1.2.2-linux-arm64.tar.gz"}
+{"version": "v1.2.3", "source": "/var/tmp/bundle/kubesolo-v1.2.3-linux-arm64.tar.gz"}
 ```
 
 ### Mirrors
 
 Set `KUBESOLO_RELEASE_BASE_URL` in KubeSolo's environment (or kubesoloctl's) to
 download from a mirror laid out like the GitHub release, e.g.
-`https://mirror.example.com/kubesolo` serving `v1.2.2/kubesolo-v1.2.2-linux-amd64.tar.gz`.
+`https://mirror.example.com/kubesolo` serving `v1.2.3/kubesolo-v1.2.3-linux-amd64.tar.gz`.
 A mirror must publish `SHA256SUMS` with each release.
 
 ---
@@ -143,14 +143,14 @@ been rolled back can say what happened to it.
 
 ```json
 {
-  "version": "v1.2.2",
+  "version": "v1.2.3",
   "containerMode": false,
   "health": {"healthy": true, "checks": {"apiserver": "ok", "node": "ok", "coredns": "ok"}},
   "agent": {"configuredImage": "docker.io/portainer/agent:2.31.0", "runningImage": "docker.io/portainer/agent:2.31.0", "inSync": true},
   "upgrade": {
     "inFlight": false,
-    "last": {"id": "3f9c2a1b7e40", "operation": "upgrade", "from": "v1.2.1", "to": "v1.2.2", "phase": "done", "result": "succeeded", "hostChanged": true, "messages": ["..."]},
-    "rollbackTarget": {"from": "v1.2.1", "to": "v1.2.2", "created": "2026-10-08T01:02:03Z", "datastoreBytes": 2060288}
+    "last": {"id": "3f9c2a1b7e40", "operation": "upgrade", "from": "v1.2.2", "to": "v1.2.3", "phase": "done", "result": "succeeded", "hostChanged": true, "messages": ["..."]},
+    "rollbackTarget": {"from": "v1.2.2", "to": "v1.2.3", "created": "2026-10-08T01:02:03Z", "datastoreBytes": 2060288}
   }
 }
 ```
