@@ -307,7 +307,7 @@ refused with `409` rather than reporting success while the agent keeps the old
 value. Changing them on an existing agent is not supported.
 
 ```json
-{"id": "7c1e9d04a2b3", "operation": "restart", "from": "v1.2.2", "to": "v1.2.2", "statusPath": "/api/v1/status"}
+{"id": "7c1e9d04a2b3", "operation": "restart", "from": "v1.2.3", "to": "v1.2.3", "statusPath": "/api/v1/status"}
 ```
 
 | Status | When |

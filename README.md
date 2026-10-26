@@ -260,7 +260,7 @@ By default KubeSolo runs its own embedded containerd. Set `runtime.endpoint` (fl
 
 ### Prerequisites
 
-- Go 1.26.5 or later (see `go.mod`)
+- Go 1.26.10 or later (see `go.mod`)
 - Docker (for ARM builds and dependency management)
 - Cross-compilation toolchains (optional, for cross-platform builds)
 

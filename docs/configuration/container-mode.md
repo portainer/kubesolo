@@ -58,7 +58,7 @@ docker run -d --privileged \
   -v kubesolo-data:/var/lib/kubesolo \
   -p 6443:6443 \
   --name kubesolo \
-  portainer/kubesolo:v1.2.2
+  portainer/kubesolo:v1.2.3
 ```
 
 There is no `:latest` tag. Release images are tagged with the version (`portainer/kubesolo:<version>`); pick the release you want from the [releases page](https://github.com/portainer/kubesolo/releases).

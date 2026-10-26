@@ -17,7 +17,7 @@ import (
 // Request asks for an upgrade. It is the body of POST /api/v1/upgrade, and what
 // kubesoloctl hands the executor when the API is not available.
 type Request struct {
-	// Version is the release to install, e.g. "v1.2.2".
+	// Version is the release to install, e.g. "v1.2.3".
 	Version string `json:"version"`
 
 	// Source is an absolute path to a release archive (.tar.gz) or a kubesolo

@@ -153,8 +153,8 @@ kubesoloctl kubeconfig fetch      # merge it into ~/.kube/config
 ### upgrade / rollback / status
 
 ```bash
-sudo kubesoloctl upgrade --version=v1.2.2      # verified, backed up, rolled back automatically on failure
-sudo kubesoloctl upgrade --version=v1.2.2 --offline-install=/tmp/bundle/kubesolo-v1.2.2-linux-amd64.tar.gz
+sudo kubesoloctl upgrade --version=v1.2.3      # verified, backed up, rolled back automatically on failure
+sudo kubesoloctl upgrade --version=v1.2.3 --offline-install=/tmp/bundle/kubesolo-v1.2.3-linux-amd64.tar.gz
 sudo kubesoloctl rollback                      # undo the last upgrade (loses cluster changes made since)
 sudo kubesoloctl status                        # version, health, last run, rollback target
 ```
@@ -292,8 +292,8 @@ KubeSolo's admin users are scoped the same way (`kubernetes-admin@<cluster>`), s
 
 ```bash
 # On a connected machine (specify --arch when the target differs):
-kubesoloctl download --version=v1.2.2 --path=./bundle --arch=arm64
+kubesoloctl download --version=v1.2.3 --path=./bundle --arch=arm64
 
 # On the target machine:
-sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.2.2-linux-arm64.tar.gz
+sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.2.3-linux-arm64.tar.gz
 ```
