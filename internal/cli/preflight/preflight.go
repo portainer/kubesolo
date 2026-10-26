@@ -5,6 +5,7 @@ package preflight
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/portainer/kubesolo/internal/runtime/network"
+	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -43,17 +45,46 @@ func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
 	}
 }
 
+// Warning is returned by a check that found a problem the install can carry on
+// past.
+type Warning string
+
+func (w Warning) Error() string { return string(w) }
+
 // RunSuite executes every check in suite, stopping on the first failure.
-// Each passing check emits one detail line; the caller owns the enclosing
-// step/ok Printer calls.
+// Each passing check emits one detail line, after its warning if it has one;
+// the caller owns the enclosing step/ok Printer calls.
 func RunSuite(checks []Check) error {
 	for _, c := range checks {
-		if err := c.Run(); err != nil {
+		err := c.Run()
+		var w Warning
+		if errors.As(err, &w) {
+			log.Warn().Msg(w.Error())
+		} else if err != nil {
 			return fmt.Errorf("%s: %w", c.Name, err)
 		}
 		log.Info().Msgf("%s", c.Name)
 	}
 	return nil
+}
+
+// Report executes every check in suite, carrying on past failures, and
+// returns each one's result.
+func Report(checks []Check) types.PreflightReport {
+	report := types.PreflightReport{Checks: make([]types.PreflightCheck, 0, len(checks))}
+	for _, c := range checks {
+		result := types.PreflightCheck{Name: c.Name, Result: types.PreflightPass}
+		err := c.Run()
+		var w Warning
+		switch {
+		case errors.As(err, &w):
+			result.Result, result.Message = types.PreflightWarn, err.Error()
+		case err != nil:
+			result.Result, result.Message = types.PreflightFail, err.Error()
+		}
+		report.Checks = append(report.Checks, result)
+	}
+	return report
 }
 
 // CheckRoot verifies the installer is running as the root user (UID 0).
@@ -279,11 +310,10 @@ func CheckAppArmor(installPrereqs bool) error {
 	if manager != "" {
 		hint = "run: " + strings.Join(append(append([]string{manager}, installArgs...), pkg), " ")
 	}
-	log.Warn().Msgf(
+	return Warning(fmt.Sprintf(
 		"AppArmor is enabled but apparmor_parser is missing: containers will run unconfined, "+
 			"and pods that request an AppArmor profile will fail to start. "+
-			"Re-run with --install-prereqs to install it, or %s", hint)
-	return nil
+			"Re-run with --install-prereqs to install it, or %s", hint))
 }
 
 // appArmorEnabled reports whether the running kernel has AppArmor enabled.
