@@ -14,6 +14,7 @@ api:
 |---|---|
 | `POST /api/v1/upgrade` | Start an upgrade. Returns `202` once accepted. |
 | `POST /api/v1/rollback` | Restore the version before the last upgrade. Returns `202`. |
+| `POST /api/v1/restart` | Restart KubeSolo to apply a configuration change. Returns `202`. See [Applying changes](config-api.md#applying-changes). |
 | `GET /api/v1/status` | Running version, health, Portainer agent image, and the upgrade record. |
 
 ---
@@ -92,7 +93,8 @@ curl --unix-socket /var/lib/kubesolo/config.sock -X POST http://localhost/api/v1
 |---|---|
 | `202` | Accepted. Follow it with `GET /api/v1/status`. |
 | `400` | Malformed request, unknown field, or a `source` that is not a file. |
-| `409` | Another upgrade or rollback is in progress — from the API or from `kubesoloctl` — or the version is not newer and `force` is not set. |
+| `403` | `source` or `force` sent on the [Portainer agent's socket](#the-portainer-agents-socket). |
+| `409` | Another upgrade, rollback or restart is in progress — from the API or from `kubesoloctl` — or the version is not newer and `force` is not set. |
 | `501` | KubeSolo runs in a container, which cannot replace its own image. Upgrade it with `kubesoloctl upgrade` on the host. |
 
 ### Air-gapped upgrades
@@ -153,8 +155,9 @@ been rolled back can say what happened to it.
 }
 ```
 
-`upgrade.current` is the run in flight, with its `phase`. `upgrade.last.result`
-is one of:
+`upgrade.current` is the run in flight, with its `phase`. Restarts from
+`POST /api/v1/restart` are recorded here too, with `"operation": "restart"`.
+`upgrade.last.result` is one of:
 
 | Result | Meaning |
 |---|---|
@@ -183,11 +186,21 @@ With the API enabled and a Portainer edge agent configured, KubeSolo also serves
 the API on `<path>/agent-api/kubesolo.sock`, and mounts that directory into the
 agent's pod (`KUBESOLO_API_SOCKET` names the socket). The directory is mounted,
 not the socket: KubeSolo recreates the socket on every start, and a bind mount
-of the file would keep pointing at the old one.
+of the file would keep pointing at the old one. It is mounted read-only, which
+still lets the agent connect but not write files to the host.
 
-This gives the agent the same control as the socket's owner: configuration,
-upgrade and rollback. The agent already runs as cluster-admin. Leave the API
-disabled to withhold it.
+This gives the agent upgrade and rollback control and a read of the
+configuration, with limits that answer `403`:
+
+- An upgrade takes no `source` or `force`, so the agent can only install a newer
+  published release. A source with a checksum the caller supplies would let it
+  run any binary as root.
+- The configuration cannot be changed: `PUT`, `PATCH` and `DELETE
+  /api/v1/config` are refused.
+
+Do these on the host instead, with `kubesoloctl upgrade` and `kubesoloctl config
+set`. The agent already runs as cluster-admin. Leave the API disabled to
+withhold it.
 
 ---
 
@@ -203,6 +216,9 @@ Everything lives under `<path>/upgrade/`:
 | `guard.sh` | The boot guard. |
 | `pending`, `attempts` | Present while a new version is being verified. |
 | `guard.log` | Restores made by the boot guard. |
+| `config.good.yaml` | The configuration KubeSolo last ran healthy on. A failed `POST /api/v1/restart` puts it back. |
+| `started`, `started.yaml` | The PID of the KubeSolo that last finished starting, and the configuration file it started with. A restart is judged only once the restarted KubeSolo has written them, and the Portainer agent's set-once settings are checked against the configuration. |
+| `config.failed.yaml` | The configuration the last reverted restart failed on. |
 
 ## See also
 

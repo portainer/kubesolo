@@ -16,6 +16,7 @@ driven by `kubesoloctl` so it exercises the same install path users do.
 | `run.sh` | Per-PR entrypoint: boot → smoke → manifests, always tears down via an `EXIT` trap |
 | `soak.sh` | Nightly stability entrypoint: loop the tiers, watch container restarts + idle-RSS growth (leak detector) |
 | `conformance.sh` | Nightly entrypoint: focused single-node-safe upstream `[Conformance]` subset via Sonobuoy |
+| `restart.sh` | `POST /api/v1/restart` on a **host** install (not container mode), through the agent's socket from a pod: a change is applied with every pod kept; a bad agent image and a configuration KubeSolo cannot run on are reverted; set-once agent settings are refused; agent settings from the environment and an agent already crash-looping do not fail it. Runs as root, as its own systemd unit, and puts the configuration back when it ends |
 
 ## Manifest deployment tiers (`manifests.sh` + `manifests/`)
 

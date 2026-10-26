@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/portainer/kubesolo/internal/config"
+	"github.com/portainer/kubesolo/internal/upgrade"
 	"github.com/portainer/kubesolo/types"
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 )
@@ -73,6 +74,7 @@ func (s *Service) routes() http.Handler {
 	if s.opts.Lifecycle != nil {
 		mux.HandleFunc("POST /api/v1/upgrade", s.handleUpgrade)
 		mux.HandleFunc("POST /api/v1/rollback", s.handleRollback)
+		mux.HandleFunc("POST /api/v1/restart", s.handleRestart)
 		mux.HandleFunc("GET /api/v1/status", s.handleStatus)
 	}
 
@@ -170,8 +172,15 @@ func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
 		next := config.Defaults()
 
 		// Path is immutable, so a reset cannot move it. Carrying it over keeps
-		// the reset from being rejected by its own immutability check.
+		// the reset from being rejected by its own immutability check. The
+		// agent's set-once settings are carried over for the same reason once
+		// an agent is configured.
 		next.Path = current.Path
+		if current.Portainer.EdgeID != "" && current.Portainer.EdgeKey != "" {
+			next.Portainer.EdgeID = current.Portainer.EdgeID
+			next.Portainer.EdgeKey = current.Portainer.EdgeKey
+			next.Portainer.Async = current.Portainer.Async
+		}
 		return next, nil
 	})
 }
@@ -225,6 +234,12 @@ type badRequest struct{ error }
 // Nothing touches the file until validation has passed, so a rejected request
 // leaves the existing configuration exactly as it was.
 func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*types.Config, []byte) (*types.Config, error)) {
+	// The agent acts for a remote Portainer server; no setting is open to it yet.
+	if fromAgentSocket(r) {
+		writeErrorFor(w, r, http.StatusForbidden, ErrorResponse{Error: "the configuration cannot be changed on the Portainer agent's socket; change it with kubesoloctl config set on the host"})
+		return
+	}
+
 	body, ok := readBody(w, r)
 	if !ok {
 		return
@@ -235,6 +250,15 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 	// If-Match precondition instead, which a mutex cannot see.
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
+
+	// A run owns the configuration file until it ends: a restart may revert it
+	// and a rollback restores it, either of which would lose this change.
+	if s.opts.Lifecycle != nil {
+		if st, err := upgrade.LoadState(s.layout()); err == nil && st.InFlight() {
+			writeErrorFor(w, r, http.StatusConflict, ErrorResponse{Error: upgrade.ErrBusy.Error() + "; change the configuration once it has finished"})
+			return
+		}
+	}
 
 	current, err := s.read()
 	if err != nil {
@@ -270,6 +294,32 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, build func(*typ
 			Field: field,
 			Error: fmt.Sprintf("%s cannot be changed on an existing installation: every certificate, the database and all container state live below it, and none of them move", field),
 		})
+		return
+	}
+
+	// portainer.image swaps the image of a cluster-admin pod, and the rest of
+	// portainer.* and api.* can cut the agent off from KubeSolo or Portainer.
+	if fromAgentSocket(r) {
+		for _, field := range changedSettings(current, next) {
+			if strings.HasPrefix(field, "portainer.") || strings.HasPrefix(field, "api.") {
+				writeErrorFor(w, r, http.StatusForbidden, ErrorResponse{
+					Field: field,
+					Error: field + " cannot be changed on the Portainer agent's socket; change it with kubesoloctl config set on the host",
+				})
+				return
+			}
+		}
+	}
+
+	// The agent was deployed from what KubeSolo started with, so until it has
+	// started with an agent configured, its settings can still be corrected.
+	base := current
+	if lc := s.opts.Lifecycle; lc != nil && lc.StartedWith != nil {
+		base = lc.StartedWith
+	}
+	var setOnce *config.SetOnceError
+	if err := config.CheckSetOnce(base, next); errors.As(err, &setOnce) {
+		writeErrorFor(w, r, http.StatusConflict, ErrorResponse{Field: setOnce.Field, Error: err.Error()})
 		return
 	}
 

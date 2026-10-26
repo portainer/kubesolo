@@ -40,9 +40,12 @@ Practically, that means anything able to open the socket can change KubeSolo's
 configuration. Reaching it from another machine means going through something
 that already has an authenticated channel — the Portainer Edge Agent, or SSH.
 
-> The Edge Agent cannot reach the socket today: its deployment declares no
-> hostPath volumes. Remote configuration through Portainer needs that mount
-> added first.
+> When the API is enabled and a Portainer edge ID and key are set, KubeSolo
+> serves the same API on a second socket, `<path>/agent-api/kubesolo.sock`,
+> mounts that directory into the Edge Agent's pod, and sets
+> `KUBESOLO_API_SOCKET` to the socket's path. The configuration is read-only on
+> that socket: writes answer `403`. See
+> [the Portainer agent's socket](upgrade-api.md#the-portainer-agents-socket).
 
 ---
 
@@ -221,6 +224,126 @@ curl -s -X PATCH --unix-socket /var/lib/kubesolo/config.sock \
 ```
 
 A `412` means the configuration moved; read it again and reapply.
+
+---
+
+## Applying changes
+
+A saved change takes effect when KubeSolo restarts. `POST /api/v1/restart` does
+that restart for you, so a client running inside KubeSolo, such as the Portainer
+agent, can apply a change it cannot restart the host service for itself. It is
+served when the API is enabled, alongside the [upgrade API](upgrade-api.md).
+
+```bash
+curl -s -X POST --unix-socket /var/lib/kubesolo/config.sock \
+  http://localhost/api/v1/restart
+```
+
+Body (optional): `{"healthTimeoutSeconds": 600}`. This is how long KubeSolo has
+to finish starting and come back healthy. Default 600, minimum 60.
+
+The restart runs out of process, the same way an upgrade does: the API checks
+the request, hands it to the executor and answers before anything is stopped.
+The executor stops KubeSolo, starts it again and waits until:
+
+- KubeSolo has finished starting and is healthy: the API server is ready, the
+  node is Ready, CoreDNS has a ready pod, and KubeSolo has stayed up as one
+  process for 30 seconds. Waiting for the start to finish means the checks see
+  the restarted KubeSolo, not the node and pod statuses the previous one left.
+- The Portainer agent, if one was running, is still the same pod and the same
+  container it was before. If KubeSolo changed the agent's pod template as it
+  started, for a new `portainer.image` or a change to the API settings, the new
+  pod must be ready instead. An agent that was not running steadily before the
+  restart is not checked: one in a crash loop, or whose container exited in
+  the five minutes before, is ready only between crashes, and the restart
+  cannot be told apart from the crashes.
+
+Workloads, the agent among them, keep running through the restart: KubeSolo
+stops without stopping its containers and reattaches to them when it starts. On
+systemd the executor makes sure of this, setting `KillMode=process` on units
+written before the installer did. This is verified on systemd only; OpenRC, s6,
+runit, SysV and Upstart are not yet tested.
+
+### When it fails
+
+KubeSolo records the configuration file as **known-good** once it, and the
+Portainer agent if one is configured, have run healthy on it for a minute, in
+`<path>/upgrade/config.good.yaml`. If a restart leaves KubeSolo unhealthy, or
+the agent not running, the executor puts the known-good configuration back and
+restarts KubeSolo on it. The configuration that failed is kept as
+`<path>/upgrade/config.failed.yaml`, replacing the one an earlier revert kept.
+Both files hold the edge key, so they are readable by root only, and they are
+removed with the rest of KubeSolo's data on uninstall.
+
+While the agent is not running, KubeSolo does not record the configuration as
+known-good, and its log says why once, with a `warn` from the `upgrade`
+component:
+
+```
+not recording this configuration as known-good, so a restart that fails goes back to an older one, or cannot be reverted: the Portainer agent is not running: no ready pod runs docker.io/portainer/agent:2.31.0
+```
+
+It logs again when the agent is running and recording resumes.
+
+That is what keeps an edge device reachable: a change that takes down KubeSolo
+or the agent would otherwise cut off the only way to correct it from Portainer.
+The containers keep running throughout, so once KubeSolo is back on the
+known-good configuration the agent picks up where it left off.
+
+Nothing is reverted when there is no known-good configuration yet, when the
+configuration being applied is the known-good one, or when KubeSolo could not
+be stopped.
+
+### What a restart does not apply
+
+`portainer.edgeID`, `portainer.edgeKey` and `portainer.async` are
+[set once](config-file.md#the-portainer-agents-settings-are-set-once): KubeSolo
+gives them to the agent when it first deploys it, and never again. Once KubeSolo
+has started with an agent configured, a `PATCH` or `PUT` that changes any of
+them, or clears them, is refused with `409` and the setting named in `field`.
+Before that, a mistyped value can still be corrected. A `DELETE` keeps them, as
+it keeps `path`. If the file is edited by hand to change one, a restart is
+refused with `409` rather than reporting success while the agent keeps the old
+value. Changing them on an existing agent is not supported.
+
+```json
+{"id": "7c1e9d04a2b3", "operation": "restart", "from": "v1.2.2", "to": "v1.2.2", "statusPath": "/api/v1/status"}
+```
+
+| Status | When |
+|---|---|
+| `202` | Accepted. Follow it with `GET /api/v1/status`. |
+| `400` | Malformed body, unknown field, or a `healthTimeoutSeconds` out of range. |
+| `409` | An upgrade, rollback or restart is already in progress, from the API or from `kubesoloctl`. Or the file was edited by hand to change `path`, which cannot change on an existing installation, or one of the Portainer agent's set-once settings; see below. `field` names the setting. |
+| `422` | KubeSolo would refuse to start with the stored configuration, for example after a hand edit. Nothing was stopped. |
+| `501` | KubeSolo runs in a container, which cannot restart itself. Restart the container from the host. |
+
+### Following it
+
+The socket goes away while KubeSolo is stopped and comes back once it has
+started, so expect connection errors for a few seconds. Then poll
+`GET /api/v1/status`. The restart is recorded with the upgrade runs, under
+`upgrade`, with `"operation": "restart"`:
+
+- While it runs, `upgrade.inFlight` is `true` and `upgrade.current.phase` moves
+  through `queued`, `preflight`, `stopping`, `starting` and `verifying`. If it
+  is reverted, it stays `rolling-back` while the known-good configuration is
+  applied; `upgrade.current.messages` lists the steps. Changes to the
+  configuration are refused with `409` until it ends: a revert would replace
+  them; so is a change through `kubesoloctl config`, which edits the file
+  directly when the API is off or KubeSolo is stopped.
+- If the executor dies part-way, the restarted KubeSolo closes the run once it
+  has been healthy for a minute: `succeeded` if the Portainer agent is
+  running, `failed` if it is not.
+- Once it ends, `upgrade.last` has the same `id` as the `202`, `phase: "done"`
+  and a `result`:
+
+| Result | Meaning |
+|---|---|
+| `succeeded` | KubeSolo restarted, passed the health checks, and the agent is running. The configuration is in effect. |
+| `rolled-back` | The configuration failed and the known-good one was put back. KubeSolo and the agent are running on it. `upgrade.last.error` says why the change failed. |
+| `aborted` | Failed before KubeSolo was stopped, for example when the service could not be found. Nothing changed. |
+| `failed` | KubeSolo did not stop, or the configuration failed and could not be reverted, or the known-good configuration failed too. `upgrade.last.error` says which. Needs attention. |
 
 ---
 

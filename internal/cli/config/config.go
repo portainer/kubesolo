@@ -84,6 +84,11 @@ type Config struct {
 	// Empty means the flag is not passed and the KubeSolo binary uses its default.
 	PortainerEdgeImage string
 
+	// APIEnabled turns on the KubeSolo API, which is mounted into the Portainer
+	// edge agent's pod when an edge ID and key are set. It exists only in the
+	// configuration file: KubeSolo has no flag for it.
+	APIEnabled bool
+
 	// LocalStorage enables the local-path storage provisioner
 	LocalStorage bool
 
@@ -266,6 +271,9 @@ func (c *Config) ToKubeSoloConfig() (*types.Config, []kubesoloconfig.Warning, er
 	if err != nil {
 		return nil, warnings, err
 	}
+
+	// The one setting with no KubeSolo flag to resolve it through.
+	cfg.API.Enabled = c.APIEnabled
 
 	validationWarnings, err := kubesoloconfig.Validate(cfg, kubesoloconfig.Host{
 		NumCPU: runtime.NumCPU(),

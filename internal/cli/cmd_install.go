@@ -79,6 +79,11 @@ func addInstallFlags(cmd *cobra.Command, cfg *config.Config) {
 		"Image deployed for the Portainer edge agent, including the tag\n"+
 			"(default: docker.io/portainer/agent:lts). Any other image is pulled from the registry")
 
+	f.BoolVar(&cfg.APIEnabled, "api-enabled",
+		envBool("KUBESOLO_API_ENABLED", false),
+		"Enable the KubeSolo API, and give the Portainer edge agent its socket when an edge ID and key are set.\n"+
+			"Requires KubeSolo v1.2.1 or newer; ignored in container mode")
+
 	f.BoolVar(&cfg.LocalStorage, "local-storage",
 		envBool("KUBESOLO_LOCAL_STORAGE", false),
 		"Enable the local-path storage provisioner")
@@ -173,6 +178,9 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	}
 
 	containerMode := cfg.RunMode == config.RunModeContainer
+	if !containerMode {
+		offlineVersion(p, cfg)
+	}
 
 	// ── Feature/version compatibility ──────────────────────────────────────────
 	// d2k flags only exist in kubesolo >= MinD2KVersion. Passing --d2k to an older
@@ -449,6 +457,10 @@ func containerSettings(cfg *config.Config) (args []string, doc []byte, dropped [
 		return nil, nil, nil, nil, fmt.Errorf("--offline-install is not supported in container mode: KubeSolo runs from the container image; to install offline, load the image into the engine (docker load) and pass it with --image")
 	}
 	resolved, kept, dropped, warnings, err := config.ContainerConfig(cfg.Flags())
+	// Not among the flags ContainerConfig drops, as KubeSolo has no flag for it.
+	if cfg.APIEnabled {
+		dropped = append(dropped, "--api-enabled")
+	}
 	if err != nil {
 		return nil, nil, dropped, warnings, err
 	}
@@ -496,6 +508,10 @@ func configDocument(p *ui.Printer, cfg *config.Config, containerMode, quiet bool
 		return nil, nil
 	}
 	if cmp, ok := compareVersions(cfg.Version, config.MinConfigFileVersion); ok && cmp < 0 {
+		if cfg.APIEnabled {
+			return nil, fmt.Errorf("--api-enabled requires kubesolo %s or newer; %s has no API — re-run with --version=%s (or later)",
+				config.MinConfigFileVersion, cfg.Version, config.MinConfigFileVersion)
+		}
 		log.Info().Msgf("kubesolo %s predates the configuration file; installing with flags instead", cfg.Version)
 		return nil, nil
 	}
@@ -514,6 +530,17 @@ func configDocument(p *ui.Printer, cfg *config.Config, containerMode, quiet bool
 	return doc, nil
 }
 
+// offlineVersion takes the version from an offline archive's name, so the
+// checks made before KubeSolo is stopped see the release that will be
+// installed. The archive is trusted over a --version left at its default,
+// which would otherwise fail stageRelease's version check.
+func offlineVersion(p *ui.Printer, cfg *config.Config) {
+	if v, ok := upgrade.VersionFromArchiveName(cfg.OfflineInstall); ok && v != cfg.Version {
+		p.Info(fmt.Sprintf("installing %s, the version %s contains", v, filepath.Base(cfg.OfflineInstall)))
+		cfg.Version = v
+	}
+}
+
 // stageRelease fetches the release and verifies it — checksum, architecture,
 // C library, version — before anything on the host changes. An offline
 // archive without a SHA256SUMS beside it, as bundles from older kubesoloctl
@@ -526,12 +553,6 @@ func stageRelease(p *ui.Printer, cfg *config.Config, info *detect.SystemInfo) (f
 			return func() {}, nil, p.Fail("offline source", err)
 		}
 		req.Source = abs
-		// The archive names its own version. Trust it over a --version left at
-		// its default, which would otherwise fail the version check below.
-		if v, ok := upgrade.VersionFromArchiveName(abs); ok && v != cfg.Version {
-			p.Info(fmt.Sprintf("installing %s, the version %s contains", v, filepath.Base(abs)))
-			cfg.Version, req.Version = v, v
-		}
 	}
 
 	layout := upgrade.NewLayout(cfg.Path, types.DefaultConfigFile)

@@ -104,7 +104,7 @@ func hasSocket(d *appsv1.Deployment) (volume, mount, env bool) {
 		}
 	}
 	for _, m := range spec.Containers[0].VolumeMounts {
-		mount = mount || m.Name == APISocketVolume
+		mount = mount || (m.Name == APISocketVolume && m.ReadOnly)
 	}
 	for _, e := range spec.Containers[0].Env {
 		env = env || (e.Name == APISocketEnv && e.Value == "/var/lib/kubesolo/agent-api/kubesolo.sock")
@@ -144,5 +144,26 @@ func TestAPISocketMountFollowsConfiguration(t *testing.T) {
 	}
 	if len(d.Spec.Template.Spec.Containers[0].Env) == 0 {
 		t.Error("removing the socket removed the agent's other environment")
+	}
+}
+
+// A Deployment from a release that mounted the socket directory read-write is
+// made read-only on the next start.
+func TestAPISocketMountBecomesReadOnly(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	cfg := types.EdgeAgentConfig{Image: "portainer/agent:2.30.0", APISocketDir: "/var/lib/kubesolo/agent-api"}
+	deploy(t, cs, cfg)
+
+	d := agentDeployment(t, cs)
+	for i := range d.Spec.Template.Spec.Containers[0].VolumeMounts {
+		d.Spec.Template.Spec.Containers[0].VolumeMounts[i].ReadOnly = false
+	}
+	if _, err := cs.AppsV1().Deployments(PortainerNamespace).Update(context.Background(), d, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	deploy(t, cs, cfg)
+	if _, m, _ := hasSocket(agentDeployment(t, cs)); !m {
+		t.Error("the socket directory is still mounted read-write")
 	}
 }

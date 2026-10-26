@@ -87,6 +87,7 @@ func withLogging(next http.Handler) http.Handler {
 			Str("component", "configapi").
 			Str("method", r.Method).
 			Str("path", r.URL.Path).
+			Bool("agent_socket", fromAgentSocket(r)).
 			Int("status", recorder.status).
 			Dur("took", time.Since(started))
 
