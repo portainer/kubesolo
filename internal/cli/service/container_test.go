@@ -170,3 +170,26 @@ func TestUserBinds(t *testing.T) {
 		t.Errorf("userBinds = %v", got)
 	}
 }
+
+func TestBridgeMTU(t *testing.T) {
+	tests := []struct {
+		name    string
+		options map[string]string
+		want    int
+		wantOK  bool
+	}{
+		{"set", map[string]string{dockerBridgeMTUOption: "1300"}, 1300, true},
+		{"unset", map[string]string{}, 0, false},
+		{"nil", nil, 0, false},
+		{"not a number", map[string]string{dockerBridgeMTUOption: "auto"}, 0, false},
+		{"zero", map[string]string{dockerBridgeMTUOption: "0"}, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := bridgeMTU(tt.options)
+			if got != tt.want || ok != tt.wantOK {
+				t.Errorf("bridgeMTU(%v) = %d, %v; want %d, %v", tt.options, got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
