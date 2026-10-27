@@ -118,6 +118,9 @@ func (r *Runner) notAgain(inc Incident) error {
 	if why := failedBefore(all, inc.Summary(), r.clock()); why != "" {
 		return errors.New(why)
 	}
+	if why := portBlocked(inc); why != "" {
+		return errors.New(why)
+	}
 	return nil
 }
 

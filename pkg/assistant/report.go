@@ -45,7 +45,8 @@ type ReportIncident struct {
 	State string `json:"state"`
 
 	// Note says why an action rated high is not offered: it failed for the
-	// same components not long ago.
+	// same components not long ago, or a restart would leave a blocked port
+	// blocked.
 	Note string `json:"note,omitempty"`
 }
 
@@ -78,7 +79,13 @@ func (r *Reporter) Report(ctx context.Context) (Report, error) {
 	for i := len(all) - 1; i >= 0; i-- {
 		inc := ReportIncident{Summary: all[i], State: state(all[i])}
 		if inc.State == StateAwaitingApproval {
-			if inc.Note = failedBefore(all, all[i], rep.Time); inc.Note != "" {
+			inc.Note = failedBefore(all, all[i], rep.Time)
+			if inc.Note == "" {
+				if full, err := r.Store.Get(all[i].ID); err == nil {
+					inc.Note = portBlocked(*full)
+				}
+			}
+			if inc.Note != "" {
 				inc.State = StateNotOffered
 			}
 		}

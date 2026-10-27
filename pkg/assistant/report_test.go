@@ -165,3 +165,21 @@ func TestAReportDoesNotOfferAnActionThatJustFailed(t *testing.T) {
 		t.Errorf("%d awaiting approval, want 0", r.AwaitingApproval)
 	}
 }
+
+// A restart for a blocked port is not offered, and the report says why.
+func TestAReportDoesNotOfferARestartForABlockedPort(t *testing.T) {
+	s := NewStore(t.TempDir())
+	blocked(t, s, triagedIncident(t, s, reviewTime, "restart_component", 0.97))
+
+	r, err := testReporter(s).Report(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	inc := r.Incidents[0]
+	if inc.State != StateNotOffered || !strings.Contains(inc.Note, "kubelet listens on port 10248 but refuses the probe") {
+		t.Errorf("state = %q, note = %q", inc.State, inc.Note)
+	}
+	if r.AwaitingApproval != 0 {
+		t.Errorf("%d awaiting approval, want 0", r.AwaitingApproval)
+	}
+}

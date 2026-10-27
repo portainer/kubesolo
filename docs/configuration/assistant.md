@@ -200,7 +200,7 @@ IDs sort in time order, and incidents are served in that order, so a poller asks
 
 A person can say whether a diagnosis was right. Reviews are kept with the incident, as the labelled data the model and its knowledge are measured — and later trained — against.
 
-**Approving an action carries it out.** First its preconditions are checked again against the node as it is now, not as it was at the incident; if they no longer hold, the action is refused and nothing is done. The incident's `actionRun` says how it went: `running`, `succeeded`, `failed` or `refused`, with the reason. One action is carried out at a time; approving while another runs keeps the approval and answers `409` — approve again shortly. An action that failed for the same components in the last 6 hours is not carried out again, approved or automatic: it is refused, naming that failure, since it would not help until something else changes.
+**Approving an action carries it out.** First its preconditions are checked again against the node as it is now, not as it was at the incident; if they no longer hold, the action is refused and nothing is done. The incident's `actionRun` says how it went: `running`, `succeeded`, `failed` or `refused`, with the reason. One action is carried out at a time; approving while another runs keeps the approval and answers `409` — approve again shortly. An action that failed for the same components in the last 6 hours is not carried out again, approved or automatic: it is refused, naming that failure, since it would not help until something else changes. Nor is a restart carried out when a failing component listens on its port yet refuses the probe: something between them, such as a firewall rule, blocks the port, and a restart would leave it blocked, so a person must clear it.
 
 | Action | Carried out as | Only when |
 |---|---|---|
@@ -260,7 +260,7 @@ sudo kubesoloctl assistant report --json   # for a program
 | `awaiting approval` | The action is rated `high` and nobody has reviewed it yet |
 | `approved` / `rejected` | Reviewed |
 | `action running` / `succeeded` / `failed` / `refused` | The approved action, carried out |
-| `not offered` | The action is rated below `high`, so it is only reported; or it failed for the same components in the last 6 hours, which `note` names |
+| `not offered` | The action is rated below `high`, so it is only reported; or it failed for the same components in the last 6 hours, or it is a restart that would leave a blocked port blocked; `note` says which |
 | `report only` | The model found nothing to do, or something a person must do |
 | `triage failed` / `triage skipped` | No diagnosis; the triage's `reason` says why |
 

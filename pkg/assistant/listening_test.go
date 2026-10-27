@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,5 +73,44 @@ func TestASnapshotWithoutTheNode(t *testing.T) {
 	}
 	if s := c.Collect(context.Background()); s.Node != "" || s.Listening != nil {
 		t.Errorf("node = %q, listening = %v, want neither", s.Node, s.Listening)
+	}
+}
+
+// A restart is not worth it when a failing component's port listens yet
+// refuses the probe: something in between, such as a firewall rule, refuses
+// it, and a restart leaves that in place.
+func TestARestartCannotClearABlockedPort(t *testing.T) {
+	const (
+		kubeletRefused = `Get "http://127.0.0.1:10248/healthz": dial tcp 127.0.0.1:10248: connect: connection refused`
+		kineRefused    = "dial tcp 127.0.0.1:2379: connect: connection refused"
+		kubeletTimeout = `Get "http://127.0.0.1:10248/healthz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`
+	)
+	for _, tc := range []struct {
+		name       string
+		action     string
+		components map[string]string
+		listening  map[string]bool
+		want       string // in the reason, or "" for none
+	}{
+		{"blocked kubelet", "restart_component", map[string]string{"kubelet": kubeletRefused, "kine": "ok"},
+			map[string]bool{"kubelet": true}, "kubelet listens on port 10248 but refuses the probe"},
+		{"blocked kine, with what depends on it", "restart_component",
+			map[string]string{"kine": kineRefused, "apiserver": "unexpected status 500", "coredns": "context deadline exceeded"},
+			map[string]bool{"kine": true}, "kine listens on port 2379 but refuses the probe"},
+		{"stopped kubelet", "restart_component", map[string]string{"kubelet": kubeletRefused}, map[string]bool{"kubelet": false}, ""},
+		{"hung kubelet", "restart_component", map[string]string{"kubelet": kubeletTimeout}, map[string]bool{"kubelet": true}, ""},
+		{"listening unknown", "restart_component", map[string]string{"kubelet": kubeletRefused}, nil, ""},
+		{"another action", "repair_database", map[string]string{"kine": kineRefused}, map[string]bool{"kine": true}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inc := Incident{
+				Snapshot: Snapshot{Components: tc.components, Listening: tc.listening},
+				Triage:   &Triage{Status: TriageDone, Diagnosis: Diagnosis{Action: tc.action}},
+			}
+			got := portBlocked(inc)
+			if tc.want == "" && got != "" || !strings.Contains(got, tc.want) {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

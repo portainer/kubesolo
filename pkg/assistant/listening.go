@@ -1,9 +1,12 @@
 package assistant
 
 import (
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -62,4 +65,24 @@ func listeningPorts(procNet string) map[int]bool {
 		}
 	}
 	return ports
+}
+
+// portBlocked says why inc's restart would not help, or returns "": a failing
+// component listens on its port yet the probe is refused, so something in
+// between, such as a firewall rule, refuses it, and a restart leaves that in
+// place. A probe that times out is left alone: a hung component listens too,
+// and a restart does help it.
+func portBlocked(inc Incident) string {
+	if inc.Triage == nil || inc.Triage.Action != "restart_component" {
+		return ""
+	}
+	for _, name := range slices.Sorted(maps.Keys(inc.Snapshot.Listening)) {
+		status := inc.Snapshot.Components[name]
+		m := probePort.FindStringSubmatch(status)
+		if !inc.Snapshot.Listening[name] || m == nil || !strings.Contains(status, "connection refused") {
+			continue
+		}
+		return fmt.Sprintf("%s listens on port %s but refuses the probe, so something such as a firewall rule blocks the port, and a restart would not clear it", name, m[1])
+	}
+	return ""
 }

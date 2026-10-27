@@ -337,3 +337,44 @@ func TestAnActionIsRepeatedWhenItMightHelp(t *testing.T) {
 		})
 	}
 }
+
+// blocked records that the incident's kubelet listens on its port yet refuses
+// the probe.
+func blocked(t *testing.T, s *Store, inc Incident) {
+	t.Helper()
+	if err := s.update(inc.ID, func(i *Incident) error {
+		i.Snapshot.Components = map[string]string{"kubelet": "dial tcp 127.0.0.1:10248: connect: connection refused"}
+		i.Snapshot.Listening = map[string]bool{"kubelet": true}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A restart is refused, approved or not, when the failing component's port is
+// blocked: it would leave the block in place.
+func TestARestartIsRefusedForABlockedPort(t *testing.T) {
+	s := NewStore(t.TempDir())
+	actor := &fakeActor{}
+	r := &Runner{Actor: actor, Store: s, now: func() time.Time { return reviewTime }}
+	inc := approved(t, s, reviewTime, "restart_component")
+	blocked(t, s, inc)
+	if err := r.Start(context.Background(), inc.ID); err != nil {
+		t.Fatal(err)
+	}
+	r.Wait()
+	if run := runOf(t, s, inc.ID); run == nil || run.Status != ActionRefused || !strings.Contains(run.Reason, "kubelet listens on port 10248") {
+		t.Errorf("run = %+v", run)
+	}
+
+	auto := triagedIncident(t, s, reviewTime.Add(time.Minute), "restart_component", 0.97)
+	blocked(t, s, auto)
+	r.Auto(context.Background(), auto)
+	r.Wait()
+	if run := runOf(t, s, auto.ID); run == nil || run.Status != ActionRefused {
+		t.Errorf("automatic run = %+v", run)
+	}
+	if len(actor.ran) != 0 {
+		t.Errorf("ran %v", actor.ran)
+	}
+}
