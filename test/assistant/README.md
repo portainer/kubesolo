@@ -107,13 +107,13 @@ assistant and the API enabled, and `kubectl` installed.
 
 ```bash
 # on the node: six faults, three runs each, about 4 hours
-./generate.sh /root/generated 3 kubelet-down kine-blocked runtime-unreachable killed coredns-firewall db-corrupt
+./generate.sh /root/generated 3 kubelet-port-blocked kine-port-blocked runtime-unreachable killed coredns-firewall db-corrupt
 ```
 
 | Fault | How | Labelled |
 |---|---|---|
-| `kubelet-down` | Rejects the kubelet's health port for 7 minutes | `restart_component` |
-| `kine-blocked` | Rejects kine's port for 7 minutes | `restart_component` |
+| `kubelet-port-blocked` | Rejects the kubelet's health port for 7 minutes | `report_only` |
+| `kine-port-blocked` | Rejects kine's port for 7 minutes | `report_only` |
 | `runtime-unreachable` | Moves containerd's socket away for 7 minutes | `restart_component` |
 | `killed` | `kill -9` | `report_only` |
 | `disk-full` | Fills the disk to 32 MiB short of full for 7 minutes, then deletes the pods evicted meanwhile | `free_disk_space` |
@@ -152,3 +152,12 @@ triaged them live, as KubeSolo does:
 13 of 18 right; every wrong action rated below 0.8, so none would have been
 offered. A blocked kine is the weak spot: the model reaches for
 `repair_database` or `free_disk_space`.
+
+These two faults were first called `kubelet-down` and `kine-blocked`, and
+labelled `restart_component`. But a rejected port leaves the component
+running, and a restart, tried on a test VM, left the kubelet as unreachable
+as before: a person must remove the rule. Incidents now say whether a failing
+component's port is listening, which tells the two apart, and the cases were
+generated again with that, labelled `report_only`. The kubelet runs inside
+KubeSolo, so one that really stopped cannot be produced on its own; the
+hand-written cases stand for it.

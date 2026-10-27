@@ -1,0 +1,81 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: apiserver, coredns, kine",
+    "time": "2026-10-27T06:55:30.538687103Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "unexpected status 500",
+        "controller": "ok",
+        "coredns": "Get \"https://10.10.216.62:6443/apis/apps/v1/namespaces/kube-system/deployments/coredns\": context deadline exceeded",
+        "disk": "ok",
+        "kine": "dial tcp 127.0.0.1:2379: connect: connection refused",
+        "kubelet": "ok",
+        "memory": "ok",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-27T06:55:28Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:55:28Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:55:28Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:55:28Z apiserver: Post-timeout activity",
+        "2026-10-27T06:55:29Z kubelet: Error updating node status, will retry: error getting node \"7af226ad3904-01\": Get \"https://10.10.216.62:6443/api/v1/nodes/7af226ad3904-01?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)",
+        "2026-10-27T06:55:29Z kubelet: Unable to update node status: update node status exceeds retry count",
+        "2026-10-27T06:55:29Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:55:29Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:55:29Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:55:29Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:55:29Z apiserver: Post-timeout activity",
+        "2026-10-27T06:55:33Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:55:33Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:55:33Z controller: Failed while getting a Node to retry updating node health. Probably Node was deleted",
+        "2026-10-27T06:55:33Z controller: Update health of Node from Controller error, Skipping - no pods will be evicted: the server was unable to return a response in the time allotted, but may still be processing the request (get nodes 7af226ad3904-01)",
+        "2026-10-27T06:55:33Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:55:33Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:55:33Z apiserver: Post-timeout activity",
+        "2026-10-27T06:55:33Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-27T06:55:35Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"context canceled\"}: context canceled",
+        "2026-10-27T06:55:35Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:55:35Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:55:35Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:55:35Z apiserver: Post-timeout activity",
+        "2026-10-27T06:55:36Z kubernetes: Failed to ensure lease exists, will retry: Get \"https://10.10.216.62:6443/apis/coordination.k8s.io/v1/namespaces/kube-node-lease/leases/7af226ad3904-01?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)",
+        "2026-10-27T06:55:36Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:55:36Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:55:36Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:55:36Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:55:36Z apiserver: Post-timeout activity"
+      ],
+      "listening": {
+        "kine": true
+      },
+      "host": {
+        "diskUsedPercent": 23,
+        "memoryAvailableMiB": 7100,
+        "uptimeSeconds": 12311
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "kine"
+    ]
+  },
+  "source": {
+    "fault": "kine-port-blocked",
+    "run": 3,
+    "node": "7af226ad3904-01",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-27T06:57:43.408516963Z",
+      "summary": "KubeSolo's apiserver and coredns components are failing due to connection timeouts to the kine (SQLite) datastore at 127.0.0.1:2379, indicating the kine is unreachable or too slow.",
+      "cause": "kine unhealthy; kine cannot answer in time: slow storage such as an SD card.",
+      "action": "restart_component",
+      "actionProbability": 0.9854362226604304,
+      "rating": "high"
+    }
+  }
+}

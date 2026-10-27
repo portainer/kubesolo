@@ -50,12 +50,15 @@
         "diskUsedPercent": 10,
         "memoryAvailableMiB": 3101,
         "uptimeSeconds": 92537
+      },
+      "listening": {
+        "kine": true
       }
     }
   },
   "expect": {
     "actions": [
-      "restart_component"
+      "report_only"
     ],
     "mentions": [
       "kine"

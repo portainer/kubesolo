@@ -29,7 +29,11 @@
         "2026-10-14T06:16:12Z default/node/edge-01 InvalidDiskCapacity: invalid capacity 0 on image filesystem",
         "2026-10-14T06:25:00Z shop/pod/api-7c9d ErrImagePull: Failed to pull image \"registry.example.com/shop/api:1.4\": not found",
         "2026-10-14T06:25:00Z shop/pod/api-7c9d BackOff: Back-off pulling image \"registry.example.com/shop/api:1.4\""
-      ]
+      ],
+      "listening": {
+        "kubelet": false
+      },
+      "node": "Unknown: NodeStatusUnknown: Kubelet stopped posting node status."
     }
   },
   "expect": {

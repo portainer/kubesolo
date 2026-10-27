@@ -31,12 +31,16 @@
         "diskUsedPercent": 10,
         "memoryAvailableMiB": 3127,
         "uptimeSeconds": 89767
-      }
+      },
+      "listening": {
+        "kubelet": true
+      },
+      "node": "Ready"
     }
   },
   "expect": {
     "actions": [
-      "restart_component"
+      "report_only"
     ],
     "mentions": [
       "kubelet"

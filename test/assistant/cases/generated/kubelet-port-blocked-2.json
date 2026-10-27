@@ -1,0 +1,82 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: kubelet",
+    "time": "2026-10-27T06:26:23.538045922Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "ok",
+        "controller": "ok",
+        "coredns": "ok",
+        "disk": "ok",
+        "kine": "ok",
+        "kubelet": "Get \"http://127.0.0.1:10248/healthz\": dial tcp 127.0.0.1:10248: connect: connection refused",
+        "memory": "ok",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-27T06:18:23Z apiserver: Post-timeout activity",
+        "2026-10-27T06:18:23Z controller: Unable to rotate token: failed to get token for kube-system/resourcequota-controller: timed out waiting for the condition",
+        "2026-10-27T06:18:24Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:18:24Z apiserver: Timeout or abort while handling",
+        "2026-10-27T06:18:24Z apiserver: Post-timeout activity",
+        "2026-10-27T06:18:24Z controller: Unable to rotate token: failed to get token for kube-system/generic-garbage-collector: timed out waiting for the condition",
+        "2026-10-27T06:18:25Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:18:25Z apiserver: Timeout or abort while handling",
+        "2026-10-27T06:18:25Z apiserver: Post-timeout activity",
+        "2026-10-27T06:18:25Z kubelet: Failed to get status for pod: Get \"https://10.10.216.62:6443/api/v1/namespaces/inject-noise/pods/unpullable\": stream error: stream ID 1303; INTERNAL_ERROR; received from peer",
+        "2026-10-27T06:18:26Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-27T06:18:27Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"crashloop\" with CrashLoopBackOff: \"back-off 5m0s restarting failed container=crashloop pod=crashloop_inject-noise(0043daa2-2308-48c6-a754-6484bf34640a)\"",
+        "2026-10-27T06:18:29Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:18:29Z kubelet: Error updating node status, will retry: error getting node \"7af226ad3904-01\": Get \"https://10.10.216.62:6443/api/v1/nodes/7af226ad3904-01?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)",
+        "2026-10-27T06:18:29Z apiserver: Timeout or abort while handling",
+        "2026-10-27T06:18:29Z apiserver: Post-timeout activity",
+        "2026-10-27T06:18:38Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-27T06:18:43Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 4.309µs, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
+        "2026-10-27T06:18:43Z kubelet: Couldn't update token: Timeout: request did not complete within requested timeout - context deadline exceeded",
+        "2026-10-27T06:18:53Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-27T06:18:54Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 3.927µs, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
+        "2026-10-27T06:18:54Z kubelet: Couldn't update token: Timeout: request did not complete within requested timeout - context deadline exceeded",
+        "2026-10-27T06:19:04Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-27T06:19:08Z controller: Deletion of namespace failed: failed to delete pods for namespace: inject-noise, err: unexpected items still remain in namespace: inject-noise for gvr: /v1, Resource=pods",
+        "2026-10-27T06:19:08Z controller: Deletion of namespace failed: failed to delete pods for namespace: inject-noise, err: unexpected items still remain in namespace: inject-noise for gvr: /v1, Resource=pods",
+        "2026-10-27T06:19:08Z controller: Deletion of namespace failed: failed to delete pods for namespace: inject-noise, err: unexpected items still remain in namespace: inject-noise for gvr: /v1, Resource=pods",
+        "2026-10-27T06:19:08Z controller: Deletion of namespace failed: failed to delete pods for namespace: inject-noise, err: unexpected items still remain in namespace: inject-noise for gvr: /v1, Resource=pods",
+        "2026-10-27T06:19:08Z controller: Deletion of namespace failed: failed to delete pods for namespace: inject-noise, err: unexpected items still remain in namespace: inject-noise for gvr: /v1, Resource=pods",
+        "2026-10-27T06:19:08Z controller: Deletion of namespace failed: failed to delete pods for namespace: inject-noise, err: unexpected items still remain in namespace: inject-noise for gvr: /v1, Resource=pods",
+        "2026-10-27T06:19:08Z controller: Deletion of namespace failed: failed to delete pods for namespace: inject-noise, err: unexpected items still remain in namespace: inject-noise for gvr: /v1, Resource=pods"
+      ],
+      "listening": {
+        "kubelet": true
+      },
+      "node": "Ready",
+      "host": {
+        "diskUsedPercent": 23,
+        "memoryAvailableMiB": 7124,
+        "uptimeSeconds": 10557
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "kubelet"
+    ]
+  },
+  "source": {
+    "fault": "kubelet-port-blocked",
+    "run": 2,
+    "node": "7af226ad3904-01",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-27T06:27:28.283794605Z",
+      "summary": "KubeSolo is failing to start due to a connection refused error on the kubelet's healthz endpoint at 127.0.0.1:10248, indicating the kubelet is not running.",
+      "cause": "The kubelet stopped or is stuck, matching the 'Kubelet down' failure type where the kubelet stopped or is stuck.",
+      "action": "restart_component",
+      "actionProbability": 0.9804617275364281,
+      "rating": "high"
+    }
+  }
+}

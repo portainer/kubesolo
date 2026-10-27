@@ -1,0 +1,81 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m30s: apiserver, coredns, kine",
+    "time": "2026-10-27T06:17:00.537420271Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "unexpected status 500",
+        "controller": "ok",
+        "coredns": "Get \"https://10.10.216.62:6443/apis/apps/v1/namespaces/kube-system/deployments/coredns\": context deadline exceeded",
+        "disk": "ok",
+        "kine": "dial tcp 127.0.0.1:2379: connect: connection refused",
+        "kubelet": "ok",
+        "memory": "ok",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-27T06:16:47Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:16:47Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:16:47Z apiserver: Post-timeout activity",
+        "2026-10-27T06:16:48Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-27T06:16:48Z kubelet: Error updating node status, will retry: error getting node \"7af226ad3904-01\": Get \"https://10.10.216.62:6443/api/v1/nodes/7af226ad3904-01?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)",
+        "2026-10-27T06:16:48Z kubelet: Unable to update node status: update node status exceeds retry count",
+        "2026-10-27T06:16:48Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:16:48Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:16:48Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:16:48Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:16:49Z apiserver: Post-timeout activity",
+        "2026-10-27T06:16:57Z kubernetes: Failed to ensure lease exists, will retry: Get \"https://10.10.216.62:6443/apis/coordination.k8s.io/v1/namespaces/kube-node-lease/leases/7af226ad3904-01?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)",
+        "2026-10-27T06:16:57Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:16:57Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:16:57Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:16:57Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:16:57Z apiserver: Post-timeout activity",
+        "2026-10-27T06:16:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"context canceled\"}: context canceled",
+        "2026-10-27T06:16:58Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:16:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:16:58Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:16:58Z apiserver: Post-timeout activity",
+        "2026-10-27T06:17:01Z kubelet: Error syncing pod, skipping: failed to \"StartContainer\" for \"unpullable\" with ImagePullBackOff: \"Back-off pulling image \\\"registry.invalid/inject/missing:1\\\": ErrImagePull: failed to pull and unpack image \\\"registry.invalid/inject/missing:1\\\": failed to resolve image: f",
+        "2026-10-27T06:17:05Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 8.116µs, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
+        "2026-10-27T06:17:05Z kubernetes: Server rejected event (will not retry!): Timeout: request did not complete within requested timeout - context deadline exceeded",
+        "2026-10-27T06:17:05Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"context canceled\"}: context canceled",
+        "2026-10-27T06:17:05Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:17:05Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:17:05Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:17:05Z apiserver: Post-timeout activity"
+      ],
+      "listening": {
+        "kine": true
+      },
+      "host": {
+        "diskUsedPercent": 23,
+        "memoryAvailableMiB": 7112,
+        "uptimeSeconds": 10001
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "kine"
+    ]
+  },
+  "source": {
+    "fault": "kine-port-blocked",
+    "run": 1,
+    "node": "7af226ad3904-01",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-27T06:19:17.224519187Z",
+      "summary": "KubeSolo is failing to start due to a connection timeout to the apiserver at 127.0.0.1:2379, which is caused by the kine (SQLite) datastore being unreachable.",
+      "cause": "kine unhealthy; apiserver fails with 'context deadline exceeded' or 'connection refused' to 127.0.0.1:2379, 'http: Handler timeout', 'Post-timeout activity', 'Error creating leases', 'apiserver /healthz check failed', 'shutdown requested before apiserver was ready'; KubeSolo restarts in a loop.",
+      "action": "restart_component",
+      "actionProbability": 0.8864700369413933,
+      "rating": "high"
+    }
+  }
+}

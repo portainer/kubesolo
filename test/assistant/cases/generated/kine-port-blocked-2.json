@@ -1,0 +1,81 @@
+{
+  "incident": {
+    "trigger": "unhealthy for 5m0s: apiserver, coredns, kine",
+    "time": "2026-10-27T06:35:00.538940551Z",
+    "snapshot": {
+      "components": {
+        "apiserver": "unexpected status 500",
+        "controller": "ok",
+        "coredns": "Get \"https://10.10.216.62:6443/apis/apps/v1/namespaces/kube-system/deployments/coredns\": context deadline exceeded",
+        "disk": "ok",
+        "kine": "dial tcp 127.0.0.1:2379: connect: connection refused",
+        "kubelet": "ok",
+        "memory": "ok",
+        "runtime": "ok",
+        "webhook": "ok"
+      },
+      "recentErrors": [
+        "2026-10-27T06:34:53Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:34:53Z apiserver: Post-timeout activity",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"context canceled\"}: context canceled",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Post-timeout activity",
+        "2026-10-27T06:34:58Z kubelet: Error updating node status, will retry: failed to patch status \"{\\\"status\\\":{\\\"$setElementOrder/conditions\\\":[{\\\"type\\\":\\\"MemoryPressure\\\"},{\\\"type\\\":\\\"DiskPressure\\\"},{\\\"type\\\":\\\"PIDPressure\\\"},{\\\"type\\\":\\\"Ready\\\"}],\\\"conditions\\\":[{\\\"lastHeartbeatTime\\\":\\\"2026-10-27T0",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: FinishRequest: post-timeout activity - time-elapsed: 4.178µs, panicked: false, err: context deadline exceeded, panic-reason: <nil>",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Post-timeout activity",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:34:58Z kubernetes: Failed to ensure lease exists, will retry: the server was unable to return a response in the time allotted, but may still be processing the request (get leases.coordination.k8s.io apiserver-zqer32bufho2kfzcxvqcg3bjli)",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Post-timeout activity",
+        "2026-10-27T06:34:58Z kubernetes: Failed to ensure lease exists, will retry: Get \"https://10.10.216.62:6443/apis/coordination.k8s.io/v1/namespaces/kube-node-lease/leases/7af226ad3904-01?timeout=10s\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: context.deadlineExceededError{}: context deadline exceeded",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:34:58Z apiserver: Post-timeout activity",
+        "2026-10-27T06:35:05Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"context canceled\"}: context canceled",
+        "2026-10-27T06:35:05Z apiserver: Unhandled Error: apiserver was unable to write a JSON response: http: Handler timeout",
+        "2026-10-27T06:35:05Z apiserver: Unhandled Error: apiserver received an error that is not an metav1.Status: &errors.errorString{s:\"http: Handler timeout\"}: http: Handler timeout",
+        "2026-10-27T06:35:05Z apiserver: Unhandled Error: apiserver was unable to write a fallback JSON response: http: Handler timeout",
+        "2026-10-27T06:35:05Z apiserver: Post-timeout activity"
+      ],
+      "listening": {
+        "kine": true
+      },
+      "host": {
+        "diskUsedPercent": 23,
+        "memoryAvailableMiB": 7123,
+        "uptimeSeconds": 11081
+      }
+    }
+  },
+  "expect": {
+    "actions": [
+      "report_only"
+    ],
+    "mentions": [
+      "kine"
+    ]
+  },
+  "source": {
+    "fault": "kine-port-blocked",
+    "run": 2,
+    "node": "7af226ad3904-01",
+    "triage": {
+      "status": "triaged",
+      "time": "2026-10-27T06:37:16.054473699Z",
+      "summary": "KubeSolo's apiserver is failing due to context deadline exceeded errors while kine is unreachable, indicating a slow datastore.",
+      "cause": "kine cannot answer in time: slow storage such as an SD card. Timeouts and refused connections are not damage: repair_database is only for the errors under Damaged datastore.",
+      "action": "restart_component",
+      "actionProbability": 0.9898008968972267,
+      "rating": "high"
+    }
+  }
+}

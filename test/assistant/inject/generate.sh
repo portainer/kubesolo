@@ -14,7 +14,7 @@
 # Odd runs add noise workloads (a crash-looping pod and an unpullable image),
 # so each node fault is seen with and without unrelated warnings around it.
 #
-# Faults: kubelet-down kine-blocked runtime-unreachable killed disk-full
+# Faults: kubelet-port-blocked kine-port-blocked runtime-unreachable killed disk-full
 #         coredns-firewall db-corrupt
 #         workload-crashloop workload-image-missing workload-config-missing
 
@@ -118,13 +118,15 @@ noise_off() {
 # expect_<fault> prints the acceptable actions and the words the diagnosis
 # should name, as two JSON arrays.
 
-expect_kubelet_down() { echo '["restart_component"] ["kubelet"]'; }
-inject_kubelet_down() { iptables -I INPUT -i lo -p tcp --dport 10248 -j REJECT; sleep "$HOLD"; }
-restore_kubelet_down() { while iptables -D INPUT -i lo -p tcp --dport 10248 -j REJECT 2>/dev/null; do :; done; }
+# A firewall rule rejecting a component's local port: the component keeps
+# running, so a restart cannot help and a person must remove the rule.
+expect_kubelet_port_blocked() { echo '["report_only"] ["kubelet"]'; }
+inject_kubelet_port_blocked() { iptables -I INPUT -i lo -p tcp --dport 10248 -j REJECT; sleep "$HOLD"; }
+restore_kubelet_port_blocked() { while iptables -D INPUT -i lo -p tcp --dport 10248 -j REJECT 2>/dev/null; do :; done; }
 
-expect_kine_blocked() { echo '["restart_component"] ["kine"]'; }
-inject_kine_blocked() { iptables -I INPUT -i lo -p tcp --dport 2379 -j REJECT; sleep "$HOLD"; }
-restore_kine_blocked() { while iptables -D INPUT -i lo -p tcp --dport 2379 -j REJECT 2>/dev/null; do :; done; }
+expect_kine_port_blocked() { echo '["report_only"] ["kine"]'; }
+inject_kine_port_blocked() { iptables -I INPUT -i lo -p tcp --dport 2379 -j REJECT; sleep "$HOLD"; }
+restore_kine_port_blocked() { while iptables -D INPUT -i lo -p tcp --dport 2379 -j REJECT 2>/dev/null; do :; done; }
 
 expect_runtime_unreachable() { echo '["restart_component"] ["containerd","runtime"]'; }
 inject_runtime_unreachable() { mv "$DATA/containerd/containerd.sock" "$DATA/containerd/containerd.sock.inject"; sleep "$HOLD"; }
