@@ -3,6 +3,8 @@ package assistant
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,6 +76,51 @@ type Runner struct {
 // autoInterval is how seldom a restart is carried out without approval.
 const autoInterval = time.Hour
 
+// retryAfter is how long an action that failed is not carried out again for
+// the same components: it would not help until something else changes.
+const retryAfter = 6 * time.Hour
+
+// failingOf is what an incident is about: the components its trigger names,
+// as in "unhealthy for 5m0s: kubelet", or else the trigger itself.
+func failingOf(trigger string) string {
+	if rest, ok := strings.CutPrefix(trigger, "unhealthy for "); ok {
+		if _, names, ok := strings.Cut(rest, ": "); ok {
+			return names
+		}
+	}
+	return trigger
+}
+
+// failedBefore says why inc's action is not worth carrying out, or returns
+// "": the same action, for the same components, failed within retryAfter.
+func failedBefore(all []Summary, inc Summary, now time.Time) string {
+	if inc.Triage == nil {
+		return ""
+	}
+	for _, s := range all {
+		run := s.ActionRun
+		if s.ID == inc.ID || run == nil || run.Status != ActionFailed || run.Action != inc.Triage.Action ||
+			failingOf(s.Trigger) != failingOf(inc.Trigger) || now.Sub(run.Start) > retryAfter {
+			continue
+		}
+		return fmt.Sprintf("%s failed for %s at %s and would not help again: %s",
+			run.Action, failingOf(s.Trigger), run.Start.UTC().Format("2006-01-02 15:04 MST"), run.Reason)
+	}
+	return ""
+}
+
+// notAgain says why inc's action is not worth carrying out, or returns nil.
+func (r *Runner) notAgain(inc Incident) error {
+	all, err := r.Store.List("")
+	if err != nil {
+		return err
+	}
+	if why := failedBefore(all, inc.Summary(), r.clock()); why != "" {
+		return errors.New(why)
+	}
+	return nil
+}
+
 // Auto carries out, without approval, an incident's restart_component rated
 // high — the only action KubeSolo takes on its own, and only when
 // assistant.autoRestart is set — at most once an hour. Its preconditions are
@@ -138,7 +185,11 @@ func (r *Runner) start(ctx context.Context, id string, auto bool) error {
 	r.wg.Go(func() {
 		defer r.mu.Unlock()
 		log.Info().Str("component", "assistant").Str("incident", id).Str("action", action).Bool("auto", auto).Msg("carrying out the action...")
-		switch err := r.Actor.Check(ctx, action, *inc); {
+		err := r.notAgain(*inc)
+		if err == nil {
+			err = r.Actor.Check(ctx, action, *inc)
+		}
+		switch {
 		case err != nil:
 			run.Status, run.Reason = ActionRefused, err.Error()
 		default:

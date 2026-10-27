@@ -259,3 +259,81 @@ func TestTheAutomaticRestartLimitOutlivesARestart(t *testing.T) {
 		t.Error("restarted automatically again within the hour, after a restart")
 	}
 }
+
+// failed records that inc's action was carried out at and failed.
+func failed(t *testing.T, s *Store, inc Incident, at time.Time) {
+	t.Helper()
+	if err := s.update(inc.ID, func(i *Incident) error {
+		i.ActionRun = &ActionRun{Action: i.Triage.Action, Status: ActionFailed, Reason: "KubeSolo restarted, but kubelet: connection refused", Start: at, End: at}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An action that just failed for the same components would not help: it is
+// refused, naming the failure, approved or automatic.
+func TestAnActionThatJustFailedIsNotRepeated(t *testing.T) {
+	s := NewStore(t.TempDir())
+	actor := &fakeActor{}
+	now := reviewTime
+	r := &Runner{Actor: actor, Store: s, now: func() time.Time { return now }}
+	first := approved(t, s, reviewTime.Add(-time.Hour), "restart_component")
+	failed(t, s, first, reviewTime.Add(-time.Hour))
+
+	again := approved(t, s, reviewTime, "restart_component")
+	if err := r.Start(context.Background(), again.ID); err != nil {
+		t.Fatal(err)
+	}
+	r.Wait()
+	run := runOf(t, s, again.ID)
+	if run == nil || run.Status != ActionRefused || !strings.Contains(run.Reason, "restart_component failed for kubelet at 2026-10-15 08:00 UTC") {
+		t.Errorf("run = %+v", run)
+	}
+
+	auto := triagedIncident(t, s, reviewTime.Add(time.Minute), "restart_component", 0.97)
+	now = reviewTime.Add(time.Minute)
+	r.Auto(context.Background(), auto)
+	r.Wait()
+	if run := runOf(t, s, auto.ID); run == nil || run.Status != ActionRefused {
+		t.Errorf("automatic run = %+v", run)
+	}
+	if len(actor.ran) != 0 {
+		t.Errorf("ran %v", actor.ran)
+	}
+}
+
+// A failure long ago, or for other components, or of another action, does
+// not stop an action.
+func TestAnActionIsRepeatedWhenItMightHelp(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		ago    time.Duration
+		action string
+		other  string // trigger of the failed incident
+	}{
+		{"long ago", retryAfter + time.Minute, "restart_component", ""},
+		{"another action", time.Hour, "repair_database", ""},
+		{"other components", time.Hour, "restart_component", "unhealthy for 5m0s: kine"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewStore(t.TempDir())
+			actor := &fakeActor{}
+			r := &Runner{Actor: actor, Store: s, now: func() time.Time { return reviewTime }}
+			first := approved(t, s, reviewTime.Add(-tc.ago), tc.action)
+			if tc.other != "" {
+				if err := s.update(first.ID, func(i *Incident) error { i.Trigger = tc.other; return nil }); err != nil {
+					t.Fatal(err)
+				}
+			}
+			failed(t, s, first, reviewTime.Add(-tc.ago))
+
+			again := approved(t, s, reviewTime, "restart_component")
+			_ = r.Start(context.Background(), again.ID)
+			r.Wait()
+			if run := runOf(t, s, again.ID); run == nil || run.Status != ActionSucceeded {
+				t.Errorf("run = %+v", run)
+			}
+		})
+	}
+}

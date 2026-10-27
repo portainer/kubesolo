@@ -142,3 +142,26 @@ func TestReportOfACarriedOutAction(t *testing.T) {
 		t.Errorf("the text report lacks the action's outcome:\n%s", text)
 	}
 }
+
+// An action that would be refused as just failed is not offered, and the
+// report says why.
+func TestAReportDoesNotOfferAnActionThatJustFailed(t *testing.T) {
+	s := NewStore(t.TempDir())
+	first := approved(t, s, reviewTime.Add(-time.Hour), "restart_component")
+	failed(t, s, first, reviewTime.Add(-time.Hour))
+	triagedIncident(t, s, reviewTime, "restart_component", 0.97)
+
+	rep := testReporter(s)
+	rep.now = func() time.Time { return reviewTime.Add(time.Minute) }
+	r, err := rep.Report(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	inc := r.Incidents[0]
+	if inc.State != StateNotOffered || !strings.Contains(inc.Note, "restart_component failed for kubelet at 2026-10-15 08:00 UTC") {
+		t.Errorf("state = %q, note = %q", inc.State, inc.Note)
+	}
+	if r.AwaitingApproval != 0 {
+		t.Errorf("%d awaiting approval, want 0", r.AwaitingApproval)
+	}
+}

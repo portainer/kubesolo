@@ -230,7 +230,7 @@ func printReport(p *ui.Printer, r assistant.Report) {
 				rated = fmt.Sprintf("rated %s (%.2f)", t.Rating, t.ActionProbability)
 			}
 			p.Label("Action", fmt.Sprintf("%s, %s", t.Action, rated))
-			p.Label("State", inc.State)
+			p.Label("State", strings.TrimSuffix(inc.State+": "+inc.Note, ": "))
 			p.Label("Summary", t.Summary)
 		} else {
 			p.Label("State", fmt.Sprintf("%s: %s", inc.State, t.Reason))

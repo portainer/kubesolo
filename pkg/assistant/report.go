@@ -43,6 +43,10 @@ type Report struct {
 type ReportIncident struct {
 	Summary
 	State string `json:"state"`
+
+	// Note says why an action rated high is not offered: it failed for the
+	// same components not long ago.
+	Note string `json:"note,omitempty"`
 }
 
 // Reporter writes reports.
@@ -73,6 +77,11 @@ func (r *Reporter) Report(ctx context.Context) (Report, error) {
 	}
 	for i := len(all) - 1; i >= 0; i-- {
 		inc := ReportIncident{Summary: all[i], State: state(all[i])}
+		if inc.State == StateAwaitingApproval {
+			if inc.Note = failedBefore(all, all[i], rep.Time); inc.Note != "" {
+				inc.State = StateNotOffered
+			}
+		}
 		if inc.State == StateAwaitingApproval {
 			rep.AwaitingApproval++
 		}
@@ -127,6 +136,9 @@ func (r Report) Text() string {
 				rated = fmt.Sprintf("rated %s (%.2f)", t.Rating, t.ActionProbability)
 			}
 			fmt.Fprintf(&b, "    %s, %s: %s\n", t.Action, rated, inc.State)
+			if inc.Note != "" {
+				fmt.Fprintf(&b, "    %s\n", inc.Note)
+			}
 			fmt.Fprintf(&b, "    %s\n", t.Summary)
 		} else {
 			fmt.Fprintf(&b, "    %s: %s\n", inc.State, t.Reason)

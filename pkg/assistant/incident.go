@@ -54,6 +54,11 @@ type Incident struct {
 	ActionRun *ActionRun `json:"actionRun,omitempty"`
 }
 
+// Summary is the incident without its snapshot.
+func (inc Incident) Summary() Summary {
+	return Summary{ID: inc.ID, Time: inc.Time, Kind: inc.Kind, Trigger: inc.Trigger, Triage: inc.Triage, Review: inc.Review, ActionRun: inc.ActionRun}
+}
+
 // Summary is an incident without its snapshot, for listing.
 type Summary struct {
 	ID        string     `json:"id"`
@@ -237,7 +242,7 @@ func (s *Store) List(since string) ([]Summary, error) {
 		if err != nil {
 			continue // deleted by a concurrent save, or not triaged yet
 		}
-		out = append(out, Summary{ID: inc.ID, Time: inc.Time, Kind: inc.Kind, Trigger: inc.Trigger, Triage: inc.Triage, Review: inc.Review, ActionRun: inc.ActionRun})
+		out = append(out, inc.Summary())
 	}
 	return out, nil
 }
