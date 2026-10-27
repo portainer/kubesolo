@@ -264,7 +264,7 @@ sudo kubesoloctl assistant report --json   # for a program
 | `report only` | The model found nothing to do, or something a person must do |
 | `triage failed` / `triage skipped` | No diagnosis; the triage's `reason` says why |
 
-Over the API, `GET /api/v1/assistant/report` returns it as JSON, and `?format=text` as the same text the command prints. `totalIncidents` and `awaitingApproval` count every incident kept, not only the 10 shown.
+Over the API, `GET /api/v1/assistant/report` returns it as JSON, and `?format=text` as plain text, with the same content as the command prints. `totalIncidents` and `awaitingApproval` count every incident kept, not only the 10 shown.
 
 ---
 

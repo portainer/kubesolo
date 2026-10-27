@@ -89,12 +89,14 @@ func TestReportAsText(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := r.Text()
+	awaiting := r.Incidents[len(r.Incidents)-1].ID
 	for _, want := range []string{
+		"id " + awaiting,
 		"kubelet", "connection refused", // health
 		"restart_component", "high", "0.97", "awaiting approval", // an offered action
 		"rejected", "repair_database", "lease UID mismatch", // a review
 		"skipped", "2066 MiB", // a skipped triage
-		"kubesoloctl assistant approve", // what to do next
+		"kubesoloctl assistant approve " + awaiting, // what to do next
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the text report lacks %q:\n%s", want, text)

@@ -37,6 +37,11 @@ func New() *Printer {
 	return &Printer{w: os.Stderr, color: ColorEnabled()}
 }
 
+// NewWriter returns a Printer targeting w, without colour.
+func NewWriter(w io.Writer) *Printer {
+	return &Printer{w: w}
+}
+
 // ColorEnabled reports whether ANSI colour output is appropriate for the
 // current stderr. Exported so configureLogging can share the same detection.
 func ColorEnabled() bool {

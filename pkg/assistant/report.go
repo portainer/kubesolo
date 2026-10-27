@@ -120,7 +120,7 @@ func (r Report) Text() string {
 	}
 	for _, inc := range r.Incidents {
 		t := inc.Triage
-		fmt.Fprintf(&b, "\n  %s  %s\n  %s\n", inc.Time.UTC().Format("2006-01-02 15:04"), inc.ID, inc.Trigger)
+		fmt.Fprintf(&b, "\n  %s, id %s\n  %s\n", inc.Time.UTC().Format("2006-01-02 15:04"), inc.ID, inc.Trigger)
 		if t.Status == TriageDone {
 			rated := "unrated"
 			if t.Rating != "" {
@@ -148,7 +148,12 @@ func (r Report) Text() string {
 	}
 
 	if r.AwaitingApproval > 0 {
-		fmt.Fprintf(&b, "\n%d action(s) awaiting approval: kubesoloctl assistant approve <id>, or reject <id>\n", r.AwaitingApproval)
+		fmt.Fprintf(&b, "\n%d action(s) awaiting approval:\n", r.AwaitingApproval)
+		for _, inc := range r.Incidents {
+			if inc.State == StateAwaitingApproval {
+				fmt.Fprintf(&b, "  kubesoloctl assistant approve %s, or reject %[1]s\n", inc.ID)
+			}
+		}
 	}
 	return b.String()
 }

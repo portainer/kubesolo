@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/portainer/kubesolo/pkg/assistant"
@@ -188,8 +191,66 @@ func runReport(asJSON bool) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(r)
 	}
-	fmt.Print(r.Text())
+	printReport(p, *r)
 	return nil
+}
+
+// printReport prints the report for a person at a terminal.
+func printReport(p *ui.Printer, r assistant.Report) {
+	p.Header("assistant report")
+
+	p.Section("Health, " + r.Time.Format("2006-01-02 15:04 MST"))
+	for _, name := range slices.Sorted(maps.Keys(r.Components)) {
+		if status := r.Components[name]; status == "ok" {
+			p.OK(name, "")
+		} else {
+			_ = p.Fail(name, errors.New(status))
+		}
+	}
+	p.Info(fmt.Sprintf("disk %d%% used, %d MiB memory available, up %s",
+		r.Host.DiskUsedPercent, r.Host.MemoryAvailableMiB, time.Duration(r.Host.UptimeSeconds)*time.Second))
+
+	p.Section(fmt.Sprintf("Incidents, newest first (%d of %d)", len(r.Incidents), r.TotalIncidents))
+	if len(r.Incidents) == 0 {
+		p.Info("none")
+	}
+	var next []string
+	for _, inc := range r.Incidents {
+		t := inc.Triage
+		p.Step(inc.Trigger)
+		p.Label("ID", inc.ID)
+		p.Label("Time", inc.Time.UTC().Format("2006-01-02 15:04 MST"))
+		if t.Status == assistant.TriageDone {
+			rated := "unrated"
+			if t.Rating != "" {
+				rated = fmt.Sprintf("rated %s (%.2f)", t.Rating, t.ActionProbability)
+			}
+			p.Label("Action", fmt.Sprintf("%s, %s", t.Action, rated))
+			p.Label("State", inc.State)
+			p.Label("Summary", t.Summary)
+		} else {
+			p.Label("State", fmt.Sprintf("%s: %s", inc.State, t.Reason))
+		}
+		if run := inc.ActionRun; run != nil {
+			p.Label("Run", strings.TrimSuffix(fmt.Sprintf("%s %s, %s", run.Action, run.Status, run.Reason), ", "))
+		}
+		if rv := inc.Review; rv != nil {
+			review := fmt.Sprintf("%s, right action %s", rv.Verdict, cmp.Or(rv.Action, "not given"))
+			if rv.Note != "" {
+				review += fmt.Sprintf(": %q", rv.Note)
+			}
+			p.Label("Review", review)
+		}
+		if inc.State == assistant.StateAwaitingApproval {
+			next = append(next,
+				"sudo kubesoloctl assistant approve "+inc.ID,
+				"sudo kubesoloctl assistant reject "+inc.ID+" --action <the right action>")
+		}
+	}
+	if r.AwaitingApproval > 0 {
+		p.Hint(fmt.Sprintf("%d action(s) awaiting approval", r.AwaitingApproval), next...)
+	}
+	p.Blank()
 }
 
 func runReview(id string, review func(*configapi.Client) (*assistant.Incident, error)) error {
