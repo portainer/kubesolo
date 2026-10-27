@@ -1,0 +1,65 @@
+package assistant
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+// probePort finds the local port a failed probe names, as in
+// `dial tcp 127.0.0.1:10248: connect: connection refused`.
+var probePort = regexp.MustCompile(`(?:127\.0\.0\.1|localhost|\[::1\]):(\d+)`)
+
+// tcpListen is a listening socket's state in /proc/net/tcp.
+const tcpListen = "0A"
+
+// listening says, for each failing component whose probe names a local port,
+// whether anything listens on it. A port that listens yet refuses the probe
+// points to something in between, such as a firewall rule, rather than to the
+// component. It is nil when the listening ports are unknown.
+func listening(components map[string]string, ports map[int]bool) map[string]bool {
+	if ports == nil {
+		return nil
+	}
+	var out map[string]bool
+	for name, status := range components {
+		m := probePort.FindStringSubmatch(status)
+		if status == "ok" || m == nil {
+			continue
+		}
+		port, _ := strconv.Atoi(m[1])
+		if out == nil {
+			out = map[string]bool{}
+		}
+		out[name] = ports[port]
+	}
+	return out
+}
+
+// listeningPorts reads the TCP ports the host listens on from procNet's tcp
+// and tcp6, or returns nil when neither can be read.
+func listeningPorts(procNet string) map[int]bool {
+	var ports map[int]bool
+	for _, name := range []string{"tcp", "tcp6"} {
+		raw, err := os.ReadFile(filepath.Join(procNet, name))
+		if err != nil {
+			continue
+		}
+		if ports == nil {
+			ports = map[int]bool{}
+		}
+		for _, line := range strings.Split(string(raw), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) < 4 || fields[3] != tcpListen {
+				continue
+			}
+			_, port, _ := strings.Cut(fields[1], ":")
+			if p, err := strconv.ParseUint(port, 16, 16); err == nil {
+				ports[int(p)] = true
+			}
+		}
+	}
+	return ports
+}

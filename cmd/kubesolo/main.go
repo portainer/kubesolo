@@ -1138,6 +1138,7 @@ func (s *kubesolo) watchComponents(ctx context.Context) {
 	}
 	if cs, err := kubesolokubernetes.GetKubernetesClient(s.embedded.AdminKubeconfigFile); err == nil {
 		collector.Events = node.WarningEvents(cs)
+		collector.Node = node.NodeReady(cs)
 	}
 	(&assistant.Watcher{
 		Collector: collector,

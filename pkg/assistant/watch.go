@@ -1,6 +1,7 @@
 package assistant
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,6 +42,13 @@ type Collector struct {
 	// fail when the API server is down.
 	Events func(context.Context) ([]string, error)
 
+	// Node returns the node's Ready condition. It may be nil, and may fail
+	// when the API server is down.
+	Node func(context.Context) (string, error)
+
+	// ProcNet is where the listening ports are read; empty means /proc/net.
+	ProcNet string
+
 	// DataDir is where KubeSolo keeps its state, for the disk usage.
 	DataDir string
 
@@ -73,6 +81,14 @@ func (c *Collector) Collect(ctx context.Context) Snapshot {
 		if events, err := c.Events(ctx); err == nil {
 			s.Events = events
 		}
+	}
+	s.Listening = listening(s.Components, listeningPorts(cmp.Or(c.ProcNet, "/proc/net")))
+	if c.Node != nil {
+		nctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if n, err := c.Node(nctx); err == nil {
+			s.Node = n
+		}
+		cancel()
 	}
 	fit(&s)
 	return s

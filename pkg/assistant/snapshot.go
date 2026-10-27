@@ -13,6 +13,15 @@ type Snapshot struct {
 	// Events are recent Kubernetes warning events, when the API server answers.
 	Events []string `json:"events,omitempty"`
 
+	// Listening says, for each failing component whose probe names a local
+	// port, whether anything listens on that port: one that listens yet
+	// refuses the probe is running, and something in between blocks it.
+	Listening map[string]bool `json:"listening,omitempty"`
+
+	// Node is the node's Ready condition as the API server last heard it from
+	// the kubelet, when the API server answers.
+	Node string `json:"node,omitempty"`
+
 	// Workload is the failing workload, for a workload incident.
 	Workload *WorkloadState `json:"workload,omitempty"`
 
