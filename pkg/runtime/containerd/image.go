@@ -72,7 +72,10 @@ func ImportArchive(ctx context.Context, socket string, r io.Reader) ([]string, e
 	}
 	defer func() { _ = c.Close() }()
 
-	imgs, err := c.Import(namespaces.WithNamespace(ctx, types.DefaultK8sNamespace), r)
+	// docker save with the containerd image store writes the whole index of a
+	// pulled image but only the content of the platforms it pulled, so the
+	// manifests of the others are skipped rather than failing the import.
+	imgs, err := c.Import(namespaces.WithNamespace(ctx, types.DefaultK8sNamespace), r, client.WithSkipMissing())
 	if err != nil {
 		return nil, fmt.Errorf("failed to import images: %w", err)
 	}
