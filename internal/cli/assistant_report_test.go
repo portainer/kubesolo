@@ -50,3 +50,23 @@ func TestPrintReport(t *testing.T) {
 		}
 	}
 }
+
+// The incident list has headings and aligned columns, like kubectl get.
+func TestPrintIncidents(t *testing.T) {
+	list := []assistant.Summary{
+		{ID: "20261027T035947.994855809Z", Kind: assistant.KindKubeSolo, Trigger: "unhealthy for 5m30s: kubelet",
+			Triage: &assistant.Triage{Status: assistant.TriageDone, Diagnosis: assistant.Diagnosis{Action: "restart_component", Rating: assistant.RatingHigh}},
+			Review: &assistant.Review{Verdict: assistant.VerdictApproved}},
+		{ID: "20261027T041000.000000000Z", Kind: assistant.KindWorkload, Trigger: "crash looping: default/api",
+			Triage: &assistant.Triage{Status: assistant.TriageSkipped}},
+	}
+	var b bytes.Buffer
+	printIncidents(&b, list)
+	want := `ID                          KIND      TRIAGE   ACTION             RATING  REVIEW    TRIGGER
+20261027T035947.994855809Z  kubesolo  triaged  restart_component  high    approved  unhealthy for 5m30s: kubelet
+20261027T041000.000000000Z  workload  skipped  -                  -       -         crash looping: default/api
+`
+	if b.String() != want {
+		t.Errorf("got:\n%s\nwant:\n%s", b.String(), want)
+	}
+}

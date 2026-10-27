@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/portainer/kubesolo/internal/cli/ui"
@@ -45,7 +47,7 @@ api.enabled must be true.`,
 		Short: "List the incidents the assistant has recorded, or show one",
 		Long: `List the incidents the assistant has recorded, oldest first, or show one
 whole as JSON. Each is listed once triaged, with the action the model
-suggests; none is taken. The last 100 are kept.`,
+suggests. The last 100 are kept.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
@@ -57,10 +59,12 @@ suggests; none is taken. The last 100 are kept.`,
 	var note, action string
 	approve := &cobra.Command{
 		Use:   "approve ID",
-		Short: "Agree with the action the assistant suggests for an incident",
-		Long: `Agree with the action the assistant suggests for an incident. Only an
-action rated high can be approved. Reviews are recorded with the incident, to
-measure and improve the assistant; no action is carried out yet.`,
+		Short: "Agree with the action the assistant suggests for an incident, and carry it out",
+		Long: `Agree with the action the assistant suggests for an incident, and carry it
+out. Only an action rated high can be approved. Its preconditions are checked
+again first; if they no longer hold, it is refused and nothing is done.
+"kubesoloctl assistant report" shows how it went. Reviews are recorded with the
+incident, to measure and improve the assistant.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runReview(args[0], func(api *configapi.Client) (*assistant.Incident, error) {
@@ -127,7 +131,7 @@ func runExport(dir string) error {
 	if err != nil {
 		return p.Fail("assistant", err)
 	}
-	p.Info(fmt.Sprintf("wrote %d test case(s) to %s", n, dir))
+	p.OK(fmt.Sprintf("%d test case(s) written", n), dir)
 	return nil
 }
 
@@ -264,9 +268,14 @@ func runReview(id string, review func(*configapi.Client) (*assistant.Incident, e
 	}
 	inc, err := review(h.api)
 	if err != nil {
-		return p.Fail("assistant", err)
+		return p.Fail("incident "+id, err)
 	}
-	p.Info(fmt.Sprintf("%s %s: %s", inc.ID, inc.Review.Verdict, cmp.Or(inc.Review.Action, "no action named")))
+	if inc.Review.Verdict == assistant.VerdictApproved {
+		p.OK("incident approved", inc.ID+" · "+inc.Review.Action)
+		p.Info("follow the action with: sudo kubesoloctl assistant report")
+	} else {
+		p.OK("incident rejected", inc.ID+" · right action "+cmp.Or(inc.Review.Action, "not given"))
+	}
 	return nil
 }
 
@@ -287,6 +296,14 @@ func runIncidents() error {
 		p.Info("no incidents recorded")
 		return nil
 	}
+	printIncidents(os.Stdout, list)
+	return nil
+}
+
+// printIncidents prints the incidents as a table, like kubectl get.
+func printIncidents(w io.Writer, list []assistant.Summary) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "ID\tKIND\tTRIAGE\tACTION\tRATING\tREVIEW\tTRIGGER")
 	for _, inc := range list {
 		status, action, rating, review := "-", "-", "-", "-"
 		if inc.Triage != nil {
@@ -295,9 +312,9 @@ func runIncidents() error {
 		if inc.Review != nil {
 			review = inc.Review.Verdict
 		}
-		fmt.Printf("%s  %s  %s  %s  %s  %s  %s\n", inc.ID, inc.Kind, status, action, rating, review, inc.Trigger)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", inc.ID, inc.Kind, status, action, rating, review, inc.Trigger)
 	}
-	return nil
+	_ = tw.Flush()
 }
 
 func runIncident(id string) error {
@@ -311,7 +328,7 @@ func runIncident(id string) error {
 	}
 	inc, err := h.api.Incident(id)
 	if err != nil {
-		return p.Fail("assistant", err)
+		return p.Fail("incident "+id, err)
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
@@ -328,11 +345,14 @@ func runAsk(question string) error {
 		return p.Fail("assistant", errAPIUnreachable)
 	}
 
-	p.Step("asking the assistant (this can take a minute or more)")
+	p.Header("assistant ask")
+	p.Step("Asking the assistant (this can take a minute or more)")
 	resp, err := h.api.Ask(question)
 	if err != nil {
 		return p.Fail("assistant", err)
 	}
+	p.Blank()
 	fmt.Println(resp.Answer)
+	p.Blank()
 	return nil
 }
