@@ -125,6 +125,7 @@ The universal installer (`install.sh`) reads these environment variables. The va
 export KUBESOLO_VERSION="v1.2.2"                # Version to install
 export KUBESOLO_PATH="/var/lib/kubesolo"        # Data directory
 export KUBESOLO_APISERVER_EXTRA_SANS=""         # Extra API server certificate SANs
+export KUBESOLO_APISERVER_AUTHENTICATION_CONFIG_FILE=""  # Absolute path to a JWT AuthenticationConfiguration file
 export KUBESOLO_PORTAINER_EDGE_ID=""            # Portainer Edge ID
 export KUBESOLO_PORTAINER_EDGE_KEY=""           # Portainer Edge Key
 export KUBESOLO_PORTAINER_EDGE_ASYNC="false"    # Async mode

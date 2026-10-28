@@ -397,8 +397,8 @@ Changes to anonymous authentication need a restart, not a file reload.
 the container. A single-file bind mount can keep pointing at the old file after
 atomic replacement, so updates would not reach kube-apiserver.
 
-The configuration API and `kubesoloctl` manage the path only. They do not read,
-validate or write the authentication file.
+The configuration API and `kubesoloctl` manage the path only. They reject a
+relative path, but do not read, validate or write the authentication file.
 
 Kubernetes rejects `--authentication-config` combined with `--oidc-*` flags.
 It also rejects an `anonymous` section combined with `--anonymous-auth`.
