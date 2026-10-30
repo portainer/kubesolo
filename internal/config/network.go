@@ -108,3 +108,19 @@ func ClusterDNS(cfg *types.Config) (string, error) {
 	}
 	return ip.String(), nil
 }
+
+// NodeIPWarning warns when ip, the node's address, is in the pod or the service
+// network: the host's own address then collides with the cluster's, and
+// traffic for the node can be routed into the cluster instead.
+func NodeIPWarning(cfg *types.Config, ip string) (Warning, bool) {
+	addr := net.ParseIP(ip)
+	if addr == nil || addr.To4() == nil {
+		return Warning{}, false
+	}
+	for field, cidr := range map[string]string{"kubernetes.podCIDR": cfg.Kubernetes.PodCIDR, "kubernetes.serviceCIDR": cfg.Kubernetes.ServiceCIDR} {
+		if network, err := parseIPv4CIDR(cidr); err == nil && network.Contains(addr) {
+			return Warning{Field: field, Message: fmt.Sprintf("%s holds the node IP %s: traffic for the node can be routed into the cluster instead; choose a network the host does not use", cidr, ip)}, true
+		}
+	}
+	return Warning{}, false
+}

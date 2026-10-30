@@ -1002,6 +1002,11 @@ func (s *kubesolo) bootstrap() {
 	if !mtuPinned && mtu < 1280 && !s.cfg.Network.DisableIPv6 {
 		log.Warn().Int("mtu", mtu).Msg("MTU is below the IPv6 minimum (1280); IPv6 pod traffic may fail to fragment correctly")
 	}
+	// Likewise a node IP in a cluster network: config.Validate warns about a
+	// configured one.
+	if w, ok := config.NodeIPWarning(s.cfg, nodeIP); ok && !nodeIPPinned {
+		log.Warn().Msg(w.String())
+	}
 
 	// Disable OpenTelemetry SDK to prevent it from interfering with the application's logging
 	_ = os.Setenv("OTEL_SDK_DISABLED", "true")

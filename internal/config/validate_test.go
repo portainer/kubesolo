@@ -271,6 +271,40 @@ func TestLowMTUWarnsOnlyWithIPv6(t *testing.T) {
 	}
 }
 
+// A node IP the host already uses inside a cluster network is the mistake the
+// configurable networks are most likely to be met with; it is warned about,
+// not refused.
+func TestNodeIPInAClusterNetworkWarns(t *testing.T) {
+	for _, tc := range []struct {
+		name, nodeIP, wantIn string
+	}{
+		{"in the pod network", "10.42.3.4", "kubernetes.podCIDR"},
+		{"in the service network", "10.43.0.200", "kubernetes.serviceCIDR"},
+		{"in neither", "192.168.1.10", ""},
+		{"detected at start, not here", "", ""},
+		{"IPv6", "fd00::1", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Network.NodeIP = tc.nodeIP
+
+			warnings, err := Validate(cfg, testHost())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got string
+			for _, w := range warnings {
+				if strings.Contains(w.Message, "holds the node IP") {
+					got = w.Field
+				}
+			}
+			if got != tc.wantIn {
+				t.Errorf("node IP warning on %q, want %q (warnings: %v)", got, tc.wantIn, warnings)
+			}
+		})
+	}
+}
+
 // TestValidateIsIdempotent guards the normalisation: the API validates on every
 // write, so running it over an already-normalised config must not drift.
 func TestValidateIsIdempotent(t *testing.T) {

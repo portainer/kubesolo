@@ -26,8 +26,10 @@ certificate, the cluster database and all container state live below it, and
 nothing moves them. `kubernetes.podCIDR`, `kubernetes.serviceCIDR` and
 `kubernetes.clusterDNS`: the node's pod range, every Service's cluster IP and the
 API server certificate were allocated from them. Choose them before the first
-start: KubeSolo records them in `<path>/networks.yaml` and refuses to start
-with others. A cluster created before they were configurable has the defaults.
+start, away from the networks the host uses (KubeSolo warns when the node IP is
+in either of them). KubeSolo records them in `<path>/networks.yaml` and refuses
+to start with others. A cluster created before they were configurable has the
+defaults.
 
 ### The Portainer agent's settings are set once
 

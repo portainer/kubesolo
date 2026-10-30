@@ -134,6 +134,11 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 		return warnings, err
 	}
 
+	// A detected node IP is checked as KubeSolo starts, once it is known.
+	if w, ok := NodeIPWarning(cfg, cfg.Network.NodeIP); ok {
+		warnings = append(warnings, w)
+	}
+
 	if cfg.API.Enabled && len(cfg.API.SocketPath) > maxUnixSocketPath {
 		return warnings, fmt.Errorf("api.socketPath is %d characters, which exceeds the %d-byte limit for a unix socket; shorten it or shorten path, from which it is derived",
 			len(cfg.API.SocketPath), maxUnixSocketPath)
