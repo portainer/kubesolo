@@ -17,6 +17,18 @@ import (
 // be fragmented correctly.
 const ipv6MinimumMTU = 1280
 
+// The sizes the Kubernetes components accept for the cluster networks. The
+// controller manager carves a /24 out of the pod CIDR for the node, so the pod
+// CIDR must hold one. The API server refuses an IPv4 service CIDR larger than a
+// /12 or smaller than a /29, and the default cluster DNS address, the tenth,
+// needs at least a /28.
+const (
+	nodePodCIDRPrefix      = 24
+	largestServiceCIDR     = 12
+	smallestServiceCIDR    = 29
+	smallestDNSServiceCIDR = 28
+)
+
 // maxUnixSocketPath is the longest path a unix socket may have on Linux:
 // sun_path is 108 bytes including its terminator. Exceeding it makes bind fail
 // with "invalid argument", which says nothing about the cause — hence the check
@@ -114,6 +126,19 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 		}
 	}
 
+	if err := validatePorts(cfg); err != nil {
+		return warnings, err
+	}
+
+	if err := validateNetworks(cfg); err != nil {
+		return warnings, err
+	}
+
+	// A detected node IP is checked as KubeSolo starts, once it is known.
+	if w, ok := NodeIPWarning(cfg, cfg.Network.NodeIP); ok {
+		warnings = append(warnings, w)
+	}
+
 	if cfg.API.Enabled && len(cfg.API.SocketPath) > maxUnixSocketPath {
 		return warnings, fmt.Errorf("api.socketPath is %d characters, which exceeds the %d-byte limit for a unix socket; shorten it or shorten path, from which it is derived",
 			len(cfg.API.SocketPath), maxUnixSocketPath)
@@ -127,6 +152,96 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 	}
 
 	return warnings, nil
+}
+
+// validatePorts checks every port is one, and that no two of the ports KubeSolo
+// listens on are the same: two of its own components on one port fail as a port
+// held by another process does, but only once KubeSolo is already starting.
+func validatePorts(cfg *types.Config) error {
+	ports := append(HostPorts(cfg), PortUse{cfg.D2K.Port, "d2k Service", "d2k.port"})
+	for _, p := range ports {
+		if p.Port < 1 || p.Port > 65535 {
+			return fmt.Errorf("%s: %d is not a port (1-65535)", p.ConfigPath, p.Port)
+		}
+	}
+	seen := map[int]string{}
+	for _, p := range HostPorts(cfg) {
+		if other, ok := seen[p.Port]; ok {
+			return fmt.Errorf("%s and %s are both %d: each needs a port of its own", other, p.ConfigPath, p.Port)
+		}
+		seen[p.Port] = p.ConfigPath
+	}
+	// d2k's is a Service port at the LoadBalancer IP — the node IP unless
+	// network.loadBalancer.ip says otherwise — which kube-proxy takes over there:
+	// on one of KubeSolo's own ports it would take that port's traffic.
+	if cfg.D2K.Enabled {
+		if other, ok := seen[cfg.D2K.Port]; ok {
+			return fmt.Errorf("d2k.port and %s are both %d: the d2k LoadBalancer Service would take the node's traffic to that port", other, cfg.D2K.Port)
+		}
+	}
+	return nil
+}
+
+// validateNetworks checks the pod and service CIDRs and the cluster DNS address.
+// A CIDR must be written as its network address (10.42.0.0/16, not
+// 10.42.1.0/16).
+func validateNetworks(cfg *types.Config) error {
+	podNet, err := parseIPv4CIDR(cfg.Kubernetes.PodCIDR)
+	if err != nil {
+		return fmt.Errorf("kubernetes.podCIDR: %w", err)
+	}
+	if ones, _ := podNet.Mask.Size(); ones > nodePodCIDRPrefix {
+		return fmt.Errorf("kubernetes.podCIDR: %s is smaller than the /%d the controller manager allocates to the node", cfg.Kubernetes.PodCIDR, nodePodCIDRPrefix)
+	}
+
+	serviceNet, err := parseIPv4CIDR(cfg.Kubernetes.ServiceCIDR)
+	if err != nil {
+		return fmt.Errorf("kubernetes.serviceCIDR: %w", err)
+	}
+	serviceOnes, serviceBits := serviceNet.Mask.Size()
+	if serviceOnes < largestServiceCIDR {
+		return fmt.Errorf("kubernetes.serviceCIDR: %s is larger than the /%d the API server accepts", cfg.Kubernetes.ServiceCIDR, largestServiceCIDR)
+	}
+	if serviceOnes > smallestServiceCIDR {
+		return fmt.Errorf("kubernetes.serviceCIDR: %s is smaller than the /%d the API server accepts", cfg.Kubernetes.ServiceCIDR, smallestServiceCIDR)
+	}
+
+	if podNet.Contains(serviceNet.IP) || serviceNet.Contains(podNet.IP) {
+		return fmt.Errorf("kubernetes.podCIDR %s and kubernetes.serviceCIDR %s overlap", cfg.Kubernetes.PodCIDR, cfg.Kubernetes.ServiceCIDR)
+	}
+
+	// Refused rather than normalised: the config API, a restart and the record
+	// of the networks compare them as written.
+	for field, n := range map[string]struct {
+		cidr    string
+		network *net.IPNet
+	}{"kubernetes.podCIDR": {cfg.Kubernetes.PodCIDR, podNet}, "kubernetes.serviceCIDR": {cfg.Kubernetes.ServiceCIDR, serviceNet}} {
+		if n.network.String() != n.cidr {
+			return fmt.Errorf("%s: %s is not a network address; use %s", field, n.cidr, n.network)
+		}
+	}
+
+	if cfg.Kubernetes.ClusterDNS == "" {
+		if serviceOnes > smallestDNSServiceCIDR {
+			return fmt.Errorf("kubernetes.serviceCIDR: %s has no room for the default cluster DNS address (its %dth); set kubernetes.clusterDNS", cfg.Kubernetes.ServiceCIDR, clusterDNSOffset)
+		}
+		return nil
+	}
+	dns := net.ParseIP(cfg.Kubernetes.ClusterDNS)
+	if dns == nil || dns.To4() == nil {
+		return fmt.Errorf("kubernetes.clusterDNS: %q is not an IPv4 address", cfg.Kubernetes.ClusterDNS)
+	}
+	if !serviceNet.Contains(dns) {
+		return fmt.Errorf("kubernetes.clusterDNS: %s is not in kubernetes.serviceCIDR %s", cfg.Kubernetes.ClusterDNS, cfg.Kubernetes.ServiceCIDR)
+	}
+	// Neither the network address nor the broadcast address is ever allocated, and
+	// the first address is the kubernetes Service's.
+	kubernetesIP, _ := nthAddress(serviceNet, 1)
+	broadcast, _ := nthAddress(serviceNet, 1<<(serviceBits-serviceOnes)-1)
+	if dns.Equal(serviceNet.IP) || dns.Equal(broadcast) || dns.Equal(kubernetesIP) {
+		return fmt.Errorf("kubernetes.clusterDNS: %s is the service CIDR's network or broadcast address, or the kubernetes Service's (%s)", cfg.Kubernetes.ClusterDNS, kubernetesIP)
+	}
+	return nil
 }
 
 // NormaliseImageRef expands a short image reference such as

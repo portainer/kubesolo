@@ -1,10 +1,14 @@
 package preflight
 
 import (
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 )
 
 // ── CheckHostname ─────────────────────────────────────────────────────────────
@@ -202,7 +206,7 @@ func TestCheckRequiredControllers_ExactRequired(t *testing.T) {
 func TestCheckPorts_NoConflict(t *testing.T) {
 	// On a clean development machine none of the KubeSolo ports should be bound.
 	// This test is best-effort and skips if any port is already in use.
-	err := CheckPorts(false)
+	err := CheckPorts(kubesoloconfig.Defaults(), false)
 	if err != nil {
 		t.Skipf("a KubeSolo port appears to be in use — skipping: %v", err)
 	}
@@ -212,16 +216,34 @@ func TestCheckPorts_PprofIncluded(t *testing.T) {
 	// When pprofServer=true, port 6060 must be in the checked set.
 	// We verify the function runs without panicking; any conflict is a skip,
 	// not a test failure, since we can't guarantee 6060 is free in CI.
-	err := CheckPorts(true)
+	err := CheckPorts(kubesoloconfig.Defaults(), true)
 	if err != nil {
 		t.Skipf("a port is already in use (pprof check active) — skipping: %v", err)
+	}
+}
+
+// kubesoloctl install checks the configuration it is about to write, not the
+// one installed before it.
+func TestCheckPorts_ChecksTheGivenConfiguration(t *testing.T) {
+	ln, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	taken := ln.Addr().(*net.TCPAddr).Port
+
+	cfg := kubesoloconfig.Defaults()
+	cfg.Kubernetes.Webhook.Port = taken
+	err = CheckPorts(cfg, false)
+	if want := fmt.Sprintf("port %d (Webhook server, kubernetes.webhook.port)", taken); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("err = %v, want it to name %s", err, want)
 	}
 }
 
 // ── Suite ─────────────────────────────────────────────────────────────────────
 
 func TestSuite_ReturnsChecks(t *testing.T) {
-	checks := Suite(false, false, "")
+	checks := Suite(kubesoloconfig.Defaults(), false, false, "")
 	if len(checks) == 0 {
 		t.Fatal("Suite should return at least one check")
 	}
@@ -237,7 +259,7 @@ func TestSuite_ReturnsChecks(t *testing.T) {
 
 func TestSuite_NamesAreUnique(t *testing.T) {
 	seen := map[string]bool{}
-	for _, c := range Suite(false, false, "") {
+	for _, c := range Suite(kubesoloconfig.Defaults(), false, false, "") {
 		if seen[c.Name] {
 			t.Errorf("duplicate check name: %q", c.Name)
 		}
@@ -247,7 +269,7 @@ func TestSuite_NamesAreUnique(t *testing.T) {
 
 func TestSuite_FirewallAfterPorts(t *testing.T) {
 	index := map[string]int{}
-	for i, c := range Suite(false, false, "") {
+	for i, c := range Suite(kubesoloconfig.Defaults(), false, false, "") {
 		index[c.Name] = i
 	}
 	ports, okPorts := index["required ports available"]

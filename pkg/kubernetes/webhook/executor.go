@@ -2,9 +2,12 @@ package webhook
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"path/filepath"
+	"strconv"
 
 	kubesolokubernetes "github.com/portainer/kubesolo/internal/kubernetes"
 	"github.com/portainer/kubesolo/types"
@@ -29,35 +32,57 @@ func (w *Service) RegisterWebhook() error {
 	return w.createOrUpdateConfig(webhookConfig)
 }
 
-// Start starts the webhook server
+// address is where the webhook listens: loopback, since only the API server,
+// in this same process, calls it.
+func (s *Service) address() string {
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(s.port))
+}
+
+// Start starts the webhook server.
+//
+// The port is bound here rather than in the serving goroutine, so that a port
+// already in use fails the start. The webhook fails open: were it simply
+// missing, the API server would admit every pod without a node — KubeSolo runs
+// no scheduler — and the whole cluster would sit Pending with nothing saying
+// why.
 func (s *Service) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mutate", s.serveMutate)
 
 	s.server = &http.Server{
-		Addr:         fmt.Sprintf(":%d", types.DefaultWebhookPort),
+		Addr:         s.address(),
 		ReadTimeout:  types.DefaultWebhookReadWriteTimeout,
 		WriteTimeout: types.DefaultWebhookReadWriteTimeout,
 		IdleTimeout:  types.DefaultWebhookIdleTimeout,
 		Handler:      mux,
 	}
 
-	log.Info().Str("component", "webhook").Msgf("starting webhook server on :%d", types.DefaultWebhookPort)
+	// Loaded before the port is bound: a webhook that cannot serve must not
+	// hold its port, where the health check would take it for up.
+	cert, err := tls.LoadX509KeyPair(filepath.Join(s.pkiPath, "webhook", "webhook.crt"), filepath.Join(s.pkiPath, "webhook", "webhook.key"))
+	if err != nil {
+		return fmt.Errorf("webhook server cannot load its certificate: %w", err)
+	}
+	s.server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
 
-	s.startServer()
+	listener, err := net.Listen("tcp", s.server.Addr)
+	if err != nil {
+		return fmt.Errorf("webhook server cannot listen on %s (kubernetes.webhook.port): %w", s.server.Addr, err)
+	}
+
+	log.Info().Str("component", "webhook").Msgf("starting webhook server on %s", s.server.Addr)
+
+	s.startServer(listener)
 	s.handleShutdown(ctx)
 	s.wg.Go(func() { s.bindStrandedPods(ctx) })
 
 	return nil
 }
 
-// startServer starts the webhook server
-func (s *Service) startServer() {
-	certPath := filepath.Join(s.pkiPath, "webhook", "webhook.crt")
-	keyPath := filepath.Join(s.pkiPath, "webhook", "webhook.key")
-
+// startServer serves the webhook on its listener
+func (s *Service) startServer(listener net.Listener) {
 	s.wg.Go(func() {
-		if err := s.server.ListenAndServeTLS(certPath, keyPath); err != nil && err != http.ErrServerClosed {
+		if err := s.server.ServeTLS(listener, "", ""); err != nil && err != http.ErrServerClosed {
 			log.Error().Str("component", "webhook").Err(err).Msg("webhook server failed")
 		}
 	})

@@ -210,11 +210,17 @@ func main() {
 	// --check-firewall is likewise answered before anything is touched, with
 	// the node IP the configuration names.
 	if *flags.CheckFirewall {
-		if err := network.CheckFirewall(service.cfg.Network.NodeIP); err != nil {
+		if err := network.CheckFirewall(service.cfg.Network.NodeIP, service.cfg.Kubernetes.PodCIDR, service.cfg.Kubernetes.APIServer.Port); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 		os.Exit(0)
+	}
+
+	// The cluster networks cannot change under an existing cluster, whatever
+	// changed them: refused, or recorded for a new one, before anything starts.
+	if err := config.CheckNetworks(service.cfg); err != nil {
+		log.Fatal().Err(err).Msg("failed to start with the configured cluster networks")
 	}
 
 	if service.cfg.Kubernetes.APIServer.StartupTimeoutSeconds > 0 {
@@ -344,7 +350,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kine",
 			start: func(ctx context.Context, cancel context.CancelFunc) {
-				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.cfg.Storage.DBWALRepair)
+				kineService := kine.NewService(ctx, cancel, s.embedded.KineDir, kineReadyCh, s.cfg.Storage.DBWALRepair, s.embedded.KineEndpoint)
 				_ = kineService.Run()
 			},
 			readyCh: kineReadyCh,
@@ -380,7 +386,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kubeproxy",
 			start: func(ctx context.Context, cancel context.CancelFunc) {
-				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode)
+				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.PodCIDR, s.embedded.KubeProxyHealthzPort)
 				_ = kubeproxyService.Run(kubeletReadyCh)
 			},
 			readyCh: kubeproxyReadyCh,
@@ -414,7 +420,7 @@ func (s *kubesolo) run() {
 	// kine persists cluster state across reboots, so kubelet will immediately
 	// reconcile existing pods — they must not start into a network with no SNAT.
 	log.Info().Str("component", "kubesolo").Msg("setting up pod masquerade rules...")
-	if err := network.EnsurePodMasquerade(types.DefaultPodCIDR); err != nil {
+	if err := network.EnsurePodMasquerade(s.embedded.PodCIDR); err != nil {
 		log.Fatal().Err(err).Msg("failed to set up pod masquerade")
 	}
 
@@ -428,7 +434,7 @@ func (s *kubesolo) run() {
 	}
 
 	log.Info().Str("component", "kubesolo").Msg("deploying coredns...")
-	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.DisableIPv6); err != nil {
+	if err := coredns.Deploy(s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.DisableIPv6, s.embedded.ClusterDNS); err != nil {
 		log.Fatal().Err(err).Msg("failed to deploy coredns")
 	}
 
@@ -459,6 +465,7 @@ func (s *kubesolo) run() {
 			Namespace: s.cfg.D2K.Namespace,
 			Image:     types.DefaultD2KImage,
 			Certs:     s.embedded.D2KCerts,
+			Port:      s.embedded.D2KPort,
 		}); err != nil {
 			log.Error().Err(err).Msg("failed to deploy d2k, continuing without it")
 		}
@@ -956,7 +963,7 @@ func (s *kubesolo) bootstrap() {
 	}
 
 	if s.cfg.Logging.Pprof {
-		system.StartMonitoring()
+		system.StartMonitoring(s.cfg.Logging.PprofPort)
 	}
 
 	// Setup logging
@@ -994,6 +1001,11 @@ func (s *kubesolo) bootstrap() {
 	// configured a low MTU would be told about it twice.
 	if !mtuPinned && mtu < 1280 && !s.cfg.Network.DisableIPv6 {
 		log.Warn().Int("mtu", mtu).Msg("MTU is below the IPv6 minimum (1280); IPv6 pod traffic may fail to fragment correctly")
+	}
+	// Likewise a node IP in a cluster network: config.Validate warns about a
+	// configured one.
+	if w, ok := config.NodeIPWarning(s.cfg, nodeIP); ok && !nodeIPPinned {
+		log.Warn().Msg(w.String())
 	}
 
 	// Disable OpenTelemetry SDK to prevent it from interfering with the application's logging

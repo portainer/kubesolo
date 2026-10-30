@@ -1,6 +1,7 @@
 package network
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -8,10 +9,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/portainer/kubesolo/types"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
@@ -25,8 +26,10 @@ const (
 	firewallDialTimeout = 3 * time.Second
 )
 
-// firewallHelp is shown whenever the firewall check fails.
-var firewallHelp = fmt.Sprintf(`The host firewall is blocking Kubernetes traffic. KubeSolo needs it to accept
+// firewallHelp is shown whenever the firewall check fails, for the pod network
+// podCIDR.
+func firewallHelp(podCIDR string) string {
+	return fmt.Sprintf(`The host firewall is blocking Kubernetes traffic. KubeSolo needs it to accept
 traffic from the pod network %[1]s to this host (INPUT) and to and from
 the pod network when forwarded (FORWARD). Add these rules to your firewall,
 make them persistent, then run the installer again:
@@ -44,14 +47,16 @@ make them persistent, then run the installer again:
               ufw route allow from %[1]s
               ufw route allow to %[1]s
 
-Other firewalls need equivalent rules.`, types.DefaultPodCIDR)
+Other firewalls need equivalent rules.`, podCIDR)
+}
 
 // CheckFirewall verifies that the host firewall lets pods reach the API server
 // on the node IP and reach each other. It attaches two throwaway pods to the
 // CNI bridge, as the bridge plugin would, and lets the kernel decide: every
 // firewall frontend (iptables, nftables, firewalld, ufw) is evaluated as it
-// will be for real pod traffic. nodeIPOverride is resolved as KubeSolo does.
-func CheckFirewall(nodeIPOverride string) error {
+// will be for real pod traffic. nodeIPOverride is resolved as KubeSolo does;
+// podCIDR and apiServerPort are kubernetes.podCIDR and kubernetes.apiServer.port.
+func CheckFirewall(nodeIPOverride, podCIDR string, apiServerPort int) error {
 	nodeIP, _, err := ResolveNodeIP(nodeIPOverride)
 	if err != nil {
 		return err
@@ -61,12 +66,15 @@ func CheckFirewall(nodeIPOverride string) error {
 	// pod-to-pod check would pass when it should not. KubeSolo loads it anyway.
 	_ = exec.Command("modprobe", "br_netfilter").Run()
 
-	gw, podNet, err := net.ParseCIDR(types.DefaultPodCIDR)
+	_, podNet, err := net.ParseCIDR(podCIDR)
 	if err != nil {
 		return err
 	}
-	gw = gw.To4()
-	gw[3] = 1
+	if podNet.IP.To4() == nil {
+		return fmt.Errorf("the pod network %s is not IPv4", podCIDR)
+	}
+	// The bridge's address is the network's first, as the CNI bridge plugin gives it.
+	gw := ipv4At(podNet, 1)
 
 	bridge, created, err := ensureBridge(gw, podNet.Mask)
 	if err != nil {
@@ -76,7 +84,10 @@ func CheckFirewall(nodeIPOverride string) error {
 		defer func() { _ = netlink.LinkDel(bridge) }()
 	}
 
-	ips := freePodIPs(podNet.IP.To4(), 2)
+	ips := freePodIPs(podNet, 2)
+	if len(ips) < 2 {
+		return fmt.Errorf("could not set up the firewall check: no two free addresses in the pod network %s", podCIDR)
+	}
 	podA, err := addPod(bridge, "kspf-a", ips[0], podNet.Mask, gw)
 	if err != nil {
 		return fmt.Errorf("could not set up the firewall check: %w", err)
@@ -94,7 +105,7 @@ func CheckFirewall(nodeIPOverride string) error {
 	// not on this host, such as a VIP held elsewhere, is not delivered to INPUT
 	// here, so there is nothing to check.
 	if isLocalIP(nodeIP) {
-		apiAddr := net.JoinHostPort(nodeIP, "6443")
+		apiAddr := net.JoinHostPort(nodeIP, strconv.Itoa(apiServerPort))
 		l, err := net.Listen("tcp", apiAddr)
 		switch {
 		case err == nil:
@@ -103,7 +114,7 @@ func CheckFirewall(nodeIPOverride string) error {
 			return fmt.Errorf("could not set up the firewall check: %w", err)
 		}
 		if err := podA.dial(apiAddr); err != nil {
-			return fmt.Errorf("pods cannot reach the API server at %s: %w\n\n%s", apiAddr, err, firewallHelp)
+			return fmt.Errorf("pods cannot reach the API server at %s: %w\n\n%s", apiAddr, err, firewallHelp(podCIDR))
 		}
 	}
 
@@ -120,10 +131,10 @@ func CheckFirewall(nodeIPOverride string) error {
 	}
 	defer func() { _ = pc.Close() }()
 	if err := podA.dial(dnsAddr); err != nil {
-		return fmt.Errorf("pods cannot reach each other (%s to %s over TCP): %w\n\n%s", ips[0], dnsAddr, err, firewallHelp)
+		return fmt.Errorf("pods cannot reach each other (%s to %s over TCP): %w\n\n%s", ips[0], dnsAddr, err, firewallHelp(podCIDR))
 	}
 	if err := podA.exchangeUDP(dnsAddr); err != nil {
-		return fmt.Errorf("pods cannot reach each other (%s to %s over UDP): %w\n\n%s", ips[0], dnsAddr, err, firewallHelp)
+		return fmt.Errorf("pods cannot reach each other (%s to %s over UDP): %w\n\n%s", ips[0], dnsAddr, err, firewallHelp(podCIDR))
 	}
 	return nil
 }
@@ -149,12 +160,26 @@ func ensureBridge(gw net.IP, mask net.IPMask) (netlink.Link, bool, error) {
 	return br, true, nil
 }
 
-// freePodIPs returns n addresses from the top of the /16 pod network that the
-// CNI has not handed to a pod.
-func freePodIPs(network net.IP, n int) []net.IP {
+// ipv4At returns the address n places into an IPv4 network: 0 is the network
+// address itself.
+func ipv4At(network *net.IPNet, n uint32) net.IP {
+	ip := make(net.IP, net.IPv4len)
+	binary.BigEndian.PutUint32(ip, binary.BigEndian.Uint32(network.IP.To4())+n)
+	return ip
+}
+
+// freePodIPs returns up to n addresses from the top of the pod network, below
+// its broadcast address and above the bridge's (its first), that the CNI has not
+// handed to a pod — whatever the network's size.
+func freePodIPs(network *net.IPNet, n int) []net.IP {
+	ones, bits := network.Mask.Size()
+	if bits-ones < 2 {
+		return nil // no address but the network's and broadcast's
+	}
+	size := uint32(1) << uint(bits-ones)
 	var ips []net.IP
-	for i := 254; len(ips) < n; i-- {
-		ip := net.IPv4(network[0], network[1], 255, byte(i)).To4()
+	for offset := size - 2; offset > 1 && len(ips) < n; offset-- {
+		ip := ipv4At(network, offset)
 		if _, err := os.Stat(filepath.Join(cniIPAMDir, ip.String())); err == nil {
 			continue
 		}

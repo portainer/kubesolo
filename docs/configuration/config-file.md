@@ -21,8 +21,15 @@ starts.
 sudo systemctl restart kubesolo
 ```
 
-The one setting that cannot be changed at all is `path`. Every certificate, the
-cluster database and all container state live below it, and nothing moves them.
+Four settings cannot be changed at all on an existing install. `path`: every
+certificate, the cluster database and all container state live below it, and
+nothing moves them. `kubernetes.podCIDR`, `kubernetes.serviceCIDR` and
+`kubernetes.clusterDNS`: the node's pod range, every Service's cluster IP and the
+API server certificate were allocated from them. Choose them before the first
+start, away from the networks the host uses (KubeSolo warns when the node IP is
+in either of them). KubeSolo records them in `<path>/networks.yaml` and refuses
+to start with others. A cluster created before they were configurable has the
+defaults.
 
 ### The Portainer agent's settings are set once
 
@@ -181,15 +188,27 @@ path: /var/lib/kubesolo
 
 kubernetes:
   nodeName: ""            # empty = the hostname
+  podCIDR: 10.42.0.0/16   # immutable
+  serviceCIDR: 10.43.0.0/16 # immutable; its first address is the kubernetes Service's
+  clusterDNS: ""          # immutable; empty = the tenth address of serviceCIDR (10.43.0.10)
   apiServer:
     extraSANs: []
     startupTimeoutSeconds: 600
+    port: 6443
+  controllerManager:
+    port: 10257
   kubelet:
     cpuManager:
       policy: none        # none | static
       policyOptions: {}
       reservedCPUs: ""    # e.g. "0-1"; defaults to "0" under the static policy
     systemReserved: {}    # e.g. {cpu: "1", memory: 500Mi}
+    port: 10250
+    healthzPort: 10248    # on loopback
+  kubeProxy:
+    healthzPort: 10256
+  webhook:
+    port: 10443           # on loopback; the webhook pins every pod to the node
 
 network:
   nodeIP: ""              # empty = auto-detect, preferring a private (RFC 1918) address
@@ -207,11 +226,14 @@ storage:
   localPath:
     enabled: true
     sharedPath: ""
+  kine:
+    port: 2379            # on loopback
   dbWALRepair: false
 
 logging:
   debug: false
   pprof: false
+  pprofPort: 6060
 
 metrics:
   enabled: false
@@ -230,12 +252,17 @@ portainer:
 d2k:
   enabled: false
   namespace: d2k
+  port: 2376              # the Docker API's port at the LoadBalancer IP
 ```
 
-Only `kubernetes:` groups its contents, because that family grows —
-controller-manager, kube-proxy, CoreDNS and the pod and service CIDRs are the
-likeliest settings to become configurable next. Everything else is single-purpose
-and stays at the top level.
+Only `kubernetes:` groups its contents, because that family grows: the API
+server, the controller manager, the kubelet, kube-proxy, the webhook and the
+cluster networks each have their own. Everything else is single-purpose and stays
+at the top level.
+
+Every port KubeSolo listens on is a setting, so a host that already uses one — a
+web UI on 10443, another cluster's etcd on 2379 — only needs that one moved. Two
+of KubeSolo's own on the same port are refused before anything starts.
 
 ---
 
@@ -247,15 +274,26 @@ and stays at the top level.
 | `api.socketPath` | `string` | `""` |
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |
+| `d2k.port` | `integer` | `2376` |
 | `kubernetes.apiServer.extraSANs` | `array` | `[]` |
+| `kubernetes.apiServer.port` | `integer` | `6443` |
 | `kubernetes.apiServer.startupTimeoutSeconds` | `integer` | `600` |
+| `kubernetes.clusterDNS` | `string` | `""` | **immutable**
+| `kubernetes.controllerManager.port` | `integer` | `10257` |
+| `kubernetes.kubeProxy.healthzPort` | `integer` | `10256` |
 | `kubernetes.kubelet.cpuManager.policy` | `string` | `none` |
 | `kubernetes.kubelet.cpuManager.policyOptions` | `object` | `map[]` |
 | `kubernetes.kubelet.cpuManager.reservedCPUs` | `string` | `""` |
+| `kubernetes.kubelet.healthzPort` | `integer` | `10248` |
+| `kubernetes.kubelet.port` | `integer` | `10250` |
 | `kubernetes.kubelet.systemReserved` | `object` | `map[]` |
 | `kubernetes.nodeName` | `string` | `""` |
+| `kubernetes.podCIDR` | `string` | `10.42.0.0/16` | **immutable**
+| `kubernetes.serviceCIDR` | `string` | `10.43.0.0/16` | **immutable**
+| `kubernetes.webhook.port` | `integer` | `10443` |
 | `logging.debug` | `boolean` | `false` |
 | `logging.pprof` | `boolean` | `false` |
+| `logging.pprofPort` | `integer` | `6060` |
 | `metrics.bindAddress` | `string` | `127.0.0.1:9105` |
 | `metrics.enabled` | `boolean` | `false` |
 | `network.disableIPv6` | `boolean` | `false` |
@@ -271,8 +309,12 @@ and stays at the top level.
 | `runtime.containerMode` | `boolean` | `<nil>` |
 | `runtime.endpoint` | `string` | `""` |
 | `storage.dbWALRepair` | `boolean` | `false` |
+| `storage.kine.port` | `integer` | `2379` |
 | `storage.localPath.enabled` | `boolean` | `true` |
 | `storage.localPath.sharedPath` | `string` | `""` |
+
+**immutable** settings cannot be changed on an existing installation; see
+[above](#when-changes-take-effect).
 
 **set-once** settings can be set until a Portainer agent is deployed, and not
 changed after; see [above](#the-portainer-agents-settings-are-set-once).

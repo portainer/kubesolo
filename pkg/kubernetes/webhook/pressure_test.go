@@ -106,7 +106,7 @@ func TestPodsAreRefusedUnderPressure(t *testing.T) {
 		{"node unreadable", nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			w := NewService("edge-01", "", "", "", false)
+			w := NewService("edge-01", "", "", "", false, 10443)
 			w.readNode = func() *corev1.Node { return tc.node }
 
 			patches, err := w.processResource(podReview(t, burstablePod()))
@@ -125,7 +125,7 @@ func TestPodsAreRefusedUnderPressure(t *testing.T) {
 // request without the node name, the pod would be created unbound, Pending
 // for good — and its controller, seeing it exist, would never replace it.
 func TestARefusalIsSentAsADenial(t *testing.T) {
-	w := NewService("edge-01", "", "", "", false)
+	w := NewService("edge-01", "", "", "", false, 10443)
 	w.readNode = func() *corev1.Node { return nodeWith(corev1.NodeDiskPressure) }
 	review := podReview(t, burstablePod())
 	review.Request.UID = "uid-1"

@@ -7,7 +7,6 @@ import (
 	"github.com/k3s-io/kine/pkg/drivers/generic"
 	"github.com/k3s-io/kine/pkg/drivers/sqlite"
 	"github.com/k3s-io/kine/pkg/endpoint"
-	"github.com/portainer/kubesolo/types"
 )
 
 // generateKineConfig generates the kine config for the kine service
@@ -18,7 +17,7 @@ import (
 func (s *service) generateKineConfig() endpoint.Config {
 	return endpoint.Config{
 		Endpoint: fmt.Sprintf("sqlite://%s/state.db?%s", s.databaseDir, sqlite.DefaultParams),
-		Listener: types.DefaultKineEndpoint,
+		Listener: s.listener,
 		ConnectionPoolConfig: generic.ConnectionPoolConfig{
 			MaxIdle:     3,
 			MaxOpen:     5,

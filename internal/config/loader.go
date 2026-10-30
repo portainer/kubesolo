@@ -44,6 +44,19 @@ func Load(cfgPath string, fv FlagValues) (*types.Config, []Warning, error) {
 	return load(cfgPath, fv, true)
 }
 
+// Installed is the configuration of the install whose file is at path: the
+// defaults, with the file over them when there is one. A file that cannot be
+// read is passed over and the defaults stand. It is for kubesoloctl's checks,
+// which want the ports and networks an install listens on and should not fail
+// over a file KubeSolo itself reports on when it starts.
+func Installed(path string) *types.Config {
+	cfg := Defaults()
+	if _, _, err := Read(path, cfg); err != nil {
+		return Defaults()
+	}
+	return cfg
+}
+
 // LoadWithoutEnv is Load with the environment layer omitted.
 //
 // It exists for kubesoloctl, which builds a configuration file for a service it

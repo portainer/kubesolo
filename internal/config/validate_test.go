@@ -271,6 +271,40 @@ func TestLowMTUWarnsOnlyWithIPv6(t *testing.T) {
 	}
 }
 
+// A node IP the host already uses inside a cluster network is the mistake the
+// configurable networks are most likely to be met with; it is warned about,
+// not refused.
+func TestNodeIPInAClusterNetworkWarns(t *testing.T) {
+	for _, tc := range []struct {
+		name, nodeIP, wantIn string
+	}{
+		{"in the pod network", "10.42.3.4", "kubernetes.podCIDR"},
+		{"in the service network", "10.43.0.200", "kubernetes.serviceCIDR"},
+		{"in neither", "192.168.1.10", ""},
+		{"detected at start, not here", "", ""},
+		{"IPv6", "fd00::1", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Network.NodeIP = tc.nodeIP
+
+			warnings, err := Validate(cfg, testHost())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got string
+			for _, w := range warnings {
+				if strings.Contains(w.Message, "holds the node IP") {
+					got = w.Field
+				}
+			}
+			if got != tc.wantIn {
+				t.Errorf("node IP warning on %q, want %q (warnings: %v)", got, tc.wantIn, warnings)
+			}
+		})
+	}
+}
+
 // TestValidateIsIdempotent guards the normalisation: the API validates on every
 // write, so running it over an already-normalised config must not drift.
 func TestValidateIsIdempotent(t *testing.T) {
@@ -352,5 +386,132 @@ func TestValidateRejectsMalformedAddresses(t *testing.T) {
 		if _, err := Validate(cfg, Host{NumCPU: 4, GOARCH: "amd64"}); err != nil {
 			t.Errorf("%s: %v", ip, err)
 		}
+	}
+}
+
+func TestInvalidPortsRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*types.Config)
+		field  string
+	}{
+		{"port zero", func(c *types.Config) { c.Kubernetes.APIServer.Port = 0 }, "kubernetes.apiServer.port"},
+		{"port above 65535", func(c *types.Config) { c.Storage.Kine.Port = 65536 }, "storage.kine.port"},
+		{"d2k port out of range", func(c *types.Config) { c.D2K.Port = -1 }, "d2k.port"},
+		{"two components on one port", func(c *types.Config) { c.Kubernetes.Webhook.Port = c.Kubernetes.APIServer.Port }, "kubernetes.webhook.port"},
+		{"pprof on the kubelet's port", func(c *types.Config) {
+			c.Logging.Pprof = true
+			c.Logging.PprofPort = c.Kubernetes.Kubelet.Port
+		}, "logging.pprofPort"},
+		{"d2k on the API server's port", func(c *types.Config) {
+			c.D2K.Enabled = true
+			c.D2K.Port = c.Kubernetes.APIServer.Port
+		}, "d2k.port"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Defaults()
+			tc.mutate(cfg)
+
+			_, err := Validate(cfg, testHost())
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if !strings.Contains(err.Error(), tc.field) {
+				t.Errorf("error should be attributed to %s, got: %v", tc.field, err)
+			}
+		})
+	}
+}
+
+// A port taken only when its user is enabled: pprof's and d2k's are free to
+// coincide with another while they are off.
+func TestDisabledPortsMayCoincide(t *testing.T) {
+	cfg := Defaults()
+	cfg.Logging.PprofPort = cfg.Kubernetes.Kubelet.Port
+	cfg.D2K.Port = cfg.Kubernetes.APIServer.Port
+	if _, err := Validate(cfg, testHost()); err != nil {
+		t.Fatalf("disabled pprof and d2k should not conflict: %v", err)
+	}
+}
+
+func TestInvalidNetworksRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*types.Config)
+		field  string
+	}{
+		{"pod CIDR not a CIDR", func(c *types.Config) { c.Kubernetes.PodCIDR = "10.42.0.0" }, "kubernetes.podCIDR"},
+		{"pod CIDR IPv6", func(c *types.Config) { c.Kubernetes.PodCIDR = "fd00::/48" }, "kubernetes.podCIDR"},
+		{"pod CIDR smaller than the node's /24", func(c *types.Config) { c.Kubernetes.PodCIDR = "10.42.0.0/25" }, "kubernetes.podCIDR"},
+		{"service CIDR larger than a /12", func(c *types.Config) { c.Kubernetes.ServiceCIDR = "10.0.0.0/11" }, "kubernetes.serviceCIDR"},
+		{"service CIDR smaller than a /29", func(c *types.Config) {
+			c.Kubernetes.ServiceCIDR = "10.43.0.0/30"
+			c.Kubernetes.ClusterDNS = "10.43.0.2"
+		}, "kubernetes.serviceCIDR"},
+		{"service CIDR with no room for the default DNS address", func(c *types.Config) { c.Kubernetes.ServiceCIDR = "10.43.0.0/29" }, "kubernetes.serviceCIDR"},
+		{"overlapping networks", func(c *types.Config) { c.Kubernetes.ServiceCIDR = "10.42.128.0/24" }, "kubernetes.podCIDR"},
+		{"DNS not an address", func(c *types.Config) { c.Kubernetes.ClusterDNS = "dns" }, "kubernetes.clusterDNS"},
+		{"DNS outside the service CIDR", func(c *types.Config) { c.Kubernetes.ClusterDNS = "10.44.0.10" }, "kubernetes.clusterDNS"},
+		{"DNS on the network address", func(c *types.Config) { c.Kubernetes.ClusterDNS = "10.43.0.0" }, "kubernetes.clusterDNS"},
+		{"DNS on the kubernetes Service's address", func(c *types.Config) { c.Kubernetes.ClusterDNS = "10.43.0.1" }, "kubernetes.clusterDNS"},
+		{"DNS on the broadcast address", func(c *types.Config) {
+			c.Kubernetes.ServiceCIDR = "10.43.0.0/24"
+			c.Kubernetes.ClusterDNS = "10.43.0.255"
+		}, "kubernetes.clusterDNS"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Defaults()
+			tc.mutate(cfg)
+
+			_, err := Validate(cfg, testHost())
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if !strings.Contains(err.Error(), tc.field) {
+				t.Errorf("error should be attributed to %s, got: %v", tc.field, err)
+			}
+		})
+	}
+}
+
+// The networks are normalised to their network address, which is what the
+// components are given, and the edge sizes are accepted.
+func TestNetworksMustBeNetworkAddresses(t *testing.T) {
+	for _, tc := range []struct{ field, pod, service, want string }{
+		{"kubernetes.podCIDR", "10.42.1.0/16", "10.43.0.0/16", "use 10.42.0.0/16"},
+		{"kubernetes.serviceCIDR", "10.42.0.0/16", "10.96.0.7/12", "use 10.96.0.0/12"},
+	} {
+		cfg := Defaults()
+		cfg.Kubernetes.PodCIDR, cfg.Kubernetes.ServiceCIDR = tc.pod, tc.service
+		if _, err := Validate(cfg, testHost()); err == nil || !strings.HasPrefix(err.Error(), tc.field) || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it refused with %q", tc.field, err, tc.want)
+		}
+	}
+
+	cfg := Defaults()
+	cfg.Kubernetes.PodCIDR = "10.42.7.0/24"
+	cfg.Kubernetes.ServiceCIDR = "10.43.0.0/28"
+	if _, err := Validate(cfg, testHost()); err != nil {
+		t.Fatalf("a /24 pod CIDR and a /28 service CIDR should be accepted: %v", err)
+	}
+}
+
+func TestDerivedServiceAddresses(t *testing.T) {
+	ip, err := KubernetesServiceIP("10.96.0.0/12")
+	if err != nil || ip != "10.96.0.1" {
+		t.Errorf("KubernetesServiceIP = %q, %v; want 10.96.0.1", ip, err)
+	}
+
+	cfg := Defaults()
+	if dns, err := ClusterDNS(cfg); err != nil || dns != types.DefaultCoreDNSIP {
+		t.Errorf("ClusterDNS (default) = %q, %v; want %s", dns, err, types.DefaultCoreDNSIP)
+	}
+	cfg.Kubernetes.ServiceCIDR = "10.96.0.0/12"
+	if dns, err := ClusterDNS(cfg); err != nil || dns != "10.96.0.10" {
+		t.Errorf("ClusterDNS (derived) = %q, %v; want 10.96.0.10", dns, err)
+	}
+	cfg.Kubernetes.ClusterDNS = "10.96.0.53"
+	if dns, err := ClusterDNS(cfg); err != nil || dns != "10.96.0.53" {
+		t.Errorf("ClusterDNS (set) = %q, %v; want 10.96.0.53", dns, err)
 	}
 }

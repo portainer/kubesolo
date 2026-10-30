@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -77,11 +78,11 @@ func TestReport_PortInUse(t *testing.T) {
 	}
 
 	var ran []string
-	checks := append([]Check{{Name: "required ports available", Run: func() error { return CheckPorts(false) }}},
+	checks := append([]Check{{Name: "required ports available", Run: func() error { return CheckPorts(kubesoloconfig.Defaults(), false) }}},
 		stubChecks(&ran)[0])
 	report := Report(checks)
 
-	if got := report.Checks[0]; got.Result != types.PreflightFail || !strings.Contains(got.Message, "port 10443 (Webhook server)") {
+	if got := report.Checks[0]; got.Result != types.PreflightFail || !strings.Contains(got.Message, "port 10443 (Webhook server, kubernetes.webhook.port)") {
 		t.Errorf("got %+v, want the port check to fail naming port 10443", got)
 	}
 	if len(ran) != 1 || report.Checks[1].Result != types.PreflightPass {
