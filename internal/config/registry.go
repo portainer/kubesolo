@@ -137,7 +137,6 @@ func buildRegistry() []Field {
 		},
 		{
 			ConfigPath: "logging.pprofPort",
-			Envar:      "KUBESOLO_PPROF_PORT",
 			Get:        func(c *types.Config) any { return c.Logging.PprofPort },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Logging.PprofPort, v) },
 		},
@@ -205,7 +204,6 @@ func buildRegistry() []Field {
 		},
 		{
 			ConfigPath:   "kubernetes.podCIDR",
-			Envar:        "KUBESOLO_POD_CIDR",
 			Mutability:   MutabilityImmutable,
 			Unchangeable: "the node's pod range and every pod's address were allocated from it, and none of them move",
 			Get:          func(c *types.Config) any { return c.Kubernetes.PodCIDR },
@@ -213,7 +211,6 @@ func buildRegistry() []Field {
 		},
 		{
 			ConfigPath:   "kubernetes.serviceCIDR",
-			Envar:        "KUBESOLO_SERVICE_CIDR",
 			Mutability:   MutabilityImmutable,
 			Unchangeable: "every Service's cluster IP and the API server certificate's kubernetes Service IP were allocated from it, and none of them move",
 			Get:          func(c *types.Config) any { return c.Kubernetes.ServiceCIDR },
@@ -221,7 +218,6 @@ func buildRegistry() []Field {
 		},
 		{
 			ConfigPath:   "kubernetes.clusterDNS",
-			Envar:        "KUBESOLO_CLUSTER_DNS",
 			Mutability:   MutabilityImmutable,
 			Unchangeable: "every pod was given it as its nameserver, and none of them change",
 			Get:          func(c *types.Config) any { return c.Kubernetes.ClusterDNS },
@@ -248,13 +244,11 @@ func buildRegistry() []Field {
 		},
 		{
 			ConfigPath: "kubernetes.apiServer.port",
-			Envar:      "KUBESOLO_APISERVER_PORT",
 			Get:        func(c *types.Config) any { return c.Kubernetes.APIServer.Port },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.APIServer.Port, v) },
 		},
 		{
 			ConfigPath: "kubernetes.controllerManager.port",
-			Envar:      "KUBESOLO_CONTROLLER_MANAGER_PORT",
 			Get:        func(c *types.Config) any { return c.Kubernetes.ControllerManager.Port },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.ControllerManager.Port, v) },
 		},
@@ -308,25 +302,21 @@ func buildRegistry() []Field {
 		},
 		{
 			ConfigPath: "kubernetes.kubelet.port",
-			Envar:      "KUBESOLO_KUBELET_PORT",
 			Get:        func(c *types.Config) any { return c.Kubernetes.Kubelet.Port },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.Kubelet.Port, v) },
 		},
 		{
 			ConfigPath: "kubernetes.kubelet.healthzPort",
-			Envar:      "KUBESOLO_KUBELET_HEALTHZ_PORT",
 			Get:        func(c *types.Config) any { return c.Kubernetes.Kubelet.HealthzPort },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.Kubelet.HealthzPort, v) },
 		},
 		{
 			ConfigPath: "kubernetes.kubeProxy.healthzPort",
-			Envar:      "KUBESOLO_KUBE_PROXY_HEALTHZ_PORT",
 			Get:        func(c *types.Config) any { return c.Kubernetes.KubeProxy.HealthzPort },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.KubeProxy.HealthzPort, v) },
 		},
 		{
 			ConfigPath: "kubernetes.webhook.port",
-			Envar:      "KUBESOLO_WEBHOOK_PORT",
 			Get:        func(c *types.Config) any { return c.Kubernetes.Webhook.Port },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Kubernetes.Webhook.Port, v) },
 		},
@@ -346,7 +336,6 @@ func buildRegistry() []Field {
 		},
 		{
 			ConfigPath: "storage.kine.port",
-			Envar:      "KUBESOLO_KINE_PORT",
 			Get:        func(c *types.Config) any { return c.Storage.Kine.Port },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.Storage.Kine.Port, v) },
 		},
@@ -405,7 +394,6 @@ func buildRegistry() []Field {
 		},
 		{
 			ConfigPath: "d2k.port",
-			Envar:      "KUBESOLO_D2K_PORT",
 			Get:        func(c *types.Config) any { return c.D2K.Port },
 			Set:        func(c *types.Config, v string) error { return setInt(&c.D2K.Port, v) },
 		},

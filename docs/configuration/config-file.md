@@ -322,8 +322,8 @@ absent rather than `false`.
 ## Flag and environment variable equivalents
 
 Every flag below still works and still overrides the file. They are deprecated:
-no new flags will be added, and new settings are configurable through the file
-(and their environment variable) only.
+no new flags will be added, and new settings are configurable only through the
+file.
 
 | Flag | Environment variable | Setting |
 |---|---|---|
@@ -355,25 +355,13 @@ no new flags will be added, and new settings are configurable through the file
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | `storage.localPath.enabled` |
 | `--local-storage-shared-path` | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | `storage.localPath.sharedPath` |
 
-These settings have an environment variable but never had a flag:
+Three settings have an environment variable but never had a flag:
 
 | Environment variable | Setting |
 |---|---|
 | `KUBESOLO_NODE_NAME` | `kubernetes.nodeName` |
 | `KUBESOLO_API_ENABLED` | `api.enabled` |
 | `KUBESOLO_API_SOCKET_PATH` | `api.socketPath` |
-| `KUBESOLO_PPROF_PORT` | `logging.pprofPort` |
-| `KUBESOLO_POD_CIDR` | `kubernetes.podCIDR` |
-| `KUBESOLO_SERVICE_CIDR` | `kubernetes.serviceCIDR` |
-| `KUBESOLO_CLUSTER_DNS` | `kubernetes.clusterDNS` |
-| `KUBESOLO_APISERVER_PORT` | `kubernetes.apiServer.port` |
-| `KUBESOLO_CONTROLLER_MANAGER_PORT` | `kubernetes.controllerManager.port` |
-| `KUBESOLO_KUBELET_PORT` | `kubernetes.kubelet.port` |
-| `KUBESOLO_KUBELET_HEALTHZ_PORT` | `kubernetes.kubelet.healthzPort` |
-| `KUBESOLO_KUBE_PROXY_HEALTHZ_PORT` | `kubernetes.kubeProxy.healthzPort` |
-| `KUBESOLO_WEBHOOK_PORT` | `kubernetes.webhook.port` |
-| `KUBESOLO_KINE_PORT` | `storage.kine.port` |
-| `KUBESOLO_D2K_PORT` | `d2k.port` |
 
 Four flags have no setting, because they configure nothing:
 
