@@ -402,6 +402,71 @@ func TestConfigEditAgentSettingsAreSetOnce(t *testing.T) {
 	}
 }
 
+// withCluster gives the install at data a database, as one that was started has.
+func withCluster(t *testing.T, data string) {
+	t.Helper()
+	db := filepath.Join(data, types.KubesoloKineDir, types.DefaultKineDBFile)
+	if err := os.MkdirAll(filepath.Dir(db), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(db, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// KubeSolo refuses to start with networks other than its cluster's, so they are
+// refused when set, not saved with a warning.
+func TestConfigSetClusterNetworksOfAnExistingCluster(t *testing.T) {
+	data := t.TempDir()
+	path := seed(t, func(c *types.Config) { c.Path = data })
+
+	// No cluster yet: nothing was allocated from them.
+	if _, err := runConfig(t, "set", "kubernetes.podCIDR", "10.50.0.0/16", "--config", path); err != nil {
+		t.Fatalf("before the cluster exists: %v", err)
+	}
+	if _, err := runConfig(t, "set", "kubernetes.podCIDR", "10.42.0.0/16", "--config", path); err != nil {
+		t.Fatal(err)
+	}
+
+	withCluster(t, data)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kv := range [][2]string{
+		{"kubernetes.podCIDR", "10.50.0.0/16"},
+		{"kubernetes.serviceCIDR", "10.51.0.0/16"},
+		{"kubernetes.clusterDNS", "10.43.0.53"},
+	} {
+		_, err := runConfig(t, "set", kv[0], kv[1], "--config", path)
+		if err == nil || !strings.HasPrefix(err.Error(), kv[0]+" cannot be changed") {
+			t.Errorf("%s: err = %v", kv[0], err)
+		}
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+		t.Error("a refused change modified the configuration file")
+	}
+}
+
+func TestConfigEditClusterNetworksOfAnExistingCluster(t *testing.T) {
+	data := t.TempDir()
+	path := seed(t, func(c *types.Config) { c.Path = data })
+	withCluster(t, data)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptedEditor(t, "s|^  podCIDR: .*|  podCIDR: 10.50.0.0/16|")
+
+	_, err = runConfig(t, "edit", "--config", path)
+	if err == nil || !strings.Contains(err.Error(), "kubernetes.podCIDR cannot be changed") || !strings.Contains(err.Error(), "your edits are kept at") {
+		t.Fatalf("err = %v", err)
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+		t.Error("a refused edit modified the configuration file")
+	}
+}
+
 // The agent is deployed from the configuration KubeSolo starts with, which it
 // records. Until it has started with an agent configured, the settings can be
 // corrected; a typo is not locked in before it was ever used.

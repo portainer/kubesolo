@@ -26,7 +26,8 @@ certificate, the cluster database and all container state live below it, and
 nothing moves them. `kubernetes.podCIDR`, `kubernetes.serviceCIDR` and
 `kubernetes.clusterDNS`: the node's pod range, every Service's cluster IP and the
 API server certificate were allocated from them. Choose them before the first
-start.
+start: KubeSolo records them in `<path>/networks.yaml` and refuses to start
+with others. A cluster created before they were configurable has the defaults.
 
 ### The Portainer agent's settings are set once
 
@@ -309,6 +310,9 @@ of KubeSolo's own on the same port are refused before anything starts.
 | `storage.kine.port` | `integer` | `2379` |
 | `storage.localPath.enabled` | `boolean` | `true` |
 | `storage.localPath.sharedPath` | `string` | `""` |
+
+**immutable** settings cannot be changed on an existing installation; see
+[above](#when-changes-take-effect).
 
 **set-once** settings can be set until a Portainer agent is deployed, and not
 changed after; see [above](#the-portainer-agents-settings-are-set-once).

@@ -354,11 +354,15 @@ func configSetCmd(path *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := refuseNetworkChange(cfg); err != nil {
+				return err
+			}
 			for _, w := range warnings {
 				p.Warn(w.String())
 			}
 
-			if field.Mutability == kubesoloconfig.MutabilityImmutable {
+			// A new path is a new install: saved, with a warning.
+			if field.ConfigPath == "path" {
 				p.Warn(fmt.Sprintf("%s cannot be changed on an install that already has state: %s", name, field.Unchangeable))
 			}
 
@@ -371,6 +375,16 @@ func configSetCmd(path *string) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// refuseNetworkChange refuses the cluster networks of an existing cluster, which
+// KubeSolo would refuse to start with. A container's cluster is in its volume,
+// out of sight here: the container refuses them as it starts.
+func refuseNetworkChange(cfg *types.Config) error {
+	if configContainer != "" {
+		return nil
+	}
+	return kubesoloconfig.RefuseNetworkChange(cfg)
 }
 
 func configEditCmd(path *string) *cobra.Command {
@@ -470,6 +484,9 @@ func runConfigEdit(path string) error {
 	}
 	warnings, err := kubesoloconfig.Validate(edited, validationHost())
 	if err != nil {
+		return fmt.Errorf("%w\n\nyour edits are kept at %s", err, tmpName)
+	}
+	if err := refuseNetworkChange(edited); err != nil {
 		return fmt.Errorf("%w\n\nyour edits are kept at %s", err, tmpName)
 	}
 	for _, w := range warnings {
