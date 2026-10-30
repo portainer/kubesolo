@@ -524,7 +524,7 @@ func configDocument(p *ui.Printer, cfg *config.Config, containerMode, quiet bool
 
 	cfg.ConfigFile = types.DefaultConfigFile
 
-	doc, warnings, err := cfg.ToKubeSoloConfig()
+	doc, warnings, err := cfg.ToKubeSoloConfig(kubesoloconfig.Installed(cfg.ConfigFile))
 	if err != nil {
 		return nil, err
 	}

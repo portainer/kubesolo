@@ -261,7 +261,11 @@ func (c *Config) kubesoloFlags() []string {
 // The environment is deliberately excluded: kubesoloctl's own environment is not
 // the installed service's, and folding it in would write values into the file
 // that the operator never asked for.
-func (c *Config) ToKubeSoloConfig() (*types.Config, []kubesoloconfig.Warning, error) {
+//
+// installed is the configuration it replaces (its defaults on a first install):
+// the settings the installer has no flag for are kept from it, so a re-install
+// does not reset a cluster's ports and networks.
+func (c *Config) ToKubeSoloConfig(installed *types.Config) (*types.Config, []kubesoloconfig.Warning, error) {
 	values, setByUser := splitFlagArgs(c.kubesoloFlags())
 
 	cfg, warnings, err := kubesoloconfig.LoadWithoutEnv("", kubesoloconfig.FlagValues{
@@ -271,6 +275,8 @@ func (c *Config) ToKubeSoloConfig() (*types.Config, []kubesoloconfig.Warning, er
 	if err != nil {
 		return nil, warnings, err
 	}
+
+	kubesoloconfig.KeepUnflagged(cfg, installed)
 
 	// The one setting with no KubeSolo flag to resolve it through.
 	cfg.API.Enabled = c.APIEnabled
