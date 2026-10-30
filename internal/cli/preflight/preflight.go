@@ -31,9 +31,8 @@ type Check struct {
 // (e.g. iptables or nftables). pprofServer mirrors the --pprof-server flag;
 // when true, the pprof port is added to the port availability check. nodeIP
 // mirrors the --node-ip flag and is the address the firewall check connects to.
-// The ports and the pod network checked are the installed configuration's
-// (its defaults when there is none).
-func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
+// The ports and the pod network checked are cfg's.
+func Suite(cfg *types.Config, installPrereqs, pprofServer bool, nodeIP string) []Check {
 	return []Check{
 		{Name: "root privileges", Run: CheckRoot},
 		{Name: "hostname RFC 1123 compliance", Run: CheckHostname},
@@ -42,10 +41,9 @@ func Suite(installPrereqs, pprofServer bool, nodeIP string) []Check {
 		{Name: "iptables and nftables tools", Run: func() error { return CheckNetfilterTools(installPrereqs) }},
 		{Name: "AppArmor parser", Run: func() error { return CheckAppArmor(installPrereqs) }},
 		{Name: "cgroups controllers", Run: func() error { return CheckCgroups(installPrereqs) }},
-		{Name: "required ports available", Run: func() error { return CheckPorts(pprofServer) }},
+		{Name: "required ports available", Run: func() error { return CheckPorts(cfg, pprofServer) }},
 		// After the port check: it listens on the API server port itself.
 		{Name: "host firewall", Run: func() error {
-			cfg := kubesoloconfig.Installed(types.DefaultConfigFile)
 			return network.CheckFirewall(nodeIP, cfg.Kubernetes.PodCIDR, cfg.Kubernetes.APIServer.Port)
 		}},
 	}
@@ -384,13 +382,16 @@ func CheckCgroups(installPrereqs bool) error {
 }
 
 // CheckPorts verifies that KubeSolo's required ports are not in use: the ones
-// the installed configuration sets, its defaults when there is none.
+// cfg sets.
 // We probe via net.Listen rather than shelling out to lsof/ss/netstat.
 // pprofServer should match the --pprof-server flag; when true, the pprof port is
 // also checked so a conflict is caught at preflight rather than at runtime.
-func CheckPorts(pprofServer bool) error {
-	cfg := kubesoloconfig.Installed(types.DefaultConfigFile)
-	cfg.Logging.Pprof = cfg.Logging.Pprof || pprofServer
+func CheckPorts(cfg *types.Config, pprofServer bool) error {
+	if pprofServer && !cfg.Logging.Pprof {
+		withPprof := *cfg
+		withPprof.Logging.Pprof = true
+		cfg = &withPprof
+	}
 
 	var conflicts []string
 	for _, e := range kubesoloconfig.HostPorts(cfg) {
