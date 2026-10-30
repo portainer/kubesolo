@@ -207,6 +207,9 @@ func TestInvalidValuesRejected(t *testing.T) {
 			c.Kubernetes.Kubelet.CPUManager.Policy = types.CPUManagerPolicyStatic
 			c.Kubernetes.Kubelet.CPUManager.ReservedCPUs = "99"
 		}, "kubernetes.kubelet"},
+		{"relative authentication config file", func(c *types.Config) {
+			c.Kubernetes.APIServer.AuthenticationConfigFile = "authentication.yaml"
+		}, "kubernetes.apiServer.authenticationConfigFile"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := Defaults()
@@ -352,5 +355,13 @@ func TestValidateRejectsMalformedAddresses(t *testing.T) {
 		if _, err := Validate(cfg, Host{NumCPU: 4, GOARCH: "amd64"}); err != nil {
 			t.Errorf("%s: %v", ip, err)
 		}
+	}
+}
+
+func TestAbsoluteAuthenticationConfigFileAccepted(t *testing.T) {
+	cfg := Defaults()
+	cfg.Kubernetes.APIServer.AuthenticationConfigFile = "/etc/kubesolo/authentication/config.yaml"
+	if _, err := Validate(cfg, testHost()); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -191,6 +191,15 @@ func buildRegistry() []Field {
 			Set:        func(c *types.Config, v string) error { c.Kubernetes.NodeName = v; return nil },
 		},
 		{
+			ConfigPath: "kubernetes.apiServer.authenticationConfigFile",
+			Envar:      "KUBESOLO_APISERVER_AUTHENTICATION_CONFIG_FILE",
+			Get:        func(c *types.Config) any { return c.Kubernetes.APIServer.AuthenticationConfigFile },
+			Set: func(c *types.Config, v string) error {
+				c.Kubernetes.APIServer.AuthenticationConfigFile = v
+				return nil
+			},
+		},
+		{
 			ConfigPath: "kubernetes.apiServer.extraSANs",
 			Flag:       "apiserver-extra-sans",
 			Envar:      "KUBESOLO_APISERVER_EXTRA_SANS",

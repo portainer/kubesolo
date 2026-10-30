@@ -96,6 +96,14 @@ kubernetes:
     # Example: [kubesolo.local, 10.0.0.4]
     extraSANs: []
 
+    # OIDC/JWT authentication file. Empty = leave authentication unchanged.
+    # Use Kubernetes' apiserver.config.k8s.io/v1 AuthenticationConfiguration.
+    # Changing this path needs a restart. kube-apiserver reloads JWT settings
+    # when the file contents change; a bad update leaves the last valid one in use.
+    # In a container, mount the directory, not just the file.
+    # See docs/configuration/config-file.md for setup and RBAC.
+    authenticationConfigFile: ""
+
     # How long each component may take to pass its health check at startup.
     # Raise it on slow storage such as an SD card.
     # No direct observable effect; check with --print-config.

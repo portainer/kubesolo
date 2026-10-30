@@ -77,6 +77,7 @@
     "10.0.0.4",
     "kubesolo.local"
   ],
+  "APIServerAuthenticationConfigFile": "",
   "KineDir": "/var/lib/kubesolo/kine/db",
   "KineSocketFile": "/var/lib/kubesolo/kine/db/socket",
   "ControllerDir": "/var/lib/kubesolo/controller-manager/config",

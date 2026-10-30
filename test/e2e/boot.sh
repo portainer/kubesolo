@@ -16,11 +16,19 @@ require_cmd "$KUBECTL"
 command -v "$KUBESOLOCTL" >/dev/null 2>&1 || [ -x "$KUBESOLOCTL" ] || fail "kubesoloctl not found: $KUBESOLOCTL"
 
 log "installing KubeSolo container from $IMAGE (name: $KS_NAME)"
-"$KUBESOLOCTL" install \
-  --run-mode=container \
-  --image "$IMAGE" \
-  --name "$KS_NAME" \
+install_args=(
+  install
+  --run-mode=container
+  --image "$IMAGE"
+  --name "$KS_NAME"
   --local-storage=true
+)
+# Optional read-only bind for the authentication file. Absent for every other
+# caller, so their install command stays the same.
+if [ -n "${E2E_AUTH_DIR:-}" ]; then
+  install_args+=(--container-mounts "${E2E_AUTH_DIR}:/etc/kubesolo/e2e-auth:ro")
+fi
+"$KUBESOLOCTL" "${install_args[@]}"
 
 # install merges the kubeconfig into ~/.kube/config; make sure we target it.
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"

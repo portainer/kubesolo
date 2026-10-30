@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -112,6 +113,13 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 		if ip != "" && net.ParseIP(ip) == nil {
 			return warnings, fmt.Errorf("%s: %q is not an IP address", field, ip)
 		}
+	}
+
+	// kube-apiserver refuses to start on a path it cannot read, which takes all
+	// of KubeSolo down with it, the configuration API included. The file itself
+	// is not read here: Validate does not touch the host.
+	if f := cfg.Kubernetes.APIServer.AuthenticationConfigFile; f != "" && !filepath.IsAbs(f) {
+		return warnings, fmt.Errorf("kubernetes.apiServer.authenticationConfigFile: %q is not an absolute path", f)
 	}
 
 	if cfg.API.Enabled && len(cfg.API.SocketPath) > maxUnixSocketPath {

@@ -14,4 +14,9 @@ cname="$KS_NAME"
 [ "$KS_NAME" != "kubesolo" ] && cname="kubesolo-$KS_NAME"
 docker rm -f "$cname" >/dev/null 2>&1 || true
 
+# Drop the host auth directory only after the container that mounted it is gone.
+if [ -n "${E2E_AUTH_DIR:-}" ]; then
+  rm -rf "$E2E_AUTH_DIR" >/dev/null 2>&1 || true
+fi
+
 ok "teardown complete"
