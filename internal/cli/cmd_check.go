@@ -11,6 +11,7 @@ import (
 	"github.com/portainer/kubesolo/internal/cli/detect"
 	"github.com/portainer/kubesolo/internal/cli/preflight"
 	"github.com/portainer/kubesolo/internal/cli/ui"
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
 )
@@ -59,7 +60,7 @@ func runCheck(cfg *config.Config) error {
 		checks = preflight.ContainerSuite()
 	} else {
 		p.OK("System detected", fmt.Sprintf("%s · %s · %s", info.Arch, info.LibC, info.InitSystem))
-		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
+		checks = preflight.Suite(kubesoloconfig.Installed(types.DefaultConfigFile), cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
 	}
 
 	p.Step("Pre-flight checks")
@@ -75,7 +76,7 @@ func runCheck(cfg *config.Config) error {
 func runCheckJSON(cfg *config.Config) error {
 	checks := preflight.ContainerSuite()
 	if runtime.GOOS != "darwin" {
-		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
+		checks = preflight.Suite(kubesoloconfig.Installed(types.DefaultConfigFile), cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
 	}
 	return writeCheckReport(os.Stdout, preflight.Report(checks))
 }

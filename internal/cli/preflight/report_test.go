@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 	"github.com/portainer/kubesolo/types"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -77,7 +78,7 @@ func TestReport_PortInUse(t *testing.T) {
 	}
 
 	var ran []string
-	checks := append([]Check{{Name: "required ports available", Run: func() error { return CheckPorts(false) }}},
+	checks := append([]Check{{Name: "required ports available", Run: func() error { return CheckPorts(kubesoloconfig.Defaults(), false) }}},
 		stubChecks(&ran)[0])
 	report := Report(checks)
 

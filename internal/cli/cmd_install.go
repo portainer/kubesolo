@@ -279,9 +279,11 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 		return p.Fail("service setup", err)
 	}
 
+	// The configuration about to be written, which the pre-flight checks check.
+	var doc *types.Config
 	var staged *upgrade.Staged
 	if !containerMode {
-		if _, err := configDocument(p, cfg, containerMode, false); err != nil {
+		if doc, err = configDocument(p, cfg, containerMode, false); err != nil {
 			return p.Fail("configuration", err)
 		}
 		cleanup, s, err := stageRelease(p, cfg, info)
@@ -318,7 +320,11 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	if containerMode {
 		checks = preflight.ContainerSuite()
 	} else {
-		checks = preflight.Suite(cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
+		if doc == nil {
+			// A KubeSolo older than the configuration file: its ports are the defaults.
+			doc = kubesoloconfig.Defaults()
+		}
+		checks = preflight.Suite(doc, cfg.InstallPrereqs, cfg.PprofServer, cfg.NodeIP)
 	}
 	if err := preflight.RunSuite(checks); err != nil {
 		if wasRunning {
