@@ -476,18 +476,19 @@ func TestInvalidNetworksRejected(t *testing.T) {
 
 // The networks are normalised to their network address, which is what the
 // components are given, and the edge sizes are accepted.
-func TestNetworksNormalisedAndAccepted(t *testing.T) {
-	cfg := Defaults()
-	cfg.Kubernetes.PodCIDR = "10.42.1.0/16"
-	cfg.Kubernetes.ServiceCIDR = "10.96.0.7/12"
-	if _, err := Validate(cfg, testHost()); err != nil {
-		t.Fatalf("validate: %v", err)
-	}
-	if cfg.Kubernetes.PodCIDR != "10.42.0.0/16" || cfg.Kubernetes.ServiceCIDR != "10.96.0.0/12" {
-		t.Errorf("networks = %s, %s; want 10.42.0.0/16, 10.96.0.0/12", cfg.Kubernetes.PodCIDR, cfg.Kubernetes.ServiceCIDR)
+func TestNetworksMustBeNetworkAddresses(t *testing.T) {
+	for _, tc := range []struct{ field, pod, service, want string }{
+		{"kubernetes.podCIDR", "10.42.1.0/16", "10.43.0.0/16", "use 10.42.0.0/16"},
+		{"kubernetes.serviceCIDR", "10.42.0.0/16", "10.96.0.7/12", "use 10.96.0.0/12"},
+	} {
+		cfg := Defaults()
+		cfg.Kubernetes.PodCIDR, cfg.Kubernetes.ServiceCIDR = tc.pod, tc.service
+		if _, err := Validate(cfg, testHost()); err == nil || !strings.HasPrefix(err.Error(), tc.field) || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it refused with %q", tc.field, err, tc.want)
+		}
 	}
 
-	cfg = Defaults()
+	cfg := Defaults()
 	cfg.Kubernetes.PodCIDR = "10.42.7.0/24"
 	cfg.Kubernetes.ServiceCIDR = "10.43.0.0/28"
 	if _, err := Validate(cfg, testHost()); err != nil {

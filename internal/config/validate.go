@@ -182,9 +182,9 @@ func validatePorts(cfg *types.Config) error {
 	return nil
 }
 
-// validateNetworks checks the pod and service CIDRs and the cluster DNS address,
-// and normalises the CIDRs to their network address (10.42.1.0/16 is
-// 10.42.0.0/16), which is what the components are given.
+// validateNetworks checks the pod and service CIDRs and the cluster DNS address.
+// A CIDR must be written as its network address (10.42.0.0/16, not
+// 10.42.1.0/16).
 func validateNetworks(cfg *types.Config) error {
 	podNet, err := parseIPv4CIDR(cfg.Kubernetes.PodCIDR)
 	if err != nil {
@@ -210,8 +210,16 @@ func validateNetworks(cfg *types.Config) error {
 		return fmt.Errorf("kubernetes.podCIDR %s and kubernetes.serviceCIDR %s overlap", cfg.Kubernetes.PodCIDR, cfg.Kubernetes.ServiceCIDR)
 	}
 
-	cfg.Kubernetes.PodCIDR = podNet.String()
-	cfg.Kubernetes.ServiceCIDR = serviceNet.String()
+	// Refused rather than normalised: the config API, a restart and the record
+	// of the networks compare them as written.
+	for field, n := range map[string]struct {
+		cidr    string
+		network *net.IPNet
+	}{"kubernetes.podCIDR": {cfg.Kubernetes.PodCIDR, podNet}, "kubernetes.serviceCIDR": {cfg.Kubernetes.ServiceCIDR, serviceNet}} {
+		if n.network.String() != n.cidr {
+			return fmt.Errorf("%s: %s is not a network address; use %s", field, n.cidr, n.network)
+		}
+	}
 
 	if cfg.Kubernetes.ClusterDNS == "" {
 		if serviceOnes > smallestDNSServiceCIDR {
