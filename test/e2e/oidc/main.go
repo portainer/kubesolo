@@ -56,7 +56,7 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	issuer := "https://" + net.JoinHostPort(ip.String(), fmt.Sprint(listener.Addr().(*net.TCPAddr).Port))
 
 	mux := http.NewServeMux()
@@ -88,7 +88,7 @@ func run(args []string) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		fmt.Fprint(w, token)
+		_, _ = fmt.Fprint(w, token)
 	})
 
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
