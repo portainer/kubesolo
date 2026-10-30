@@ -441,6 +441,16 @@ func KeepImmutable(cfg, from *types.Config) {
 	}
 }
 
+// KeepUnflagged carries over from from every setting with no flag: the ones a
+// configuration built from flags, as the installer builds it, cannot set.
+func KeepUnflagged(cfg, from *types.Config) {
+	for _, f := range Registry() {
+		if f.Flag == "" {
+			_ = f.Set(cfg, fmt.Sprint(f.Get(from)))
+		}
+	}
+}
+
 // FieldByPath looks up a single setting by its dotted config path.
 func FieldByPath(path string) (Field, bool) {
 	for _, f := range Registry() {
