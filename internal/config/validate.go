@@ -135,6 +135,11 @@ func Validate(cfg *types.Config, host Host) ([]Warning, error) {
 		return warnings, err
 	}
 
+	// A detected node IP is checked as KubeSolo starts, once it is known.
+	if w, ok := NodeIPWarning(cfg, cfg.Network.NodeIP); ok {
+		warnings = append(warnings, w)
+	}
+
 	// kube-apiserver refuses to start on a path it cannot read, which takes all
 	// of KubeSolo down with it, the configuration API included. The file itself
 	// is not read here: Validate does not touch the host.
