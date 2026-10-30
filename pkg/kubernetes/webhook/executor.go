@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -56,6 +57,14 @@ func (s *Service) Start(ctx context.Context) error {
 		Handler:      mux,
 	}
 
+	// Loaded before the port is bound: a webhook that cannot serve must not
+	// hold its port, where the health check would take it for up.
+	cert, err := tls.LoadX509KeyPair(filepath.Join(s.pkiPath, "webhook", "webhook.crt"), filepath.Join(s.pkiPath, "webhook", "webhook.key"))
+	if err != nil {
+		return fmt.Errorf("webhook server cannot load its certificate: %w", err)
+	}
+	s.server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
+
 	listener, err := net.Listen("tcp", s.server.Addr)
 	if err != nil {
 		return fmt.Errorf("webhook server cannot listen on %s (kubernetes.webhook.port): %w", s.server.Addr, err)
@@ -72,11 +81,8 @@ func (s *Service) Start(ctx context.Context) error {
 
 // startServer serves the webhook on its listener
 func (s *Service) startServer(listener net.Listener) {
-	certPath := filepath.Join(s.pkiPath, "webhook", "webhook.crt")
-	keyPath := filepath.Join(s.pkiPath, "webhook", "webhook.key")
-
 	s.wg.Go(func() {
-		if err := s.server.ServeTLS(listener, certPath, keyPath); err != nil && err != http.ErrServerClosed {
+		if err := s.server.ServeTLS(listener, "", ""); err != nil && err != http.ErrServerClosed {
 			log.Error().Str("component", "webhook").Err(err).Msg("webhook server failed")
 		}
 	})
