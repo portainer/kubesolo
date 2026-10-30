@@ -217,6 +217,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	// The cluster networks cannot change under an existing cluster, whatever
+	// changed them: refused, or recorded for a new one, before anything starts.
+	if err := config.CheckNetworks(service.cfg); err != nil {
+		log.Fatal().Err(err).Msg("failed to start with the configured cluster networks")
+	}
+
 	if service.cfg.Kubernetes.APIServer.StartupTimeoutSeconds > 0 {
 		types.DefaultRetryCount = service.cfg.Kubernetes.APIServer.StartupTimeoutSeconds / int(types.DefaultComponentSleep.Seconds())
 	}
