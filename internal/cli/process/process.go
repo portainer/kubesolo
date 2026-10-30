@@ -200,20 +200,29 @@ func findKubeSoloPIDs() []int {
 // listening on any KubeSolo port, then maps those inodes back to PIDs via
 // each process's fd directory. This avoids any dependency on lsof or ss.
 func findPortOwners() []int {
-	targetPorts := make(map[int]bool, len(KubeSoloPorts))
-	for _, p := range KubeSoloPorts {
-		targetPorts[p] = true
-	}
-	cfg := kubesoloconfig.Installed(types.DefaultConfigFile)
-	for _, p := range []int{cfg.Storage.Kine.Port, cfg.Kubernetes.APIServer.Port, cfg.Kubernetes.Webhook.Port, cfg.Logging.PprofPort} {
-		targetPorts[p] = true
-	}
+	targetPorts := portsOf(kubesoloconfig.Installed(types.DefaultConfigFile))
 
 	inodes := listeningInodes(targetPorts)
 	if len(inodes) == 0 {
 		return nil
 	}
 	return inodesToPIDs(inodes)
+}
+
+// portsOf are the ports a KubeSolo process may hold: the defaults, and every
+// port cfg has KubeSolo listen on, pprof's and the metrics endpoint's whether or
+// not they are enabled now (a stale KubeSolo may have started with them).
+func portsOf(cfg *types.Config) map[int]bool {
+	ports := make(map[int]bool, len(KubeSoloPorts))
+	for _, p := range KubeSoloPorts {
+		ports[p] = true
+	}
+	all := *cfg
+	all.Logging.Pprof, all.Metrics.Enabled = true, true
+	for _, e := range kubesoloconfig.HostPorts(&all) {
+		ports[e.Port] = true
+	}
+	return ports
 }
 
 // listeningInodes reads /proc/net/tcp[6] and returns the set of socket inodes
