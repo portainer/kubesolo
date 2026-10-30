@@ -148,6 +148,33 @@ func TestKeepImmutable(t *testing.T) {
 	}
 }
 
+func TestKeepUnflagged(t *testing.T) {
+	from := Defaults()
+	from.Path = "/data/kubesolo"
+	from.API.SocketPath = "/data/kubesolo/" + types.DefaultAPISocketName
+	from.Kubernetes.Webhook.Port = 11443
+
+	cfg := Defaults()
+	cfg.Path = "/data/kubesolo"
+	KeepUnflagged(cfg, from)
+	if cfg.Kubernetes.Webhook.Port != 11443 || cfg.API.SocketPath != from.API.SocketPath {
+		t.Errorf("not carried over: webhook port %d, socket %s", cfg.Kubernetes.Webhook.Port, cfg.API.SocketPath)
+	}
+
+	// Under a new path the socket moves with it, unless it was put elsewhere.
+	cfg = Defaults()
+	cfg.Path = "/srv/kubesolo"
+	KeepUnflagged(cfg, from)
+	if want := "/srv/kubesolo/" + types.DefaultAPISocketName; cfg.API.SocketPath != want {
+		t.Errorf("socket %s, want %s", cfg.API.SocketPath, want)
+	}
+	from.API.SocketPath = "/run/kubesolo.sock"
+	KeepUnflagged(cfg, from)
+	if cfg.API.SocketPath != "/run/kubesolo.sock" {
+		t.Errorf("a socket put elsewhere moved to %s", cfg.API.SocketPath)
+	}
+}
+
 func TestCheckSetOnce(t *testing.T) {
 	agent := Defaults()
 	agent.Portainer.EdgeID, agent.Portainer.EdgeKey = "edge-id", "edge-key"

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -442,12 +443,17 @@ func KeepImmutable(cfg, from *types.Config) {
 }
 
 // KeepUnflagged carries over from from every setting with no flag: the ones a
-// configuration built from flags, as the installer builds it, cannot set.
+// configuration built from flags, as the installer builds it, cannot set. The
+// API socket, derived from path where it was not put elsewhere, moves with a
+// new path.
 func KeepUnflagged(cfg, from *types.Config) {
 	for _, f := range Registry() {
 		if f.Flag == "" {
 			_ = f.Set(cfg, fmt.Sprint(f.Get(from)))
 		}
+	}
+	if cfg.Path != from.Path && from.API.SocketPath == filepath.Join(from.Path, types.DefaultAPISocketName) {
+		cfg.API.SocketPath = filepath.Join(cfg.Path, types.DefaultAPISocketName)
 	}
 }
 
