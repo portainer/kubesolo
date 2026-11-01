@@ -5,8 +5,8 @@
 # same directory. Both configurations scrape the same two targets and feed the
 # same dashboards. Choose whichever collector best suits your environment.
 #
-# The two scrape jobs below—the API server's /metrics endpoint and the
-# kubelet/cAdvisor proxy—feed every panel across both dashboards:
+# The two scrape jobs below (the API server's /metrics endpoint and KubeSolo's
+# own metrics server) feed every panel across both dashboards:
 #   kubesolo-grafana-dashboard-classic.json
 #   kubesolo-grafana-dashboard-apiv2.json
 #
@@ -21,9 +21,16 @@
 #
 # This example assumes the Collector was installed with the official Helm chart
 # (https://github.com/open-telemetry/opentelemetry-helm-charts/tree/main/charts/opentelemetry-collector)
-# in the "monitoring" namespace using a ServiceAccount named "otel-collector".
+# in the "default" namespace using a ServiceAccount named "otel-collector".
 # Adjust the ClusterRoleBinding subject below if your release uses a different
-# name or namespace.
+# name or namespace. The ConfigMap has no `namespace:`, so it lands in the
+# namespace you apply it to (use `-n <ns>` to match your release).
+#
+# The kubesolo-metrics job scrapes 127.0.0.1:9105, which is the loopback of the
+# KubeSolo container. Run the Collector pod with hostNetwork: true and
+# dnsPolicy: ClusterFirstWithHostNet (Helm: hostNetwork: true) so it shares
+# that network namespace, and start KubeSolo with KUBESOLO_METRICS_SERVER=true.
+# See README.md, "Why Alloy uses hostNetwork" for an alternative approach.
 #
 # In your Helm values, configure the contrib image:
 #   image.repository: otel/opentelemetry-collector-contrib
@@ -41,9 +48,8 @@ kind: ClusterRole
 metadata:
   name: kubesolo-otel-metrics
 rules:
-  - apiGroups: [""]
-    resources: ["nodes", "nodes/metrics", "nodes/stats", "nodes/proxy"]
-    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -56,26 +62,20 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: otel-collector
-    namespace: monitoring
+    namespace: default
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kubesolo-otel-collector-config
-  namespace: monitoring
 data:
   config.yaml: |
-    # These two scrape jobs are the basis for every panel in
+    # These scrape jobs are the basis for every panel in
     # kubesolo-grafana-dashboard-classic.json / kubesolo-grafana-dashboard-apiv2.json:
-    #   - kubesolo-apiserver:        kube-apiserver's own /metrics, proxied
+    #   - kubesolo-apiserver: kube-apiserver's own /metrics, reached
     #     through the kubernetes.default.svc Service.
-    #   - kubesolo-kubelet-cadvisor: kubelet + cAdvisor metrics, proxied
-    #     through the apiserver's node proxy.
-    #
-    # "kubesolo" below is the node name in the proxy path. KubeSolo's node
-    # name defaults to the host's hostname and is configurable via
-    # `kubernetes.nodeName` (docs/configuration/config-file.md), so replace
-    # it with your actual node name (`kubectl get nodes`) if it differs.
+    #   - kubesolo-metrics:   KubeSolo's own metrics server on
+    #     127.0.0.1:9105 (needs hostNetwork, see header).
     receivers:
       prometheus:
         config:
@@ -88,14 +88,11 @@ data:
               metrics_path: /metrics
               static_configs:
                 - targets: ["kubernetes.default.svc"]
-            - job_name: "kubesolo-kubelet-cadvisor"
-              scheme: https
-              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-              tls_config:
-                ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-              metrics_path: /api/v1/nodes/kubesolo/proxy/metrics/cadvisor
+            - job_name: "kubesolo-metrics"
+              scheme: http
+              metrics_path: /metrics
               static_configs:
-                - targets: ["kubernetes.default.svc"]
+                - targets: ["127.0.0.1:9105"]
 
     # Basic-auth credentials for the Grafana Cloud remote_write endpoint,
     # referenced by the exporter below via `auth.authenticator`. ${env:...}
