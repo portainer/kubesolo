@@ -2,11 +2,14 @@
 # and sending them to Grafana Cloud or another Prometheus remote_write endpoint.
 #
 # This file provides an OpenTelemetry equivalent to `alloy-config.yaml` in this
-# same directory. Both configurations scrape the same two targets and feed the
+# same directory. Both configurations scrape the same three targets and feed the
 # same dashboards. Choose whichever collector best suits your environment.
 #
-# The two scrape jobs below (the API server's /metrics endpoint and KubeSolo's
-# own metrics server) feed every panel across both dashboards:
+# The three scrape jobs below (the API server's /metrics endpoint, the kubelet's
+# cAdvisor metrics and KubeSolo's own metrics server) feed every panel across
+# both dashboards. The node name in the cAdvisor metrics_path (default
+# "kubesolo") must match your node (`kubectl get nodes`), otherwise no
+# container metrics are scraped:
 #   kubesolo-grafana-dashboard-classic.json
 #   kubesolo-grafana-dashboard-apiv2.json
 #
@@ -50,6 +53,10 @@ metadata:
 rules:
   - nonResourceURLs: ["/metrics"]
     verbs: ["get"]
+  # kubelet cAdvisor, proxied through the apiserver
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -74,6 +81,8 @@ data:
     # kubesolo-grafana-dashboard-classic.json / kubesolo-grafana-dashboard-apiv2.json:
     #   - kubesolo-apiserver: kube-apiserver's own /metrics, reached
     #     through the kubernetes.default.svc Service.
+    #   - kubesolo-kubelet-cadvisor: container metrics via the apiserver node
+    #     proxy. "kubesolo" in metrics_path is the node name; must match yours.
     #   - kubesolo-metrics:   KubeSolo's own metrics server on
     #     127.0.0.1:9105 (needs hostNetwork, see header).
     receivers:
@@ -86,6 +95,14 @@ data:
               tls_config:
                 ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
               metrics_path: /metrics
+              static_configs:
+                - targets: ["kubernetes.default.svc"]
+            - job_name: "kubesolo-kubelet-cadvisor"
+              scheme: https
+              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              tls_config:
+                ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              metrics_path: /api/v1/nodes/kubesolo/proxy/metrics/cadvisor
               static_configs:
                 - targets: ["kubernetes.default.svc"]
             - job_name: "kubesolo-metrics"

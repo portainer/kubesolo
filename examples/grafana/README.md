@@ -46,12 +46,29 @@ The format was introduced gradually through versions such as `v2alpha1` and `v2b
 
 [`alloy-config.yaml`](alloy-config.yaml) is a complete, self-contained manifest that runs [Grafana Alloy](https://grafana.com/docs/alloy/latest/) inside the KubeSolo cluster and sends metrics to a Prometheus-compatible endpoint. It contains a `ServiceAccount`, `ClusterRole`, `ClusterRoleBinding`, `ConfigMap`, and `Deployment`. Everything goes into the `default` namespace, so no namespace needs to exist beforehand.
 
-The Alloy config scrapes two targets. These provide the data used by every panel in both dashboards:
+The Alloy config scrapes three targets. These provide the data used by every panel in both dashboards:
 
 - `kubesolo-apiserver` — the kube-apiserver’s own `/metrics` endpoint, accessed through the `kubernetes.default.svc` Service
+- `kubesolo-kubelet-cadvisor` — the kubelet’s cAdvisor container metrics (`container_*`), reached through the API server node proxy at `/api/v1/nodes/kubesolo/proxy/metrics/cadvisor`
 - `kubesolo-metrics` — KubeSolo’s own metrics server on `127.0.0.1:9105` (the `kubesolo_*` metrics). Start KubeSolo with `KUBESOLO_METRICS_SERVER=true` to enable it.
 
-The `ClusterRole` grants the Alloy `ServiceAccount` access to the `/metrics` non-resource URL.
+The `ClusterRole` grants the Alloy `ServiceAccount` access to the `/metrics` non-resource URL and to `get` on `nodes/proxy`, which the cAdvisor scrape needs.
+
+### The node name must match
+
+The cAdvisor target is addressed by node name: `/api/v1/nodes/<node-name>/proxy/metrics/cadvisor`. The example uses `kubesolo`, which is the default node name. **If your node has a different name, change `kubesolo` in that path to match it, otherwise the API server returns a 404 and the container metrics are silently not scraped.** The same applies to the OpenTelemetry Collector example.
+
+Find your node name with:
+
+```sh
+kubectl get nodes
+```
+
+You can verify the path works before deploying the agent:
+
+```sh
+kubectl get --raw /api/v1/nodes/<node-name>/proxy/metrics/cadvisor | head
+```
 
 ### Creating the credentials Secret
 
@@ -113,7 +130,7 @@ For installation options, including the Helm chart, binary, and Docker image, as
 
 [`otel-collector-config.yaml`](otel-collector-config.yaml) provides the same setup using the vendor-neutral [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) instead of Alloy.
 
-It scrapes the same two targets (`kubesolo-apiserver` and `kubesolo-metrics`) using the same authentication settings. It then sends the metrics to the same type of Prometheus-compatible endpoint, so it feeds both dashboards in the same way.
+It scrapes the same three targets (`kubesolo-apiserver`, `kubesolo-kubelet-cadvisor` and `kubesolo-metrics`) using the same authentication settings. It then sends the metrics to the same type of Prometheus-compatible endpoint, so it feeds both dashboards in the same way. As with Alloy, the node name in the cAdvisor `metrics_path` (`/api/v1/nodes/kubesolo/proxy/metrics/cadvisor`) must match your node name. See [The node name must match](#the-node-name-must-match).
 
 Unlike `alloy-config.yaml`, this file has no Deployment. The `kubesolo-metrics` job scrapes `127.0.0.1:9105`, so run the Collector pod with `hostNetwork: true` and `dnsPolicy: ClusterFirstWithHostNet` (Helm: `hostNetwork: true`). See [Why Alloy uses `hostNetwork`](#why-alloy-uses-hostnetwork) for the reasoning and the alternative. The ConfigMap has no `namespace:`, so apply it into the namespace of your Collector release (`kubectl apply -n <ns> -f ...`), and adjust the `ClusterRoleBinding` subject namespace (`default`) to match.
 

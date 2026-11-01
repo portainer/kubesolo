@@ -2,9 +2,11 @@
 # scraping KubeSolo's metrics and shipping them to Grafana Cloud (or another
 # Prometheus remote_write endpoint).
 #
-# The "kubesolo" scrape targets the API server's /metrics; "kubesolo_self"
-# scrapes KubeSolo's own metrics server. Both dashboards in this folder use
-# these two targets:
+# The "kubesolo" scrape targets the API server's /metrics and the kubelet's
+# cAdvisor metrics (via the API server node proxy); "kubesolo_self" scrapes
+# KubeSolo's own metrics server. Both dashboards in this folder use these
+# three targets. The node name in the cAdvisor path (default "kubesolo") must
+# match your node (`kubectl get nodes`), otherwise no container metrics.
 #   kubesolo-grafana-dashboard-classic.json
 #   kubesolo-grafana-dashboard-apiv2.json
 #
@@ -39,13 +41,17 @@ kind: ServiceAccount
 metadata:
   name: alloy
 ---
-# Read access to the apiserver's own /metrics (non-resource URL)
+# Read access to the apiserver's own /metrics (non-resource URL) and to the
+# kubelet endpoints proxied through the apiserver (cAdvisor)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: alloy-metrics-reader
 rules:
   - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -69,12 +75,19 @@ data:
   config.alloy: |
     // kubesolo-apiserver: kube-apiserver's own /metrics, reached through the
     // kubernetes.default.svc Service.
+    // kubesolo-kubelet-cadvisor: container metrics via the apiserver node
+    // proxy. "kubesolo" in the path is the node name and must match yours.
     prometheus.scrape "kubesolo" {
       targets = [
         {
           "__address__"      = "kubernetes.default.svc",
           "__metrics_path__" = "/metrics",
           "job"              = "kubesolo-apiserver",
+        },
+        {
+          "__address__"      = "kubernetes.default.svc",
+          "__metrics_path__" = "/api/v1/nodes/kubesolo/proxy/metrics/cadvisor",
+          "job"              = "kubesolo-kubelet-cadvisor",
         },
       ]
 
@@ -90,7 +103,10 @@ data:
 
     // KubeSolo's own metrics server (KUBESOLO_METRICS_SERVER=true). It binds to
     // 127.0.0.1:9105 inside the KubeSolo container by default, so the Alloy pod
-    // runs with hostNetwork: true to share that network namespace.
+    // runs with hostNetwork: true to share that network namespace. To stay on
+    // the pod network instead, see README.md ("Why Alloy uses hostNetwork"):
+    // start KubeSolo with KUBESOLO_METRICS_BIND_ADDRESS=0.0.0.0:9105 and
+    // scrape the node InternalIP.
     prometheus.scrape "kubesolo_self" {
       targets = [
         {
@@ -130,7 +146,9 @@ spec:
     spec:
       serviceAccountName: alloy
       # Needed to reach KubeSolo's metrics server on 127.0.0.1:9105 (see
-      # README.md, "Why Alloy uses hostNetwork").
+      # README.md, "Why Alloy uses hostNetwork"). Not needed if you set
+      # KUBESOLO_METRICS_BIND_ADDRESS=0.0.0.0:9105 and scrape the node
+      # InternalIP instead; see the same README section.
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
