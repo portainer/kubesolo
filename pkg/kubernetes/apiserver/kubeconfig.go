@@ -2,7 +2,9 @@ package apiserver
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 
 	"github.com/rs/zerolog/log"
 	"k8s.io/client-go/tools/clientcmd"
@@ -82,7 +84,7 @@ func (s *service) createKubeConfig(certData *certificateData, nodeIP string) *ap
 
 	kubeConfig := api.NewConfig()
 	kubeConfig.Clusters[clusterName] = &api.Cluster{
-		Server:                   fmt.Sprintf("https://%s:6443", nodeIP),
+		Server:                   fmt.Sprintf("https://%s", net.JoinHostPort(nodeIP, strconv.Itoa(s.port))),
 		CertificateAuthorityData: certData.ca,
 	}
 	kubeConfig.AuthInfos[userName] = &api.AuthInfo{

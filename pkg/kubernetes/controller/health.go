@@ -11,7 +11,7 @@ import (
 
 // checkControllerManagerHealth checks if the controller manager is working properly
 func (s *service) checkControllerManagerHealth() error {
-	req, err := http.NewRequestWithContext(s.ctx, http.MethodGet, "https://127.0.0.1:10257/healthz", nil)
+	req, err := http.NewRequestWithContext(s.ctx, http.MethodGet, network.LoopbackURL("https", s.port, "/healthz"), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create health check request: %v", err)
 	}

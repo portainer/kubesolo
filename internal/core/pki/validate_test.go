@@ -147,6 +147,23 @@ func TestInvalidateIfStale(t *testing.T) {
 	})
 }
 
+// The kubernetes Service IP moves with kubernetes.serviceCIDR, which can change
+// until the cluster is created: after the certificates, before the database.
+func TestInvalidateIfStaleServiceIP(t *testing.T) {
+	cert := selfSignedCert(t, time.Now().Add(24*time.Hour), []net.IP{net.ParseIP("10.0.0.5"), net.ParseIP("10.43.0.1")})
+
+	e := writeAPIServerCert(t, "10.0.0.5", cert)
+	e.KubernetesServiceIP = "10.43.0.1"
+	require.NoError(t, InvalidateIfStale(e))
+	assert.FileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"), "a cert carrying the Service IP must be kept")
+
+	e = writeAPIServerCert(t, "10.0.0.5", cert)
+	e.KubernetesServiceIP = "10.51.0.1"
+	require.NoError(t, InvalidateIfStale(e))
+	assert.NoFileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"), "a cert without the Service IP must be removed")
+	assert.FileExists(t, filepath.Join(e.PKIDir, "ca", "ca.crt"), "CA must be preserved")
+}
+
 // TestInvalidateIfStaleExtraSANs covers the case that previously went unnoticed:
 // adding a SAN to the configuration re-signs nothing, so the new name stays
 // unusable until the certificate expires or the node IP moves.

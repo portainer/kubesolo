@@ -53,7 +53,7 @@ func TestUpdateLoadBalancerStatusWithRetry(t *testing.T) {
 			return true, lbTestService(corev1.ServiceTypeLoadBalancer), nil
 		})
 
-		w := NewService("node-1", testNodeIP, "", "", true)
+		w := NewService("node-1", testNodeIP, "", "", true, 10443)
 		require.NoError(t, w.updateLoadBalancerStatusWithRetry(context.Background(), testNamespace, testService, cs))
 
 		assert.GreaterOrEqual(t, gets, 2, "expected the stale read to be retried")
@@ -63,7 +63,7 @@ func TestUpdateLoadBalancerStatusWithRetry(t *testing.T) {
 	t.Run("patches immediately when the type is already committed", func(t *testing.T) {
 		cs := fake.NewClientset(lbTestService(corev1.ServiceTypeLoadBalancer))
 
-		w := NewService("node-1", testNodeIP, "", "", true)
+		w := NewService("node-1", testNodeIP, "", "", true, 10443)
 		require.NoError(t, w.updateLoadBalancerStatusWithRetry(context.Background(), testNamespace, testService, cs))
 
 		assert.True(t, statusPatched(cs.Actions()), "expected a status patch on the CREATE path")
@@ -74,7 +74,7 @@ func TestUpdateLoadBalancerStatusWithRetry(t *testing.T) {
 		svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: testNodeIP}}
 		cs := fake.NewClientset(svc)
 
-		w := NewService("node-1", testNodeIP, "", "", true)
+		w := NewService("node-1", testNodeIP, "", "", true, 10443)
 		require.NoError(t, w.updateLoadBalancerStatusWithRetry(context.Background(), testNamespace, testService, cs))
 
 		assert.False(t, statusPatched(cs.Actions()), "should not re-patch an already-correct status")

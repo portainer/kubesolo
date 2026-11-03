@@ -2,7 +2,9 @@ package kubelet
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
@@ -18,7 +20,7 @@ func (s *service) generateKubeletKubeconfig() error {
 				"name": "kubernetes",
 				"cluster": map[string]any{
 					"certificate-authority": s.caFile,
-					"server":                fmt.Sprintf("https://%s:6443", s.nodeIP),
+					"server":                fmt.Sprintf("https://%s", net.JoinHostPort(s.nodeIP, strconv.Itoa(s.apiServerPort))),
 				},
 			},
 		},

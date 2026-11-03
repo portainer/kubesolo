@@ -3,6 +3,8 @@ package process
 import (
 	"testing"
 	"time"
+
+	kubesoloconfig "github.com/portainer/kubesolo/internal/config"
 )
 
 // ── pidFromProcPath ───────────────────────────────────────────────────────────
@@ -79,4 +81,23 @@ func TestListeningInodes_EmptyInput(t *testing.T) {
 	// On Linux this may or may not return results depending on what's running;
 	// on macOS it will always return empty. Either way must not panic.
 	_ = inodes
+}
+
+// A stale KubeSolo is found on whichever of its ports the installed
+// configuration moved, not only the four it started with.
+func TestPortsOfCoversEveryConfiguredPort(t *testing.T) {
+	cfg := kubesoloconfig.Defaults()
+	cfg.Kubernetes.ControllerManager.Port = 20257
+	cfg.Kubernetes.Kubelet.Port = 20250
+	cfg.Kubernetes.Kubelet.HealthzPort = 20248
+	cfg.Kubernetes.KubeProxy.HealthzPort = 20256
+	cfg.Logging.PprofPort = 16060
+	cfg.Metrics.BindAddress = "127.0.0.1:19105"
+
+	ports := portsOf(cfg)
+	for _, p := range append([]int{20257, 20250, 20248, 20256, 16060, 19105}, KubeSoloPorts...) {
+		if !ports[p] {
+			t.Errorf("port %d is not scanned", p)
+		}
+	}
 }
