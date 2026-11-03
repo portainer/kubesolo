@@ -31,6 +31,21 @@ func TestContainerUpgradeImage(t *testing.T) {
 	}
 }
 
+func TestReleaseImageVersion(t *testing.T) {
+	for image, want := range map[string]string{
+		"portainer/kubesolo:v1.2.2":            "v1.2.2",
+		"docker.io/portainer/kubesolo:v1.2.2":  "v1.2.2",
+		"portainer/kubesolo:latest":            "",
+		"portainer/kubesolo":                   "",
+		"registry.example.com/kubesolo:v1.2.2": "",
+	} {
+		got, ok := releaseImageVersion(image)
+		if got != want || ok != (want != "") {
+			t.Errorf("%s: got %q, %v; want %q", image, got, ok, want)
+		}
+	}
+}
+
 func TestCheckContainerVersion(t *testing.T) {
 	if err := checkContainerVersion("v1.2.1", "v1.2.2", false); err != nil {
 		t.Errorf("upgrade: %v", err)

@@ -376,10 +376,14 @@ func TestCloseInterrupted(t *testing.T) {
 		{"died before changing anything", interrupted(OpUpgrade, false), "v1.2.1", "", ResultAborted},
 		{"rollback came up", &State{Current: &Run{ID: "r", Operation: OpRollback, From: "v1.2.2", To: "v1.2.1", Started: started, PID: deadPID(t), HostChanged: true}}, "v1.2.1", "", ResultSucceeded},
 		{"something else is running", interrupted(OpUpgrade, true), "v1.1.9", "", ResultFailed},
+		{"restart came up", &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: started, PID: deadPID(t), HostChanged: true}}, "v1.2.2", "", ResultSucceeded},
+		{"restart died before stopping KubeSolo", &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: started, PID: deadPID(t)}}, "v1.2.2", "", ResultAborted},
+		{"restart died while reverting", &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: started, PID: deadPID(t), HostChanged: true, Phase: PhaseRollingBack}}, "v1.2.2", "", ResultRolledBack},
+		{"restart, then another version is running", &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: started, PID: deadPID(t), HostChanged: true}}, "v1.2.1", "", ResultFailed},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if !c.state.CloseInterrupted(c.running, c.guard) {
+			if !c.state.CloseInterrupted(c.running, c.guard, "") {
 				t.Fatal("not closed")
 			}
 			if c.state.Current != nil || c.state.Last == nil || c.state.Last.Result != c.want || c.state.Last.Finished.IsZero() {
@@ -389,10 +393,10 @@ func TestCloseInterrupted(t *testing.T) {
 	}
 
 	live := &State{Current: &Run{ID: "r", PID: os.Getpid(), Started: started}}
-	if live.CloseInterrupted("v1.2.2", "") {
+	if live.CloseInterrupted("v1.2.2", "", "") {
 		t.Error("closed a run whose executor is alive")
 	}
-	if (&State{}).CloseInterrupted("v1.2.2", "") {
+	if (&State{}).CloseInterrupted("v1.2.2", "", "") {
 		t.Error("closed a run that does not exist")
 	}
 
@@ -511,5 +515,33 @@ func TestVersionFromArchiveName(t *testing.T) {
 		if got, ok := VersionFromArchiveName(name); ok {
 			t.Errorf("%s: matched %q", name, got)
 		}
+	}
+}
+
+// A restart is judged on the Portainer agent as well as on KubeSolo. Closing a
+// run whose executor died, KubeSolo checks it too: a healthy KubeSolo whose
+// agent is down is not a restart that succeeded.
+func TestCloseInterruptedRestartWithTheAgentDown(t *testing.T) {
+	st := &State{Current: &Run{ID: "r", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: time.Now().Add(-time.Minute), PID: deadPID(t), HostChanged: true}}
+	problem := "the Portainer agent is not running: the agent's pod is not ready"
+	if !st.CloseInterrupted("v1.2.2", "", problem) {
+		t.Fatal("not closed")
+	}
+	if st.Last.Result != ResultFailed || !strings.HasSuffix(st.Last.Error, "came up healthy, but "+problem) {
+		t.Errorf("result %s, error %q", st.Last.Result, st.Last.Error)
+	}
+
+	back := &State{Current: &Run{ID: "b", Operation: OpRestart, From: "v1.2.2", To: "v1.2.2", Started: time.Now().Add(-time.Minute), PID: deadPID(t), HostChanged: true, Phase: PhaseRollingBack}}
+	if !back.CloseInterrupted("v1.2.2", "", problem) {
+		t.Fatal("not closed")
+	}
+	if back.Last.Result != ResultFailed || !strings.HasSuffix(back.Last.Error, "came up healthy on it, but "+problem) {
+		t.Errorf("reverting: result %s, error %q", back.Last.Result, back.Last.Error)
+	}
+
+	// Other runs are judged as before.
+	up := &State{Current: &Run{ID: "u", Operation: OpUpgrade, From: "v1.2.1", To: "v1.2.2", Started: time.Now().Add(-time.Minute), PID: deadPID(t), HostChanged: true}}
+	if !up.CloseInterrupted("v1.2.2", "", problem) || up.Last.Result != ResultSucceeded {
+		t.Errorf("upgrade: %+v", up.Last)
 	}
 }

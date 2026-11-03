@@ -107,7 +107,7 @@ func (c *Client) Upgrade(req upgrade.Request) (*upgrade.Accepted, error) {
 
 // Rollback asks KubeSolo to restore the version before the last upgrade.
 func (c *Client) Rollback(healthTimeoutSeconds int) (*upgrade.Accepted, error) {
-	body, err := json.Marshal(rollbackRequest{HealthTimeoutSeconds: healthTimeoutSeconds})
+	body, err := json.Marshal(timeoutRequest{HealthTimeoutSeconds: healthTimeoutSeconds})
 	if err != nil {
 		return nil, err
 	}

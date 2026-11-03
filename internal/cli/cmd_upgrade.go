@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/distribution/reference"
@@ -38,8 +39,8 @@ When KubeSolo serves its API, the upgrade goes through it, so it cannot collide
 with one Portainer started. Otherwise kubesoloctl runs the same upgrade itself.
 
 Examples:
-  sudo kubesoloctl upgrade --version=v1.2.2
-  sudo kubesoloctl upgrade --version=v1.2.2 --offline-install=/tmp/kubesolo-v1.2.2-linux-amd64.tar.gz`,
+  sudo kubesoloctl upgrade --version=v1.2.3
+  sudo kubesoloctl upgrade --version=v1.2.3 --offline-install=/tmp/kubesolo-v1.2.3-linux-amd64.tar.gz`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUpgrade(cfg, opts)
 		},
@@ -264,6 +265,20 @@ func containerUpgradeArgs(oldArgs []string, cfg *config.Config) (args []string, 
 	return []string{"--config=" + config.ContainerConfigFile}, doc, dropped, nil
 }
 
+// releaseImageVersion returns the version a release image is tagged with, as
+// v1.2.2 in portainer/kubesolo:v1.2.2.
+func releaseImageVersion(image string) (string, bool) {
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil || reference.FamiliarName(named) != config.DefaultContainerImage {
+		return "", false
+	}
+	tagged, ok := named.(reference.Tagged)
+	if !ok || !strings.HasPrefix(tagged.Tag(), "v") {
+		return "", false
+	}
+	return tagged.Tag(), true
+}
+
 // checkContainerVersion refuses a target that is not newer than the running
 // version unless forced, as a host upgrade does.
 func checkContainerVersion(running, target string, force bool) error {
@@ -304,6 +319,13 @@ func runContainerUpgrade(p *ui.Printer, cfg *config.Config, opts upgradeOptions)
 		return p.Fail("image", err)
 	}
 	running, versionErr := service.ContainerVersion(cfg.Name)
+	if versionErr != nil {
+		// v1.2.2 and older move KubeSolo out of the container's cgroup, which
+		// makes docker exec fail. A release image still names its version.
+		if v, ok := releaseImageVersion(current); ok {
+			running, versionErr = v, nil
+		}
+	}
 	// A custom image is not described by --version, so only a release image is
 	// checked against the running version.
 	if cfg.ContainerImage == config.DefaultContainerImage+":"+cfg.Version {

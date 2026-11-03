@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,22 +30,27 @@ func (w *Service) serveMutate(resp http.ResponseWriter, req *http.Request) {
 	// Process resource directly without batching
 	patches, err := w.processResource(admissionReview)
 	if err != nil {
-		log.Error().Str("component", "webhook").
+		event, msg := log.Error(), "failed to process resource"
+		if refusal := (*refusalError)(nil); errors.As(err, &refusal) {
+			event, msg = log.Warn(), "refusing a pod while the node is under pressure"
+		}
+		event.Str("component", "webhook").
 			Str("resourceKind", admissionReview.Request.Kind.Kind).
 			Str("resourceName", admissionReview.Request.Name).
 			Err(err).
-			Msg("failed to process resource")
+			Msg(msg)
 
-		// Send error response
-		admissionResponse := &admissionv1.AdmissionResponse{
+		// Deny the request. It must not go through sendResponse, which would
+		// replace the denial with an allowed response without patches: a pod
+		// would then be created without a node, Pending for good.
+		admissionReview.Response = &admissionv1.AdmissionResponse{
 			UID:     admissionReview.Request.UID,
 			Allowed: false,
 			Result: &metav1.Status{
 				Message: err.Error(),
 			},
 		}
-		admissionReview.Response = admissionResponse
-		w.sendResponse(resp, admissionReview, nil)
+		writeReview(resp, admissionReview)
 		return
 	}
 
@@ -91,7 +97,10 @@ func (w *Service) processResource(admissionReview *admissionv1.AdmissionReview) 
 
 	switch admissionReview.Request.Kind.Kind {
 	case "Pod":
-		patches = w.processPodMutation(admissionReview)
+		var err error
+		if patches, err = w.processPodMutation(admissionReview); err != nil {
+			return nil, err
+		}
 	case "PersistentVolumeClaim":
 		patches = w.processPVCMutation(admissionReview)
 	case "Job":
@@ -113,15 +122,15 @@ func (w *Service) processResource(admissionReview *admissionv1.AdmissionReview) 
 }
 
 // processPodMutation processes the pod mutation
-func (w *Service) processPodMutation(admissionReview *admissionv1.AdmissionReview) []map[string]any {
+func (w *Service) processPodMutation(admissionReview *admissionv1.AdmissionReview) ([]map[string]any, error) {
 	if admissionReview.Request.Kind.Kind != "Pod" {
-		return nil
+		return nil, nil
 	}
 
 	var pod corev1.Pod
 	if err := json.Unmarshal(admissionReview.Request.Object.Raw, &pod); err != nil {
 		log.Error().Str("component", "webhook").Err(err).Msg("failed to unmarshal pod")
-		return nil
+		return nil, nil
 	}
 
 	log.Debug().Str("component", "webhook").
@@ -131,7 +140,14 @@ func (w *Service) processPodMutation(admissionReview *admissionv1.AdmissionRevie
 		Msg("processing pod")
 
 	if pod.Spec.NodeName == "" {
-		return w.createNodeNamePatch(pod)
+		// Binding the pod is the scheduler's job, and so is keeping it off a
+		// node that would refuse it.
+		if node := w.readNode(); node != nil {
+			if reason := refusedUnderPressure(&pod, node); reason != "" {
+				return nil, &refusalError{reason: reason}
+			}
+		}
+		return w.createNodeNamePatch(pod), nil
 	}
 
 	log.Debug().Str("component", "webhook").
@@ -139,7 +155,7 @@ func (w *Service) processPodMutation(admissionReview *admissionv1.AdmissionRevie
 		Str("namespace", pod.Namespace).
 		Str("node", pod.Spec.NodeName).
 		Msg("pod already has node name assigned")
-	return nil
+	return nil, nil
 }
 
 // processPVCMutation processes the PVC mutation
@@ -169,7 +185,18 @@ func (w *Service) processPVCMutation(admissionReview *admissionv1.AdmissionRevie
 		Str("node", w.nodeName).
 		Msg("setting node annotation for PVC")
 
-	return w.pvcAnnotationPatch
+	if pvc.Annotations == nil {
+		return w.pvcAnnotationPatch
+	}
+
+	// Adding the whole map would replace the PVC's existing annotations, so add only the key ("/" escaped as "~1")
+	return []map[string]any{
+		{
+			"op":    "add",
+			"path":  "/metadata/annotations/volume.kubernetes.io~1selected-node",
+			"value": w.nodeName,
+		},
+	}
 }
 
 // processJobMutation processes the job mutation
@@ -184,6 +211,32 @@ func (w *Service) processJobMutation(admissionReview *admissionv1.AdmissionRevie
 		Str("job", job.Name).
 		Str("namespace", job.Namespace).
 		Msg("processing job")
+
+	nodeSelector := job.Spec.Template.Spec.NodeSelector
+	if _, exists := nodeSelector["kubernetes.io/hostname"]; exists {
+		log.Debug().Str("component", "webhook").
+			Str("job", job.Name).
+			Str("namespace", job.Namespace).
+			Msg("job already has hostname node selector")
+		return nil
+	}
+
+	if nodeSelector != nil {
+		log.Info().Str("component", "webhook").
+			Str("job", job.Name).
+			Str("namespace", job.Namespace).
+			Str("node", w.nodeName).
+			Msg("setting node selector for job")
+
+		// Adding the whole map would replace the job's existing node selector, so add only the key ("/" escaped as "~1")
+		return []map[string]any{
+			{
+				"op":    "add",
+				"path":  "/spec/template/spec/nodeSelector/kubernetes.io~1hostname",
+				"value": w.nodeName,
+			},
+		}
+	}
 
 	log.Info().Str("component", "webhook").
 		Str("job", job.Name).
@@ -250,9 +303,12 @@ func (w *Service) processServiceMutation(admissionReview *admissionv1.AdmissionR
 
 // sendResponse sends the response to the admission review
 func (w *Service) sendResponse(resp http.ResponseWriter, admissionReview *admissionv1.AdmissionReview, patches []map[string]any) {
-	admissionResponse := w.createAdmissionResponse(admissionReview, patches)
-	admissionReview.Response = admissionResponse
+	admissionReview.Response = w.createAdmissionResponse(admissionReview, patches)
+	writeReview(resp, admissionReview)
+}
 
+// writeReview writes the admission review with its response.
+func writeReview(resp http.ResponseWriter, admissionReview *admissionv1.AdmissionReview) {
 	resp.Header().Set("Content-Type", "application/json")
 
 	data, err := json.Marshal(admissionReview)

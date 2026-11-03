@@ -107,6 +107,23 @@ func (l Layout) BackupServiceDefinition() string {
 	return filepath.Join(l.BackupDir(), "service-definition")
 }
 
+// KnownGoodConfig is the configuration file as it was when KubeSolo last ran
+// healthy on it. A restart that fails puts it back.
+func (l Layout) KnownGoodConfig() string { return filepath.Join(l.Dir(), "config.good.yaml") }
+
+// FailedConfig is where the last restart that was reverted keeps the
+// configuration file that failed, for whoever looks into it. It is in the data
+// directory, not beside the configuration file, so that it goes with the rest
+// of KubeSolo's state.
+func (l Layout) FailedConfig() string { return filepath.Join(l.Dir(), "config.failed.yaml") }
+
+// StartedFile holds the PID of the KubeSolo that last finished starting.
+func (l Layout) StartedFile() string { return filepath.Join(l.Dir(), "started") }
+
+// StartedConfig is the configuration file that KubeSolo started with, which
+// its Portainer agent was deployed from.
+func (l Layout) StartedConfig() string { return filepath.Join(l.Dir(), "started.yaml") }
+
 // GuardScript is the boot guard every init system runs before KubeSolo.
 func (l Layout) GuardScript() string { return filepath.Join(l.Dir(), "guard.sh") }
 

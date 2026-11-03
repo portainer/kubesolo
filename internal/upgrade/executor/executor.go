@@ -8,6 +8,7 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -72,6 +73,14 @@ type executor struct {
 
 	// from is the version installed when the run began.
 	from string
+
+	// good is the configuration a restart reverts to, nil when it cannot.
+	good []byte
+
+	// awaitStarted has the gate also wait for KubeSolo to finish starting. A
+	// restart keeps the version, so without it the node and pod statuses the
+	// previous process left behind would pass the health checks.
+	awaitStarted bool
 }
 
 func (e *executor) execute() error {
@@ -92,6 +101,8 @@ func (e *executor) execute() error {
 		result, err = e.upgrade()
 	case upgrade.OpRollback:
 		result, err = e.rollback()
+	case upgrade.OpRestart:
+		result, err = e.restart()
 	default:
 		result, err = upgrade.ResultAborted, fmt.Errorf("unknown operation %q", e.job.Operation)
 	}
@@ -533,6 +544,191 @@ func (e *executor) rollback() (upgrade.Result, error) {
 	return upgrade.ResultSucceeded, nil
 }
 
+// ── restart ──────────────────────────────────────────────────────────────────
+
+// restart stops and starts the installed version, so that it reads the
+// configuration file again. If KubeSolo or the Portainer agent does not come
+// back, the configuration KubeSolo last ran healthy on is put back: the agent
+// is the only way to reach most edge devices, and a configuration that loses
+// it cannot be corrected from Portainer.
+func (e *executor) restart() (upgrade.Result, error) {
+	e.phase(upgrade.PhasePreflight)
+	if err := upgrade.ValidateHealthTimeout(e.job.Request.HealthTimeoutSeconds); err != nil {
+		return upgrade.ResultAborted, err
+	}
+	if err := e.detectHost(); err != nil {
+		return upgrade.ResultAborted, err
+	}
+	// A unit that stops with KillMode=control-group takes every container down
+	// with KubeSolo, which a restart must not do.
+	if !e.svc.Daemon && e.svc.Init == detect.InitSystemd {
+		changed, err := upgrade.EnsureProcessKillMode()
+		if err != nil {
+			return upgrade.ResultAborted, fmt.Errorf("make systemd keep the containers running when KubeSolo stops: %w", err)
+		}
+		if changed {
+			e.logf("set KillMode=process on the kubesolo unit, so its containers keep running through the restart")
+		}
+	}
+	installed, err := upgrade.BinaryVersion(e.ctx, e.l.Binary)
+	if err != nil {
+		return upgrade.ResultAborted, fmt.Errorf("read the installed version: %w", err)
+	}
+	e.from = installed
+	e.run.From, e.run.To = installed, installed
+
+	good, err := upgrade.LoadKnownGoodConfig(e.l)
+	if err != nil {
+		return upgrade.ResultAborted, fmt.Errorf("read the known-good configuration: %w", err)
+	}
+	applied, _ := os.ReadFile(e.l.ConfigFile)
+	switch {
+	case good == nil:
+		e.logf("no configuration is known to be good yet, so a restart that fails cannot be reverted. KubeSolo records one once it, and the Portainer agent if there is one, have run healthy on it for a minute; its log says why it has not")
+	case bytes.Equal(good, applied):
+		e.logf("the configuration file is the known-good one, so a restart that fails has nothing to revert to")
+		good = nil
+	}
+	e.good = good
+	e.awaitStarted = true
+
+	return e.cycle(restartHost{
+		stop:  e.svc.Stop,
+		start: e.svc.Start,
+		gate:  e.gate,
+		agent: newClusterAgent(e.l.AdminKubeconfig()),
+	})
+}
+
+// restartHost is what a restart acts on. The service, the health gate and the
+// cluster are fields so that tests can stand in for them.
+type restartHost struct {
+	stop  func(context.Context) error
+	start func() error
+	gate  func(want string, timeout time.Duration, watchGuard bool) gateOutcome
+	agent agentCheck
+}
+
+// errInterrupted ends a check when the executor is signalled.
+var errInterrupted = errors.New("interrupted")
+
+// notStopped is a stop that failed. KubeSolo may still be running on the
+// configuration it had, so there is nothing to revert.
+type notStopped struct{ error }
+
+// cycle is the part of a restart that changes the host: apply the
+// configuration file and verify it, and revert to the known-good one if it
+// fails.
+func (e *executor) cycle(h restartHost) (upgrade.Result, error) {
+	err := e.apply(h, e.job.Request.HealthTimeout())
+	var ns notStopped
+	switch {
+	case err == nil:
+		e.logf("KubeSolo %s restarted and is healthy", e.from)
+		return upgrade.ResultSucceeded, nil
+	case errors.Is(err, errInterrupted):
+		// As for an upgrade: the host shutting down says nothing about the
+		// restart. KubeSolo closes the run once it is back and healthy.
+		e.logf("interrupted while verifying the restart; KubeSolo closes the run once it is healthy")
+		return "", errLeftPending
+	case errors.As(err, &ns) || e.good == nil:
+		return upgrade.ResultFailed, err
+	}
+	return e.revert(h, err)
+}
+
+// apply restarts KubeSolo on the configuration file and waits up to timeout
+// for it, and the Portainer agent, to be running.
+func (e *executor) apply(h restartHost, timeout time.Duration) error {
+	before, err := h.agent.snapshot(e.ctx)
+	if err != nil {
+		e.logf("could not read the Portainer agent before stopping KubeSolo, so only its availability is checked afterwards: %v", err)
+		before = nil
+	}
+
+	// Saved with the step, so that a run whose executor dies from here on is
+	// not taken for one that never stopped KubeSolo.
+	e.run.HostChanged = true
+	e.step(upgrade.PhaseStopping)
+	if err := h.stop(e.ctx); err != nil {
+		return notStopped{fmt.Errorf("stop KubeSolo: %w", err)}
+	}
+	e.step(upgrade.PhaseStarting)
+	if err := h.start(); err != nil {
+		return fmt.Errorf("start KubeSolo %s: %w", e.from, err)
+	}
+	e.step(upgrade.PhaseVerifying)
+	deadline := time.Now().Add(timeout)
+	switch outcome := h.gate(e.from, timeout, false); outcome.kind {
+	case gateHealthy:
+	case gateInterrupted:
+		return errInterrupted
+	default:
+		return fmt.Errorf("KubeSolo %s did not become healthy after the restart: %s", e.from, outcome.reason)
+	}
+	// An agent that was not running could not have been disrupted.
+	switch {
+	case before != nil && before.deployment == nil:
+		return nil
+	case before != nil && !before.steady(time.Now()):
+		e.logf("the Portainer agent was not running steadily before the restart, so it is not checked")
+		return nil
+	}
+	// A new agent image may still be pulling once KubeSolo is healthy.
+	return h.agent.verify(e.ctx, before, later(deadline, time.Now().Add(time.Minute)))
+}
+
+// step moves the run to phase p. While a revert is under way the run stays
+// rolling-back and the step is only logged, so that /api/v1/status, and
+// KubeSolo closing a run whose executor died, can tell a revert apart.
+func (e *executor) step(p upgrade.Phase) {
+	if e.run.Phase == upgrade.PhaseRollingBack {
+		e.logf("%s", p)
+		return
+	}
+	e.phase(p)
+}
+
+// revert puts the known-good configuration back after a restart failed with
+// cause, keeping the one that failed beside it, and restarts KubeSolo on it.
+func (e *executor) revert(h restartHost, cause error) (upgrade.Result, error) {
+	e.logf("reverting to the known-good configuration: %v", cause)
+
+	mode := os.FileMode(0o600)
+	if fi, err := os.Stat(e.l.ConfigFile); err == nil {
+		mode = fi.Mode().Perm()
+	}
+	if failed, err := os.ReadFile(e.l.ConfigFile); err == nil {
+		// Readable by root only, whatever the file's mode: it holds the edge key.
+		if err := upgrade.WriteFileAtomic(e.l.FailedConfig(), failed, 0o600); err == nil {
+			e.logf("the configuration that failed is kept as %s", e.l.FailedConfig())
+		}
+	}
+	if err := upgrade.WriteFileAtomic(e.l.ConfigFile, e.good, mode); err != nil {
+		return upgrade.ResultFailed, fmt.Errorf("%w; and putting back the known-good configuration failed: %v", cause, err)
+	}
+	// From here the configuration file holds the known-good configuration.
+	e.phase(upgrade.PhaseRollingBack)
+
+	err := e.apply(h, e.job.Request.RestoreHealthTimeout())
+	switch {
+	case errors.Is(err, errInterrupted):
+		e.logf("interrupted while verifying the known-good configuration; KubeSolo closes the run once it is healthy")
+		return "", errLeftPending
+	case err != nil:
+		return upgrade.ResultFailed, fmt.Errorf("%w; and KubeSolo did not come back on the known-good configuration either: %v", cause, err)
+	}
+	e.logf("KubeSolo %s is running healthy on the known-good configuration again", e.from)
+	return upgrade.ResultRolledBack, cause
+}
+
+func later(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
 func (e *executor) verifyBackupBinary(m *upgrade.Manifest) error {
 	sum, err := sha256File(e.l.BackupBinary())
 	if err != nil {
@@ -705,10 +901,12 @@ func (e *executor) gate(want string, timeout time.Duration, watchGuard bool) gat
 			case !h.Healthy:
 				since = time.Now()
 				reason = Summary(h)
-			case time.Since(since) >= gateStable:
-				return gateOutcome{gateHealthy, "healthy"}
-			default:
+			case time.Since(since) < gateStable:
 				reason = "healthy, confirming it stays up"
+			case e.awaitStarted && upgrade.StartedPID(e.l) != pid:
+				reason = "KubeSolo is still starting"
+			default:
+				return gateOutcome{gateHealthy, "healthy"}
 			}
 		}
 

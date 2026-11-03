@@ -64,6 +64,15 @@ type kubesolo struct {
 	// containerd, whose socket lives under cfg.Path.
 	runtimeEndpoint cri.Endpoint
 
+	// startupConfig is the configuration file as this process read it, nil
+	// when there was none. Once KubeSolo has run healthy on it, it is the
+	// configuration a failed restart goes back to.
+	startupConfig []byte
+
+	// startupFile is the configuration file as this process read it, without
+	// the flags and environment variables cfg also applies.
+	startupFile *types.Config
+
 	embedded types.Embedded
 }
 
@@ -85,11 +94,16 @@ var (
 // errors instead of exiting so that the config API can reject a bad payload
 // without taking the cluster down.
 func service() (*kubesolo, error) {
+	startupConfig, _ := os.ReadFile(*flags.Config)
 	cfg, warnings, err := config.Load(*flags.Config, config.FlagValues{
 		Values:    flags.Values(),
 		SetByUser: flags.SetByUser(),
 	})
 	if err != nil {
+		return nil, err
+	}
+	startupFile := config.Defaults()
+	if _, _, err := config.Read(*flags.Config, startupFile); err != nil {
 		return nil, err
 	}
 
@@ -115,6 +129,8 @@ func service() (*kubesolo, error) {
 		hostName:        system.GetHostname(),
 		cfg:             cfg,
 		runtimeEndpoint: runtimeEndpoint,
+		startupConfig:   startupConfig,
+		startupFile:     startupFile,
 	}, nil
 }
 
@@ -423,7 +439,7 @@ func (s *kubesolo) run() {
 		}
 	}
 
-	if s.cfg.Portainer.EdgeID != "" && s.cfg.Portainer.EdgeKey != "" {
+	if s.agentConfigured() {
 		log.Info().Str("component", "kubesolo").Msg("deploying portainer edge agent...")
 		if err := portainer.DeployEdgeAgent(s.embedded.AdminKubeconfigFile, types.EdgeAgentConfig{
 			Image:            s.cfg.Portainer.Image,
@@ -449,7 +465,14 @@ func (s *kubesolo) run() {
 
 	}
 
+	// A restart is judged from here: before it, the node and pod statuses are
+	// the previous process's.
+	if err := upgrade.RecordStarted(upgrade.NewLayout(s.cfg.Path, *flags.Config), s.startupConfig); err != nil {
+		log.Warn().Str("component", "upgrade").Err(err).Msg("could not record that KubeSolo has started")
+	}
+
 	s.wg.Go(func() { s.verifyPendingUpgrade(ctx) })
+	s.wg.Go(func() { s.recordKnownGoodConfig(ctx) })
 
 	<-ctx.Done()
 	log.Info().Str("component", "kubesolo").Msg("shutting down...")
@@ -614,9 +637,11 @@ func (s *kubesolo) verifyPendingUpgrade(ctx context.Context) {
 
 	raw, _ := os.ReadFile(l.PendingFile())
 	pendingHere := strings.TrimSpace(string(raw)) == Version
+	// A run's executor may still be alive, as it is through a restart, which
+	// starts this KubeSolo before it finishes. Its run is watched until the
+	// executor ends it or dies, when it is closed here.
 	st, _ := upgrade.LoadState(l)
-	interrupted := st != nil && st.Current != nil && !st.InFlight()
-	if !pendingHere && !interrupted {
+	if !pendingHere && (st == nil || st.Current == nil) {
 		return
 	}
 	if pendingHere {
@@ -646,9 +671,14 @@ func (s *kubesolo) verifyPendingUpgrade(ctx context.Context) {
 			continue
 		}
 
-		// An executor holding the lock is verifying this version itself.
+		// An executor holding the lock is verifying this version itself, and
+		// one queued is about to take it.
 		lock, err := upgrade.TryLock(l)
 		if err != nil {
+			continue
+		}
+		if st, err := upgrade.LoadState(l); err == nil && st.InFlight() {
+			lock.Unlock()
 			continue
 		}
 		if raw, _ := os.ReadFile(l.PendingFile()); strings.TrimSpace(string(raw)) == Version {
@@ -656,12 +686,81 @@ func (s *kubesolo) verifyPendingUpgrade(ctx context.Context) {
 			_ = os.Remove(l.AttemptsFile())
 			log.Info().Str("component", "upgrade").Str("version", Version).Msg("upgrade verified: KubeSolo is healthy")
 		}
-		if st, err := upgrade.LoadState(l); err == nil && st.CloseInterrupted(Version, lastGuardEvent(l)) {
+		if st, err := upgrade.LoadState(l); err == nil && st.CloseInterrupted(Version, lastGuardEvent(l), executor.AgentProblem(ctx, l.AdminKubeconfig(), s.agentConfigured())) {
 			upgrade.SettleBackups(l, st.Last.Operation, st.Last.Result)
 			_ = upgrade.SaveState(l, st)
 			log.Info().Str("component", "upgrade").Str("result", string(st.Last.Result)).Msg("closed an upgrade run whose executor stopped before it finished")
 		}
 		lock.Unlock()
+		return
+	}
+}
+
+// recordKnownGoodConfig records the configuration file this process started
+// with as known to be good, once KubeSolo, and the Portainer agent that keeps
+// the device reachable, have been healthy on it for a while.
+//
+// It waits while the upgrade lock is held: a restart's executor is still
+// judging this configuration, and recording it first would make a failed one
+// the configuration the executor goes back to.
+func (s *kubesolo) recordKnownGoodConfig(ctx context.Context) {
+	if s.startupConfig == nil {
+		return
+	}
+	l := upgrade.NewLayout(s.cfg.Path, *flags.Config)
+
+	const settle = time.Minute
+	var healthySince time.Time
+	// agentProblem is why the agent is holding recording off, logged when it
+	// changes rather than on every check.
+	var agentProblem string
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		if h := executor.CheckHealth(ctx, l.AdminKubeconfig(), Version); !h.Healthy {
+			healthySince = time.Time{}
+			continue
+		}
+		if p := executor.AgentProblem(ctx, l.AdminKubeconfig(), s.agentConfigured()); p != agentProblem {
+			if p != "" {
+				log.Warn().Str("component", "upgrade").Msgf("not recording this configuration as known-good, so a restart that fails goes back to an older one, or cannot be reverted: %s", p)
+			} else {
+				log.Info().Str("component", "upgrade").Msg("the Portainer agent is running; this configuration can be recorded as known-good")
+			}
+			agentProblem = p
+		}
+		if agentProblem != "" {
+			healthySince = time.Time{}
+			continue
+		}
+		if healthySince.IsZero() {
+			healthySince = time.Now()
+		}
+		if time.Since(healthySince) < settle {
+			continue
+		}
+
+		lock, err := upgrade.TryLock(l)
+		if err != nil {
+			continue
+		}
+		wrote, err := upgrade.SaveKnownGoodConfig(l, s.startupConfig)
+		lock.Unlock()
+		if err != nil {
+			// Retried after another settle, rather than every tick.
+			log.Warn().Str("component", "upgrade").Err(err).Msg("could not record the known-good configuration; trying again")
+			healthySince = time.Time{}
+			continue
+		}
+		if wrote {
+			log.Info().Str("component", "upgrade").Msg("recorded the configuration KubeSolo is running healthy on as known-good")
+		}
 		return
 	}
 }
@@ -767,6 +866,7 @@ func (s *kubesolo) startConfigAPIService(ctx context.Context, cancel context.Can
 			Commit:        Commit,
 			DataDir:       s.cfg.Path,
 			ContainerMode: s.embedded.ContainerMode,
+			StartedWith:   s.startupFile,
 			Spawn:         spawnUpgradeExecutor,
 			Health: func(ctx context.Context) upgrade.Health {
 				return executor.CheckHealth(ctx, kubeconfig, "")
@@ -798,6 +898,12 @@ func (s *kubesolo) agentSocketPath() string {
 		return ""
 	}
 	return filepath.Join(s.cfg.Path, agentSocketDirName, portainer.AgentSocketName)
+}
+
+// agentConfigured reports whether the configuration sets up the Portainer
+// agent, as it is deployed at start.
+func (s *kubesolo) agentConfigured() bool {
+	return s.cfg.Portainer.EdgeID != "" && s.cfg.Portainer.EdgeKey != ""
 }
 
 // agentSocketDir is the directory mounted into the agent's pod, or "".

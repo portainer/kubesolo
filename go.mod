@@ -1,6 +1,6 @@
 module github.com/portainer/kubesolo
 
-go 1.26.5
+go 1.26.10
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
@@ -32,6 +32,7 @@ require (
 	k8s.io/apiserver v0.35.7
 	k8s.io/client-go v0.35.7
 	k8s.io/component-base v0.35.7
+	k8s.io/component-helpers v0.33.6
 	k8s.io/cri-api v0.35.6
 	k8s.io/cri-client v0.33.6
 	k8s.io/klog/v2 v2.130.1
@@ -270,7 +271,6 @@ require (
 	k8s.io/apiextensions-apiserver v0.33.6 // indirect
 	k8s.io/cloud-provider v0.33.6 // indirect
 	k8s.io/cluster-bootstrap v0.0.0 // indirect
-	k8s.io/component-helpers v0.33.6 // indirect
 	k8s.io/controller-manager v0.32.2 // indirect
 	k8s.io/csi-translation-lib v0.0.0 // indirect
 	k8s.io/dynamic-resource-allocation v0.0.0 // indirect

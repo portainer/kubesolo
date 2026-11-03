@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"encoding/json"
+	corev1 "k8s.io/api/core/v1"
 	"net/http"
 	"sync"
 
@@ -35,6 +36,10 @@ type Service struct {
 	adminKubeconfig         string
 	loadBalancer            bool
 	loadBalancerUpdateLocks sync.Map
+
+	// readNode reads this node, to keep pods off it while it is under
+	// pressure; nil when it cannot.
+	readNode func() *corev1.Node
 }
 
 // NewService creates a new webhook server
@@ -83,7 +88,7 @@ func NewService(nodeName, loadBalancerIP, pkiPath, adminKubeconfig string, loadB
 		},
 	})
 
-	return &Service{
+	s := &Service{
 		nodeName:                nodeName,
 		loadBalancerIP:          loadBalancerIP,
 		pkiPath:                 pkiPath,
@@ -97,6 +102,8 @@ func NewService(nodeName, loadBalancerIP, pkiPath, adminKubeconfig string, loadB
 		loadBalancerStatusPatch: loadBalancerStatusPatch,
 		loadBalancer:            loadBalancer,
 	}
+	s.readNode = s.node
+	return s
 }
 
 // getClientset returns the Kubernetes clientset, or nil if RegisterWebhook has not completed.

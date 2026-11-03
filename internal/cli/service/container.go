@@ -51,14 +51,15 @@ func (m *containerManager) nname() string { return networkNameFor(m.name) }
 // CMD rather than a freshly resolved config.
 //
 // When cmdArgs has no --mtu= (the common case: the user didn't override),
-// this is kubesoloctl auto-detecting on the host, so it can safely call the
-// same interface-selection logic the embedded runtime uses rather than
-// falling back to Docker's hardcoded 1500 default. cmdArgs itself is left
-// unchanged — the container's CMD still has no --mtu=, so once it's attached
-// to a network sized to this value, the embedded kubesolo process detects
-// the same MTU from its own veth and still reports it as auto-detected, not
-// pinned.
-func mtuFromCmdArgs(cmdArgs []string) int {
+// this auto-detects on the host kubesoloctl runs on, using the same
+// interface-selection logic the embedded runtime uses rather than Docker's
+// hardcoded 1500 default. The engine may be on another host (DOCKER_HOST)
+// with a smaller link, so the engine's default bridge MTU caps the result.
+// cmdArgs itself is left unchanged — the container's CMD still has no --mtu=,
+// so once it's attached to a network sized to this value, the embedded
+// kubesolo process detects the same MTU from its own veth and still reports
+// it as auto-detected, not pinned.
+func mtuFromCmdArgs(ctx context.Context, cli *client.Client, cmdArgs []string) int {
 	for _, a := range cmdArgs {
 		v, ok := strings.CutPrefix(a, "--mtu=")
 		if !ok {
@@ -68,10 +69,25 @@ func mtuFromCmdArgs(cmdArgs []string) int {
 			return n
 		}
 	}
-	if mtu, err := hostnetwork.GetNodeMTU(); err == nil {
-		return mtu
+	mtu, err := hostnetwork.GetNodeMTU()
+	if err != nil {
+		mtu = defaultDockerBridgeMTU
 	}
-	return defaultDockerBridgeMTU
+	if insp, err := cli.NetworkInspect(ctx, "bridge", network.InspectOptions{}); err == nil {
+		if engine, ok := bridgeMTU(insp.Options); ok {
+			mtu = min(mtu, engine)
+		}
+	}
+	return mtu
+}
+
+// bridgeMTU reads the MTU a bridge network was created with, if it set one.
+func bridgeMTU(options map[string]string) (int, bool) {
+	mtu, err := strconv.Atoi(options[dockerBridgeMTUOption])
+	if err != nil || mtu <= 0 {
+		return 0, false
+	}
+	return mtu, true
 }
 
 // ensureNetwork makes sure a dedicated bridge network named nname exists with
@@ -82,11 +98,9 @@ func ensureNetwork(ctx context.Context, cli *client.Client, nname string, mtu in
 	insp, err := cli.NetworkInspect(ctx, nname, network.InspectOptions{})
 	switch {
 	case err == nil:
-		current := defaultDockerBridgeMTU
-		if v, ok := insp.Options[dockerBridgeMTUOption]; ok {
-			if parsed, perr := strconv.Atoi(v); perr == nil {
-				current = parsed
-			}
+		current, ok := bridgeMTU(insp.Options)
+		if !ok {
+			current = defaultDockerBridgeMTU
 		}
 		if current == mtu {
 			return nil
@@ -209,7 +223,7 @@ func ReplaceContainer(name string, cfg *config.Config, cmdArgs []string, configD
 	_ = cli.ContainerStop(ctx, m.cname(), container.StopOptions{Timeout: &timeout})
 	_ = cli.ContainerRemove(ctx, m.cname(), container.RemoveOptions{Force: true})
 
-	mtu := mtuFromCmdArgs(cmdArgs)
+	mtu := mtuFromCmdArgs(ctx, cli, cmdArgs)
 	if err := ensureNetwork(ctx, cli, m.nname(), mtu); err != nil {
 		return err
 	}
@@ -599,7 +613,7 @@ func ResetContainer(name string) error {
 	_ = cli.ContainerRemove(ctx, cname, container.RemoveOptions{Force: true})
 
 	nname := networkNameFor(name)
-	mtu := mtuFromCmdArgs(cmdArgs)
+	mtu := mtuFromCmdArgs(ctx, cli, cmdArgs)
 	if err := ensureNetwork(ctx, cli, nname, mtu); err != nil {
 		return err
 	}

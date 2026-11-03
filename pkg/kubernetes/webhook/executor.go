@@ -46,6 +46,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	s.startServer()
 	s.handleShutdown(ctx)
+	s.wg.Go(func() { s.bindStrandedPods(ctx) })
 
 	return nil
 }

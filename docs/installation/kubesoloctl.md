@@ -81,7 +81,7 @@ kubesoloctl kubeconfig fetch
 | Command | Purpose |
 |---|---|
 | `install` | Install KubeSolo and configure the service / start the container |
-| `check` | Run pre-flight checks only, without installing |
+| `check` | Run pre-flight checks only, without installing (`--json` runs every check and reports each result) |
 | `upgrade --version=<v>` | Upgrade to a newer version, with a backup and automatic rollback |
 | `rollback` | Restore the version, datastore and configuration from before the last upgrade |
 | `status` | Show the running version, health, and the last upgrade or rollback |
@@ -113,6 +113,7 @@ Common flags:
 | `--node-ip` | `KUBESOLO_NODE_IP` | _(auto-detect)_ | Override the detected node IP |
 | `--mtu` | `KUBESOLO_MTU` | _(auto-detect)_ | Override the detected MTU (ignored in container mode) |
 | `--portainer-edge-image` | `KUBESOLO_PORTAINER_EDGE_IMAGE` | `docker.io/portainer/agent:lts` | Image deployed for the Portainer edge agent |
+| `--api-enabled` | `KUBESOLO_API_ENABLED` | `false` | Enable the [configuration API](../configuration/config-api.md), and mount its socket into the Portainer edge agent when an edge ID and key are set (KubeSolo v1.2.1 or later; ignored in container mode) |
 | `--offline-install` | `KUBESOLO_OFFLINE_INSTALL` | _(none)_ | Install from a local tarball/binary instead of downloading (host mode only) |
 | `--proxy` | `KUBESOLO_PROXY` | _(none)_ | HTTP/HTTPS proxy injected into the service environment, or the container's in container mode (kept across `upgrade` and `reset`) |
 | `--cpu-manager-policy` | `KUBESOLO_CPU_MANAGER_POLICY` | `none` | `static` gives Guaranteed-QoS pods exclusive cores (ignored in container mode) |
@@ -152,8 +153,8 @@ kubesoloctl kubeconfig fetch      # merge it into ~/.kube/config
 ### upgrade / rollback / status
 
 ```bash
-sudo kubesoloctl upgrade --version=v1.2.2      # verified, backed up, rolled back automatically on failure
-sudo kubesoloctl upgrade --version=v1.2.2 --offline-install=/tmp/bundle/kubesolo-v1.2.2-linux-amd64.tar.gz
+sudo kubesoloctl upgrade --version=v1.2.3      # verified, backed up, rolled back automatically on failure
+sudo kubesoloctl upgrade --version=v1.2.3 --offline-install=/tmp/bundle/kubesolo-v1.2.3-linux-amd64.tar.gz
 sudo kubesoloctl rollback                      # undo the last upgrade (loses cluster changes made since)
 sudo kubesoloctl status                        # version, health, last run, rollback target
 ```
@@ -291,8 +292,8 @@ KubeSolo's admin users are scoped the same way (`kubernetes-admin@<cluster>`), s
 
 ```bash
 # On a connected machine (specify --arch when the target differs):
-kubesoloctl download --version=v1.2.2 --path=./bundle --arch=arm64
+kubesoloctl download --version=v1.2.3 --path=./bundle --arch=arm64
 
 # On the target machine:
-sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.2.2-linux-arm64.tar.gz
+sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.2.3-linux-arm64.tar.gz
 ```

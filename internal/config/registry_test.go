@@ -1,10 +1,12 @@
 package config
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/portainer/kubesolo/internal/config/flags"
+	"github.com/portainer/kubesolo/types"
 )
 
 // flagsNotInRegistry are KubeSolo flags that deliberately have no config
@@ -110,6 +112,53 @@ func TestSecretsAreMarked(t *testing.T) {
 	for _, f := range Registry() {
 		if f.Secret != want[f.ConfigPath] {
 			t.Errorf("%s: Secret = %v, want %v", f.ConfigPath, f.Secret, want[f.ConfigPath])
+		}
+	}
+}
+
+func TestCheckSetOnce(t *testing.T) {
+	agent := Defaults()
+	agent.Portainer.EdgeID, agent.Portainer.EdgeKey = "edge-id", "edge-key"
+
+	change := func(edit func(*types.Config)) *types.Config {
+		next := *agent
+		edit(&next)
+		return &next
+	}
+	cases := []struct {
+		name    string
+		current *types.Config
+		next    *types.Config
+		field   string
+	}{
+		{"no agent yet: the agent can be configured", Defaults(), agent, ""},
+		{"edge ID changed", agent, change(func(c *types.Config) { c.Portainer.EdgeID = "other" }), "portainer.edgeID"},
+		{"edge key changed", agent, change(func(c *types.Config) { c.Portainer.EdgeKey = "other" }), "portainer.edgeKey"},
+		{"async changed", agent, change(func(c *types.Config) { c.Portainer.Async = true }), "portainer.async"},
+		{"agent removed", agent, Defaults(), "portainer.edgeID"},
+		{"other settings", agent, change(func(c *types.Config) { c.Portainer.Image = "portainer/agent:2.31.0"; c.Network.MTU = 1400 }), ""},
+	}
+	for _, c := range cases {
+		err := CheckSetOnce(c.current, c.next)
+		var setOnce *SetOnceError
+		switch {
+		case c.field == "" && err != nil:
+			t.Errorf("%s: %v", c.name, err)
+		case c.field != "" && (!errors.As(err, &setOnce) || setOnce.Field != c.field):
+			t.Errorf("%s: err = %v, want %s", c.name, err, c.field)
+		}
+	}
+
+	for _, d := range Describe() {
+		want := "restart"
+		switch d.Path {
+		case "path":
+			want = "immutable"
+		case "portainer.edgeID", "portainer.edgeKey", "portainer.async":
+			want = "set-once"
+		}
+		if d.Mutability != want {
+			t.Errorf("%s: mutability %q, want %q", d.Path, d.Mutability, want)
 		}
 	}
 }
