@@ -19,8 +19,10 @@ POD_CIDR=10.42.0.0/16
 case "$scenario" in
   rocky-iptables)
     image=rockylinux/rockylinux:10
-    # The rules iptables-services installs and loads at boot.
-    setup='dnf install -y -q iptables-services && iptables-restore /etc/sysconfig/iptables'
+    # The rules iptables-services installs and loads at boot. nftables as well:
+    # where the kernel cannot load ip_tables (as on the ubuntu-26.04 runners),
+    # kubesoloctl check stops at the netfilter tools check without nft.
+    setup='dnf install -y -q iptables-services nftables && iptables-restore /etc/sysconfig/iptables'
     fix="iptables -I INPUT -s $POD_CIDR -j ACCEPT && iptables -I FORWARD -s $POD_CIDR -j ACCEPT && iptables -I FORWARD -d $POD_CIDR -j ACCEPT"
     ;;
   rocky-firewalld)
