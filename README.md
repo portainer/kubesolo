@@ -245,6 +245,7 @@ Full documentation is at [kubesolo.io](https://kubesolo.io/documentation). The g
 - [d2k](docs/configuration/d2k.md): a Docker-compatible API endpoint on the node
 - [Registry configuration](docs/configuration/registry.md): mirrors, private registries and custom TLS
 - [containerd drop-ins and NVIDIA GPUs](docs/configuration/containerd-drop-ins.md): extra runtimes, GPU workloads
+- [Kubelet drop-ins](docs/configuration/kubelet-drop-ins.md): eviction thresholds, image garbage collection and other kubelet settings
 - [Installing a CNI (Cilium)](docs/configuration/cni.md): running an external CNI on a single KubeSolo node
 
 **Monitoring**

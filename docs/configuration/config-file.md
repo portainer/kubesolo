@@ -210,6 +210,9 @@ controller-manager, kube-proxy, CoreDNS and the pod and service CIDRs are the
 likeliest settings to become configurable next. Everything else is single-purpose
 and stays at the top level.
 
+Kubelet settings this file doesn't cover, such as eviction thresholds and image
+garbage collection, are set with [kubelet drop-ins](kubelet-drop-ins.md).
+
 ---
 
 ## Every setting
@@ -311,5 +314,6 @@ Four flags have no setting, because they configure nothing:
 ## See also
 
 - [Configuration API](config-api.md) — managing this file over a socket
+- [Kubelet drop-ins](kubelet-drop-ins.md) — kubelet settings this file doesn't cover
 - [Install script flags](../installation/flags.md)
 - [kubesoloctl](../installation/kubesoloctl.md)
