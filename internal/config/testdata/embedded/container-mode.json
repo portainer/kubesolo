@@ -74,6 +74,7 @@
   "APIServerDir": "/var/lib/kubesolo/apiserver",
   "ServiceAccountKeyFile": "/var/lib/kubesolo/pki/apiserver/service-account.key",
   "APIServerExtraSANs": null,
+  "APIServerAuthenticationConfigFile": "",
   "KineDir": "/var/lib/kubesolo/kine/db",
   "KineSocketFile": "/var/lib/kubesolo/kine/db/socket",
   "ControllerDir": "/var/lib/kubesolo/controller-manager/config",

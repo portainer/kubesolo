@@ -21,6 +21,9 @@ starts.
 sudo systemctl restart kubesolo
 ```
 
+JWT settings in the separate [authentication file](#jwt-authentication) are
+reloaded by kube-apiserver. Changing its path here still requires a restart.
+
 The one setting that cannot be changed at all is `path`. Every certificate, the
 cluster database and all container state live below it, and nothing moves them.
 
@@ -183,6 +186,7 @@ kubernetes:
   nodeName: ""            # empty = the hostname
   apiServer:
     extraSANs: []
+    authenticationConfigFile: ""
     startupTimeoutSeconds: 600
   kubelet:
     cpuManager:
@@ -247,6 +251,7 @@ and stays at the top level.
 | `api.socketPath` | `string` | `""` |
 | `d2k.enabled` | `boolean` | `false` |
 | `d2k.namespace` | `string` | `d2k` |
+| `kubernetes.apiServer.authenticationConfigFile` | `string` | `""` |
 | `kubernetes.apiServer.extraSANs` | `array` | `[]` |
 | `kubernetes.apiServer.startupTimeoutSeconds` | `integer` | `600` |
 | `kubernetes.kubelet.cpuManager.policy` | `string` | `none` |
@@ -319,10 +324,11 @@ file.
 | `--local-storage` | `KUBESOLO_LOCAL_STORAGE` | `storage.localPath.enabled` |
 | `--local-storage-shared-path` | `KUBESOLO_LOCAL_STORAGE_SHARED_PATH` | `storage.localPath.sharedPath` |
 
-Three settings have an environment variable but never had a flag:
+These settings have an environment variable but never had a flag:
 
 | Environment variable | Setting |
 |---|---|
+| `KUBESOLO_APISERVER_AUTHENTICATION_CONFIG_FILE` | `kubernetes.apiServer.authenticationConfigFile` |
 | `KUBESOLO_NODE_NAME` | `kubernetes.nodeName` |
 | `KUBESOLO_API_ENABLED` | `api.enabled` |
 | `KUBESOLO_API_SOCKET_PATH` | `api.socketPath` |
@@ -335,6 +341,68 @@ Four flags have no setting, because they configure nothing:
 | `--print-config` | Prints the resolved document and exits |
 | `--version` | Prints the version and exits |
 | `--full` | Has had no effect for several releases; retained for compatibility |
+
+## JWT authentication
+
+To use an OIDC provider, set `kubernetes.apiServer.authenticationConfigFile` to
+an authentication file. Use an absolute path that KubeSolo can read:
+
+```yaml
+kubernetes:
+  apiServer:
+    authenticationConfigFile: /etc/kubesolo/authentication/config.yaml
+```
+
+Write the authentication file in Kubernetes'
+[`AuthenticationConfiguration` v1 format](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#authentication-configuration-from-a-file):
+
+```yaml
+apiVersion: apiserver.config.k8s.io/v1
+kind: AuthenticationConfiguration
+jwt:
+  - issuer:
+      url: https://issuer.example.com
+      audiences:
+        - kubesolo
+    claimMappings:
+      username:
+        claim: sub
+        prefix: "oidc:"
+      groups:
+        claim: groups
+        prefix: "oidc:"
+```
+
+Replace the issuer URL and audience with your provider's values. The issuer
+must serve OIDC discovery and signing keys over HTTPS. If it uses a private CA,
+put the CA's PEM certificate in `issuer.certificateAuthority`. The same format
+supports multiple issuers and CEL rules; see the Kubernetes reference above.
+
+**Restart once to enable it.** Changing the path, or clearing it to disable JWT
+authentication, also needs a restart. An empty path leaves authentication
+unchanged. Client certificates and service-account tokens still work with JWT
+authentication enabled. Grant mapped users or groups permissions through RBAC
+separately.
+
+**Edit the authentication file to change JWT settings.** KubeSolo passes its
+path to kube-apiserver's `--authentication-config`; kube-apiserver handles
+reloads. Replace the file atomically in the same directory. A bad update is
+logged and leaves the last valid configuration in use. Correct the file to
+recover.
+
+An invalid or unreadable file at startup prevents the API server from starting.
+Changes to anonymous authentication need a restart, not a file reload.
+
+**In a container, mount the directory, not the file.** Use a path visible inside
+the container. A single-file bind mount can keep pointing at the old file after
+atomic replacement, so updates would not reach kube-apiserver.
+
+The configuration API and `kubesoloctl` manage the path only. They reject a
+relative path, but do not read, validate or write the authentication file.
+
+Kubernetes rejects `--authentication-config` combined with `--oidc-*` flags.
+It also rejects an `anonymous` section combined with `--anonymous-auth`.
+KubeSolo does not set either of those conflicting flags.
 
 ---
 

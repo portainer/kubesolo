@@ -150,6 +150,8 @@ type Embedded struct {
 	ServiceAccountKeyFile string
 	// API Server extra SANs
 	APIServerExtraSANs []string
+	// API Server structured authentication configuration file
+	APIServerAuthenticationConfigFile string
 
 	// Kine directories and files
 	KineDir        string

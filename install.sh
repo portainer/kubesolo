@@ -1614,7 +1614,7 @@ fi
 # Whether this run was given any settings, as opposed to only a version or a
 # source. On an existing install they are not applied, and the user is told.
 SETTINGS_GIVEN=false
-if env | grep -qE '^KUBESOLO_(PATH|APISERVER_EXTRA_SANS|PORTAINER_[A-Z_]+|LOAD_BALANCER(_IP)?|LOCAL_STORAGE[A-Z_]*|DB_WAL_REPAIR|DISABLE_IPV6|CPU_MANAGER_[A-Z_]+|RESERVED_CPUS|SYSTEM_RESERVED|STARTUP_TIMEOUT|D2K[A-Z_]*|DEBUG|PPROF_SERVER|RUN_MODE|PROXY)=.'; then
+if env | grep -qE '^KUBESOLO_(PATH|APISERVER_EXTRA_SANS|APISERVER_AUTHENTICATION_CONFIG_FILE|PORTAINER_[A-Z_]+|LOAD_BALANCER(_IP)?|LOCAL_STORAGE[A-Z_]*|DB_WAL_REPAIR|DISABLE_IPV6|CPU_MANAGER_[A-Z_]+|RESERVED_CPUS|SYSTEM_RESERVED|STARTUP_TIMEOUT|D2K[A-Z_]*|DEBUG|PPROF_SERVER|RUN_MODE|PROXY)=.'; then
     SETTINGS_GIVEN=true
 fi
 
@@ -2114,15 +2114,16 @@ if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foregro
         echo "🔍 Detected sudo usage - using real user: $REAL_USER (home: $REAL_HOME)"
     fi
 
-    # Wait for kubesolo to generate the kubeconfig
+    # Wait for kubesolo to generate the kubeconfig. A first boot on a small device
+    # can take well over 30s, so wait as long as kubesoloctl does (120s).
     echo "⏳ Waiting for kubesolo to generate kubeconfig..."
-    i=1
-    while [ $i -le 30 ]; do
+    i=0
+    while [ $i -le 120 ]; do
         if [ -f "$CONFIG_PATH/pki/admin/admin.kubeconfig" ]; then
             break
         fi
-        if [ $i -eq 30 ]; then
-            echo "⚠️  Kubeconfig not found in $CONFIG_PATH/pki/admin/admin.kubeconfig after waiting"
+        if [ $i -eq 120 ]; then
+            echo "⚠️  Kubeconfig not found in $CONFIG_PATH/pki/admin/admin.kubeconfig after 120s, the cluster may still be starting"
             exit 0
         fi
         sleep 1

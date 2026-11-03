@@ -69,6 +69,9 @@ func goldenCases() []goldenCase {
 		{name: "extra-sans-empty", cfg: cfgWith(at(base), sans())},
 		{name: "extra-sans-single", cfg: cfgWith(at(base), sans("kubesolo.local"))},
 		{name: "extra-sans-multiple", cfg: cfgWith(at(base), sans("10.0.0.4", "kubesolo.local"))},
+		{name: "authentication-config-file", cfg: cfgWith(at(base), func(c *types.Config) {
+			c.Kubernetes.APIServer.AuthenticationConfigFile = "/etc/kubesolo/authentication/config.yaml"
+		})},
 		{name: "load-balancer-off", cfg: cfgWith(at(base), func(c *types.Config) {
 			c.Network.LoadBalancer.Enabled = false
 		})},

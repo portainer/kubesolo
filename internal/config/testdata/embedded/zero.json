@@ -74,6 +74,7 @@
   "APIServerDir": "apiserver",
   "ServiceAccountKeyFile": "pki/apiserver/service-account.key",
   "APIServerExtraSANs": null,
+  "APIServerAuthenticationConfigFile": "",
   "KineDir": "kine/db",
   "KineSocketFile": "kine/db/socket",
   "ControllerDir": "controller-manager/config",
