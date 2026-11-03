@@ -2114,15 +2114,16 @@ if [ -n "$KUBECTL_PATH" ] && [ -x "$KUBECTL_PATH" ] && [ "$RUN_MODE" != "foregro
         echo "🔍 Detected sudo usage - using real user: $REAL_USER (home: $REAL_HOME)"
     fi
 
-    # Wait for kubesolo to generate the kubeconfig
+    # Wait for kubesolo to generate the kubeconfig. A first boot on a small device
+    # can take well over 30s, so wait as long as kubesoloctl does (120s).
     echo "⏳ Waiting for kubesolo to generate kubeconfig..."
-    i=1
-    while [ $i -le 30 ]; do
+    i=0
+    while [ $i -le 120 ]; do
         if [ -f "$CONFIG_PATH/pki/admin/admin.kubeconfig" ]; then
             break
         fi
-        if [ $i -eq 30 ]; then
-            echo "⚠️  Kubeconfig not found in $CONFIG_PATH/pki/admin/admin.kubeconfig after waiting"
+        if [ $i -eq 120 ]; then
+            echo "⚠️  Kubeconfig not found in $CONFIG_PATH/pki/admin/admin.kubeconfig after 120s, the cluster may still be starting"
             exit 0
         fi
         sleep 1
