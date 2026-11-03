@@ -140,6 +140,14 @@ docker restart kubesolo
 
 In container mode KubeSolo sets its own `evictionHard` thresholds, with the disk thresholds at `0%`, and sets `imageGCHighThresholdPercent` to `100`. A drop-in that sets these fields overrides KubeSolo's values, key by key.
 
+The kubelet port isn't published from the container, so check the running configuration through the API server instead:
+
+```bash
+NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
+kubectl get --raw "/api/v1/nodes/$NODE/proxy/configz" \
+  | jq '.kubeletconfig | {evictionHard, imageGCHighThresholdPercent}'
+```
+
 ---
 
 ## Troubleshooting
