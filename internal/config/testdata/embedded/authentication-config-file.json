@@ -69,6 +69,7 @@
   "KubeletDir": "/var/lib/kubesolo/kubelet",
   "KubeletConfigDir": "/var/lib/kubesolo/kubelet/config",
   "KubeletConfigFile": "/var/lib/kubesolo/kubelet/config/config.yaml",
+  "KubeletDropInDir": "/var/lib/kubesolo/kubelet/config.d",
   "KubeletKubeConfigFile": "/var/lib/kubesolo/pki/kubelet/kubelet.kubeconfig",
   "KubeletPluginsDir": "/var/lib/kubesolo/kubelet/volumeplugins",
   "APIServerDir": "/var/lib/kubesolo/apiserver",
