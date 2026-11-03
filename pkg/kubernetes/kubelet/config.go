@@ -150,7 +150,9 @@ func (s *service) generateKubeletConfig() map[string]any {
 		// Disable QoS cgroups and node-allocatable enforcement; containerd/runc
 		// still manage per-container cgroups normally.
 		config["cgroupsPerQOS"] = false
-		config["enforceNodeAllocatable"] = []string{}
+		// "none" rather than an empty list: --config-dir makes the kubelet re-apply
+		// defaults, which turn an empty list back into "pods".
+		config["enforceNodeAllocatable"] = []string{"none"}
 		config["imageGCHighThresholdPercent"] = 100
 		config["evictionHard"] = map[string]string{
 			"memory.available":  "50Mi",
