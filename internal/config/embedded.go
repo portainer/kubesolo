@@ -164,7 +164,8 @@ func BuildEmbedded(cfg *types.Config, probe Probe) types.Embedded {
 		APIServerDir:          filepath.Join(cfg.Path, types.DefaultAPIServerDir),
 		ServiceAccountKeyFile: filepath.Join(cfg.Path, types.DefaultPKIDir, "apiserver", "service-account.key"),
 		// API Server extra SANs
-		APIServerExtraSANs: cfg.Kubernetes.APIServer.ExtraSANs,
+		APIServerExtraSANs:                cfg.Kubernetes.APIServer.ExtraSANs,
+		APIServerAuthenticationConfigFile: cfg.Kubernetes.APIServer.AuthenticationConfigFile,
 
 		// Kine paths
 		KineDir:        filepath.Join(cfg.Path, types.KubesoloKineDir),
