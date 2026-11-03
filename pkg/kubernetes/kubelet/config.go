@@ -58,6 +58,13 @@ func (s *service) writeKubeletConfigFile() error {
 	if err := filesystem.EnsureDirectoryExists(s.kubeletDropInDir); err != nil {
 		return fmt.Errorf("failed to create kubelet drop-in directory: %v", err)
 	}
+	// A file at that path is left alone above, and the kubelet would load nothing
+	// from it without saying so.
+	if info, err := os.Stat(s.kubeletDropInDir); err != nil {
+		return fmt.Errorf("failed to check kubelet drop-in directory: %v", err)
+	} else if !info.IsDir() {
+		return fmt.Errorf("kubelet drop-in directory %s is not a directory; move it and put drop-ins in a directory at that path", s.kubeletDropInDir)
+	}
 
 	yamlConfig, err := yaml.Marshal(s.generateKubeletConfig())
 	if err != nil {

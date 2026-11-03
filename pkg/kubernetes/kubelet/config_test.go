@@ -269,6 +269,22 @@ func TestWriteKubeletConfigFile_CreatesDropInDir(t *testing.T) {
 	assert.True(t, info.IsDir())
 }
 
+func TestWriteKubeletConfigFile_RefusesFileAtDropInDir(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.d"), []byte("evictionHard: {}\n"), 0o644))
+
+	s := &service{
+		kubeletDir:        dir,
+		kubeletConfigDir:  filepath.Join(dir, "config"),
+		kubeletConfigFile: filepath.Join(dir, "config", "config.yaml"),
+		kubeletDropInDir:  filepath.Join(dir, "config.d"),
+		containerMode:     true, // avoids reading the host /etc/resolv.conf
+	}
+	err := s.writeKubeletConfigFile()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a directory")
+}
+
 // TestGenerateKubeletConfig_SurvivesDropInMerge guards against settings the kubelet
 // loses because of --config-dir. With that flag the kubelet round-trips its config
 // through versioned JSON and applies defaults again, even when the directory is
