@@ -110,6 +110,9 @@ func TestPrecedence(t *testing.T) {
 				if tc.flag && f.Flag == "" {
 					continue // setting has no flag; the case does not apply
 				}
+				if tc.env && f.Envar == "" {
+					continue // setting has no environment variable; the case does not apply
+				}
 				t.Run(tc.name, func(t *testing.T) {
 					clearEnv(t)
 

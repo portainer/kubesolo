@@ -135,7 +135,7 @@ curl -s -X DELETE --unix-socket /var/lib/kubesolo/config.sock \
   http://localhost/api/v1/config
 ```
 
-`path` is immutable and is carried over.
+The immutable settings, `path` and the cluster networks, are carried over.
 
 ---
 
@@ -163,7 +163,7 @@ Failures return:
 |---|---|
 | `200` | Applied, or validated |
 | `400` | Malformed body, or a secret sent back as `***` |
-| `409` | An immutable setting would change — only `path` |
+| `409` | An immutable setting would change: `path`, `kubernetes.podCIDR`, `kubernetes.serviceCIDR` or `kubernetes.clusterDNS` |
 | `412` | `If-Match` did not match; the configuration changed since you read it |
 | `415` | Wrong `Content-Type` on a patch |
 | `422` | Valid JSON, invalid configuration |
@@ -314,7 +314,7 @@ value. Changing them on an existing agent is not supported.
 |---|---|
 | `202` | Accepted. Follow it with `GET /api/v1/status`. |
 | `400` | Malformed body, unknown field, or a `healthTimeoutSeconds` out of range. |
-| `409` | An upgrade, rollback or restart is already in progress, from the API or from `kubesoloctl`. Or the file was edited by hand to change `path`, which cannot change on an existing installation, or one of the Portainer agent's set-once settings; see below. `field` names the setting. |
+| `409` | An upgrade, rollback or restart is already in progress, from the API or from `kubesoloctl`. Or the file was edited by hand to change `path` or a cluster network, which cannot change on an existing installation, or one of the Portainer agent's set-once settings; see below. `field` names the setting. |
 | `422` | KubeSolo would refuse to start with the stored configuration, for example after a hand edit. Nothing was stopped. |
 | `501` | KubeSolo runs in a container, which cannot restart itself. Restart the container from the host. |
 

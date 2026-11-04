@@ -80,10 +80,10 @@ func TestHostPortFor(t *testing.T) {
 }
 
 func TestProxyEnv(t *testing.T) {
-	if env := proxyEnv("", []string{"172.20.0.0/16"}); env != nil {
+	if env := proxyEnv("", []string{"172.20.0.0/16"}, clusterNetworks(nil)); env != nil {
 		t.Errorf("no proxy: %v", env)
 	}
-	env := proxyEnv("http://proxy:3128", []string{"172.20.0.0/16"})
+	env := proxyEnv("http://proxy:3128", []string{"172.20.0.0/16"}, clusterNetworks(nil))
 	want := []string{
 		"HTTP_PROXY=http://proxy:3128",
 		"HTTPS_PROXY=http://proxy:3128",
@@ -91,6 +91,19 @@ func TestProxyEnv(t *testing.T) {
 	}
 	if strings.Join(env, " ") != strings.Join(want, " ") {
 		t.Errorf("env = %v\nwant  %v", env, want)
+	}
+}
+
+// The cluster networks excluded from the proxy are the container's own, as its
+// configuration sets them.
+func TestProxyEnvConfiguredNetworks(t *testing.T) {
+	doc := []byte("apiVersion: kubesolo.io/v1alpha1\nkind: Config\nkubernetes:\n  podCIDR: 10.50.0.0/16\n  serviceCIDR: 10.51.0.0/16\n")
+	env := proxyEnv("http://proxy:3128", nil, clusterNetworks(doc))
+	if want := "NO_PROXY=localhost,127.0.0.1,10.50.0.0/16,10.51.0.0/16,.svc,.cluster.local"; env[2] != want {
+		t.Errorf("NO_PROXY = %s\nwant       %s", env[2], want)
+	}
+	if got := strings.Join(clusterNetworks([]byte("not: [yaml")), ","); got != "10.42.0.0/16,10.43.0.0/16" {
+		t.Errorf("an unreadable document: %s, want the defaults", got)
 	}
 }
 

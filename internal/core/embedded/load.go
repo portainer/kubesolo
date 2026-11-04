@@ -71,7 +71,7 @@ func loadCNIPlugins(containerdCNIDir, containerdCNIPluginsDir string) error {
 
 // loadCNIConfig creates the necessary directories, generates the default CNI configuration file and symlinks it
 // to the standard CNI config directory
-func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string, mtu int) error {
+func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string, mtu int, podCIDR string) error {
 	dirs := []string{
 		types.DefaultStandardCNIConfDir,
 		containerdCNIConfigDir,
@@ -83,7 +83,7 @@ func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string, mtu i
 		}
 	}
 
-	if err := writeCNIConfigFile(containerdCNIConfigFile, mtu); err != nil {
+	if err := writeCNIConfigFile(containerdCNIConfigFile, mtu, podCIDR); err != nil {
 		return err
 	}
 
@@ -96,9 +96,9 @@ func loadCNIConfig(containerdCNIConfigDir, containerdCNIConfigFile string, mtu i
 
 // writeCNIConfigFile generates the default CNI configuration and writes it to path.
 // Shared by the embedded containerd path and the host-managed runtime path, so that
-// both produce byte-identical configuration from the same MTU.
-func writeCNIConfigFile(path string, mtu int) error {
-	cniConfig, err := json.Marshal(generateCNIConfigFile(mtu))
+// both produce byte-identical configuration from the same MTU and pod CIDR.
+func writeCNIConfigFile(path string, mtu int, podCIDR string) error {
+	cniConfig, err := json.Marshal(generateCNIConfigFile(mtu, podCIDR))
 	if err != nil {
 		log.Error().Str("component", "embedded").Msgf("failed to marshal cni config: %v", err)
 		return err

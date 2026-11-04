@@ -21,12 +21,14 @@ import (
 // matches the configuration. If it does not, it removes the leaf certificates so
 // that GenerateAllCertificates will re-sign fresh ones on the next call.
 //
-// Two things can make it stale. The advertised node IP may have moved, which
+// Three things can make it stale. The advertised node IP may have moved, which
 // handles DHCP address changes between restarts: the old certs embed the
 // previous IP in their SANs, causing TLS failures until the PKI is regenerated.
 // The configured extra SANs may also have changed — adding one to the
 // configuration has no other trigger to re-sign, so without this the new name is
 // silently rejected by TLS until the certificate expires or the node IP moves.
+// And the kubernetes Service IP moves with kubernetes.serviceCIDR, which can
+// still change after a first start that failed before the cluster was created.
 //
 // The CA is deliberately preserved (see removeLeafCerts): regenerating it on
 // every IP change would rotate the cluster's trust anchor and force every
@@ -76,6 +78,15 @@ func InvalidateIfStale(embedded types.Embedded) error {
 			Str("missing_ip", nodeIP.String()).
 			Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
 			Msg("node IP not found in existing certificate SANs — regenerating leaf certificates")
+		return removeLeafCerts(embedded.PKIDir)
+	}
+
+	if serviceIP := net.ParseIP(embedded.KubernetesServiceIP); serviceIP != nil && !containsIP(cert.IPAddresses, serviceIP) {
+		log.Warn().
+			Str("component", "pki").
+			Str("missing_ip", serviceIP.String()).
+			Strs("cert_ips", ipsToStrings(cert.IPAddresses)).
+			Msg("kubernetes Service IP not found in existing certificate SANs — regenerating leaf certificates")
 		return removeLeafCerts(embedded.PKIDir)
 	}
 
