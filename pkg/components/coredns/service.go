@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/portainer/kubesolo/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-func createService(ctx context.Context, clientset kubernetes.Interface) error {
+// createService creates the kube-dns Service at clusterIP, the address the kubelet
+// gives every pod as its nameserver.
+func createService(ctx context.Context, clientset kubernetes.Interface, clusterIP string) error {
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      coreDNSServiceName,
@@ -26,7 +27,7 @@ func createService(ctx context.Context, clientset kubernetes.Interface) error {
 			Selector: map[string]string{
 				"k8s-app": "coredns",
 			},
-			ClusterIP: types.DefaultCoreDNSIP,
+			ClusterIP: clusterIP,
 			Ports: []corev1.ServicePort{
 				{
 					Name:     "dns",

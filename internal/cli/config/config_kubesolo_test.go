@@ -136,7 +136,7 @@ func TestToKubeSoloConfigMapsEverySetting(t *testing.T) {
 		SystemReserved:          "cpu=1,memory=500Mi",
 	}
 
-	doc, _, err := cfg.ToKubeSoloConfig()
+	doc, _, err := cfg.ToKubeSoloConfig(kubesoloconfig.Defaults())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +174,28 @@ func TestToKubeSoloConfigMapsEverySetting(t *testing.T) {
 
 // TestCmdArgsCollapsesToConfigFlag pins the point of the whole exercise: once a
 // configuration file exists, the service command line is one flag.
+// A re-install keeps what the installer has no flag for, from the configuration
+// it replaces; the rest is the installer's to say.
+func TestToKubeSoloConfigKeepsWhatItHasNoFlagFor(t *testing.T) {
+	installed := kubesoloconfig.Defaults()
+	installed.Kubernetes.PodCIDR = "10.50.0.0/16"
+	installed.Kubernetes.Webhook.Port = 11443
+	installed.Kubernetes.NodeName = "edge-01"
+	installed.API.Enabled = true
+	installed.Logging.Debug = true
+
+	doc, _, err := (&Config{Path: "/opt/kubesolo"}).ToKubeSoloConfig(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Kubernetes.PodCIDR != "10.50.0.0/16" || doc.Kubernetes.Webhook.Port != 11443 || doc.Kubernetes.NodeName != "edge-01" {
+		t.Errorf("settings without a flag not kept: podCIDR %s, webhook port %d, node name %q", doc.Kubernetes.PodCIDR, doc.Kubernetes.Webhook.Port, doc.Kubernetes.NodeName)
+	}
+	if doc.API.Enabled || doc.Logging.Debug {
+		t.Errorf("the installer's own settings were kept from the old file: api.enabled %v, debug %v", doc.API.Enabled, doc.Logging.Debug)
+	}
+}
+
 func TestCmdArgsCollapsesToConfigFlag(t *testing.T) {
 	cfg := &Config{Path: "/var/lib/kubesolo", Debug: true, D2K: true}
 

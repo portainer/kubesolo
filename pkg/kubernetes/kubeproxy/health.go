@@ -13,7 +13,7 @@ func (s *service) checkKubeProxyHealth() error {
 		Timeout: 5 * time.Second,
 	}
 
-	req, err := http.NewRequestWithContext(s.ctx, http.MethodGet, "http://127.0.0.1:10256/healthz", nil)
+	req, err := http.NewRequestWithContext(s.ctx, http.MethodGet, network.LoopbackURL("http", s.healthzPort, "/healthz"), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create health check request: %v", err)
 	}

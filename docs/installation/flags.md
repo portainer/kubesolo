@@ -285,7 +285,7 @@ curl -sfL https://get.kubesolo.io | sudo sh -s -- --debug=true
 
 ### --pprof-server
 
-Start the Go pprof HTTP server on port `6060`. Intended for profiling and performance analysis.
+Start the Go pprof HTTP server on port `6060` (`logging.pprofPort` in the [config file](../configuration/config-file.md)). Intended for profiling and performance analysis.
 
 | Flag | Env var | Default |
 |---|---|---|

@@ -15,8 +15,9 @@ func Defaults() *types.Config {
 		Path: types.DefaultBasePath,
 
 		Logging: types.LoggingConfig{
-			Debug: false,
-			Pprof: false,
+			Debug:     false,
+			Pprof:     false,
+			PprofPort: types.DefaultPprofPort,
 		},
 
 		Network: types.NetworkConfig{
@@ -35,10 +36,17 @@ func Defaults() *types.Config {
 		},
 
 		Kubernetes: types.KubernetesConfig{
-			NodeName: "", // the hostname
+			NodeName:    "", // the hostname
+			PodCIDR:     types.DefaultPodCIDR,
+			ServiceCIDR: types.DefaultServiceClusterIPRange,
+			ClusterDNS:  "", // the tenth address of ServiceCIDR
 			APIServer: types.APIServerConfig{
 				ExtraSANs:             nil,
 				StartupTimeoutSeconds: types.DefaultStartupTimeout,
+				Port:                  types.DefaultAPIServerPort,
+			},
+			ControllerManager: types.ControllerManagerConfig{
+				Port: types.DefaultControllerManagerPort,
 			},
 			Kubelet: types.KubeletConfig{
 				CPUManager: types.CPUManagerConfig{
@@ -47,6 +55,14 @@ func Defaults() *types.Config {
 					ReservedCPUs:  "",
 				},
 				SystemReserved: nil,
+				Port:           types.DefaultKubeletPort,
+				HealthzPort:    types.DefaultKubeletHealthzPort,
+			},
+			KubeProxy: types.KubeProxyConfig{
+				HealthzPort: types.DefaultKubeProxyHealthzPort,
+			},
+			Webhook: types.WebhookConfig{
+				Port: types.DefaultWebhookPort,
 			},
 		},
 
@@ -54,6 +70,9 @@ func Defaults() *types.Config {
 			LocalPath: types.LocalPathConfig{
 				Enabled:    true,
 				SharedPath: "",
+			},
+			Kine: types.KineConfig{
+				Port: types.DefaultKinePort,
 			},
 			DBWALRepair: false,
 		},
@@ -68,6 +87,7 @@ func Defaults() *types.Config {
 		D2K: types.D2KConfig{
 			Enabled:   false,
 			Namespace: types.DefaultD2KNamespace,
+			Port:      int(types.DefaultD2KPort),
 		},
 
 		Metrics: types.MetricsConfig{

@@ -1,8 +1,9 @@
 package controller
 
 import (
+	"strconv"
+
 	"github.com/portainer/kubesolo/internal/logging"
-	"github.com/portainer/kubesolo/types"
 	"github.com/spf13/cobra"
 )
 
@@ -11,7 +12,10 @@ func (s *service) configureControllerManagerFlags(command *cobra.Command) {
 
 	// controller manager settings
 	_ = flags.Set("allocate-node-cidrs", "true")
-	_ = flags.Set("cluster-cidr", types.DefaultPodCIDR)
+	_ = flags.Set("cluster-cidr", s.podCIDR)
+	// The node's pod range is kept out of the service range, as the API server has it.
+	_ = flags.Set("service-cluster-ip-range", s.serviceCIDR)
+	_ = flags.Set("secure-port", strconv.Itoa(s.port))
 	_ = flags.Set("service-account-private-key-file", s.serviceAccountKeyFile)
 	_ = flags.Set("kubeconfig", s.adminKubeconfigFile)
 	_ = flags.Set("authentication-kubeconfig", s.adminKubeconfigFile)

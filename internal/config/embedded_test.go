@@ -51,6 +51,17 @@ func goldenCases() []goldenCase {
 				c.D2K.Namespace = "d2k"
 				c.Kubernetes.Kubelet.CPUManager = types.CPUManagerConfig{Policy: "none"}
 				c.Metrics.BindAddress = "127.0.0.1:9105"
+				c.Kubernetes.PodCIDR = "10.42.0.0/16"
+				c.Kubernetes.ServiceCIDR = "10.43.0.0/16"
+				c.Kubernetes.APIServer.Port = 6443
+				c.Kubernetes.ControllerManager.Port = 10257
+				c.Kubernetes.Kubelet.Port = 10250
+				c.Kubernetes.Kubelet.HealthzPort = 10248
+				c.Kubernetes.KubeProxy.HealthzPort = 10256
+				c.Kubernetes.Webhook.Port = 10443
+				c.Storage.Kine.Port = 2379
+				c.Logging.PprofPort = 6060
+				c.D2K.Port = 2376
 			}),
 			probe: Probe{NodeIP: "192.168.1.10", LoadBalancerIP: "192.168.1.10", MTU: 1500},
 		},

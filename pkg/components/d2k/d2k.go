@@ -42,7 +42,7 @@ const (
 	TLSSecretName = "d2k-tls"
 
 	// ServiceName is the name of the LoadBalancer Service exposing the d2k
-	// Docker-compatible API endpoint on port 2376.
+	// Docker-compatible API endpoint on d2k.port (2376 by default).
 	ServiceName = "d2k"
 )
 
@@ -57,6 +57,10 @@ type Config struct {
 
 	// Certs holds the on-disk paths to the kubesolo-CA-signed TLS material.
 	Certs types.D2KCertificatePaths
+
+	// Port is the port the LoadBalancer Service publishes the Docker API on
+	// (d2k.port). d2k itself listens on DefaultD2KPort inside its pod.
+	Port int
 }
 
 // Deploy reconciles all d2k Kubernetes objects programmatically. The function
@@ -105,7 +109,7 @@ func Deploy(adminKubeconfig string, cfg Config) error {
 		return fmt.Errorf("failed to reconcile d2k Deployment: %v", err)
 	}
 
-	if err := createService(ctx, clientset, cfg.Namespace); err != nil {
+	if err := createService(ctx, clientset, cfg.Namespace, cfg.Port); err != nil {
 		return fmt.Errorf("failed to reconcile d2k Service: %v", err)
 	}
 

@@ -70,7 +70,7 @@ func (w *Service) createConfiguration() (*admissionregistrationv1.MutatingWebhoo
 			{
 				Name: types.DefaultWebhookName,
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
-					URL:      kubesolokubernetes.StringPtr("https://127.0.0.1:10443/mutate"),
+					URL:      kubesolokubernetes.StringPtr("https://" + w.address() + "/mutate"),
 					CABundle: caCert,
 				},
 				Rules:                   rules,
