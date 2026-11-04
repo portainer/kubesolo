@@ -185,7 +185,7 @@ programmatically.
 
 - **[Configuration file](docs/configuration/config-file.md)** — every setting, precedence, migrating from flags
 - **[Configuration API](docs/configuration/config-api.md)** — managing it over a socket
-- **[Grafana dashboards](examples/grafana/README.md)** — pre-built dashboards for API server, kubelet, cAdvisor and Go runtime metrics
+- **[Grafana dashboards](examples/grafana/README.md)** — pre-built dashboards, plus Grafana Alloy and OpenTelemetry Collector configs, for API server, kubelet, KubeSolo and Go runtime metrics
 
 ### Migrating from flags
 
@@ -250,7 +250,7 @@ Full documentation is at [kubesolo.io](https://kubesolo.io/documentation). The g
 **Monitoring**
 
 - Metrics endpoint: set `metrics.enabled: true` to serve Prometheus metrics for the control plane at `/metrics` on `127.0.0.1:9105` (change with `metrics.bindAddress`). It is off by default.
-- [Grafana dashboards](examples/grafana/README.md): pre-built dashboards for API server, kubelet, cAdvisor and Go runtime metrics (scraped from Kubernetes, not from the KubeSolo metrics endpoint)
+- [Grafana dashboards](examples/grafana/README.md): pre-built dashboards, plus Grafana Alloy and OpenTelemetry Collector configs, for API server, kubelet, KubeSolo and Go runtime metrics (scraped from the API server `/metrics`, the kubelet cAdvisor endpoint via the API server node proxy, and the KubeSolo metrics endpoint, which needs `metrics.enabled: true`). The cAdvisor scrape path contains the node name (default `kubesolo`), which must match your node's name.
 
 **Using a host container runtime**
 
