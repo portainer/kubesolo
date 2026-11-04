@@ -4,9 +4,9 @@ KubeSolo includes two Grafana dashboards with the same panels and visualizations
 
 - API server metrics
 - Kubelet metrics
-- cAdvisor container metrics
 - Controller workqueue metrics
 - Go runtime metrics
+- KubeSolo-specific panels: component health, certificates, Kine DB size, uptime, and build info
 
 Choose the dashboard format that matches your Grafana installation:
 
@@ -44,51 +44,83 @@ The format was introduced gradually through versions such as `v2alpha1` and `v2b
 
 > This section and [`alloy-config.yaml`](alloy-config.yaml) show one possible way to ship KubeSolo metrics. You can use any metrics agent that fits your environment.
 
-[`alloy-config.yaml`](alloy-config.yaml) contains an example [Grafana Alloy](https://grafana.com/docs/alloy/latest/) configuration for sending metrics to a Prometheus-compatible endpoint.
+[`alloy-config.yaml`](alloy-config.yaml) is a complete, self-contained manifest that runs [Grafana Alloy](https://grafana.com/docs/alloy/latest/) inside the KubeSolo cluster and sends metrics to a Prometheus-compatible endpoint. It contains a `ServiceAccount`, `ClusterRole`, `ClusterRoleBinding`, `ConfigMap`, and `Deployment`. Everything goes into the `default` namespace, so no namespace needs to exist beforehand.
 
-Its `prometheus.scrape "kubesolo"` block collects metrics from exactly two targets. These targets provide the data used by every panel in both dashboards:
+The Alloy config scrapes three targets. These provide the data used by every panel in both dashboards:
 
 - `kubesolo-apiserver` — the kube-apiserver’s own `/metrics` endpoint, accessed through the `kubernetes.default.svc` Service
-- `kubesolo-kubelet-cadvisor` — kubelet and cAdvisor metrics, accessed through the apiserver’s node proxy at `/api/v1/nodes/<node>/proxy/metrics/cadvisor`
+- `kubesolo-kubelet-cadvisor` — the kubelet’s cAdvisor container metrics (`container_*`), reached through the API server node proxy at `/api/v1/nodes/kubesolo/proxy/metrics/cadvisor`
+- `kubesolo-metrics` — KubeSolo’s own metrics server on `127.0.0.1:9105` (the `kubesolo_*` metrics). Start KubeSolo with `KUBESOLO_METRICS_SERVER=true` to enable it.
 
-The rest of the file configures authentication and authorization for these two scrapes. This includes the `ClusterRole`, `ClusterRoleBinding`, `bearer_token_file`, and `tls_config` settings.
+The `ClusterRole` grants the Alloy `ServiceAccount` access to the `/metrics` non-resource URL and to `get` on `nodes/proxy`, which the cAdvisor scrape needs.
 
-The `ClusterRole` grants the Alloy `ServiceAccount` access to the `nodes`, `nodes/metrics`, `nodes/stats`, and `nodes/proxy` resources. KubeSolo’s existing `system:kube-apiserver-to-kubelet` role grants similar access to the apiserver, but Alloy authenticates as its own `ServiceAccount` and therefore needs a separate grant.
+### The node name must match
 
-Apply the configuration with:
+The cAdvisor target is addressed by node name: `/api/v1/nodes/<node-name>/proxy/metrics/cadvisor`. The example uses `kubesolo`, which is the default node name. **If your node has a different name, change `kubesolo` in that path to match it, otherwise the API server returns a 404 and the container metrics are silently not scraped.** The same applies to the OpenTelemetry Collector example.
+
+Find your node name with:
 
 ```sh
-kubectl apply -f alloy-config.yaml
+kubectl get nodes
 ```
 
-Then set `GRAFANA_CLOUD_URL`, `GRAFANA_CLOUD_USERNAME`, and `GRAFANA_CLOUD_API_KEY` on the Alloy deployment. Alternatively, configure `prometheus.remote_write` to send metrics to another Prometheus-compatible endpoint.
+You can verify the path works before deploying the agent:
 
-Using environment variables is the simplest way to get started. However, this places the Grafana Cloud username and API key directly in the Alloy Deployment or Pod specification. Where possible, use a Kubernetes `Secret` with [`remote.kubernetes.secret`](https://grafana.com/docs/alloy/latest/reference/components/remote/remote.kubernetes.secret/) instead. This keeps credentials out of the Alloy configuration and away from the Pod specification.
+```sh
+kubectl get --raw /api/v1/nodes/<node-name>/proxy/metrics/cadvisor | head
+```
 
-Non-sensitive values, such as the remote-write URL, can similarly be loaded from a `ConfigMap` using [`remote.kubernetes.configmap`](https://grafana.com/docs/alloy/latest/reference/components/remote/remote.kubernetes.configmap/). For example:
+### Creating the credentials Secret
+
+The Deployment reads `GRAFANA_CLOUD_URL`, `GRAFANA_CLOUD_USERNAME`, and `GRAFANA_CLOUD_API_KEY` from a Secret named `grafana-cloud-credentials`. The Secret is deliberately not part of `alloy-config.yaml`, so re-applying the file never overwrites your real token with a placeholder. Create it **before** applying the manifest. Without it the pod fails with `CreateContainerConfigError`.
+
+```sh
+podman exec kubesolo kubectl create secret generic grafana-cloud-credentials \
+  --from-literal=GRAFANA_CLOUD_URL='https://prometheus-prod-XX-prod-REGION.grafana.net/api/prom/push' \
+  --from-literal=GRAFANA_CLOUD_USERNAME='1234567' \
+  --from-literal=GRAFANA_CLOUD_API_KEY='<your-real-token>' \
+  --dry-run=client -o yaml | podman exec -i kubesolo kubectl apply -f -
+```
+
+Replace the placeholders with the values from your Grafana Cloud stack. Then apply the manifest:
+
+```sh
+podman exec -i kubesolo kubectl apply -f - < alloy-config.yaml
+```
+
+To send metrics to another Prometheus-compatible endpoint, change the three values in the Secret.
+
+### Why Alloy uses `hostNetwork`
+
+The Deployment sets `hostNetwork: true` and `dnsPolicy: ClusterFirstWithHostNet` only for KubeSolo’s own metrics on port 9105. KubeSolo binds `127.0.0.1:9105` by default (`metrics.bindAddress`), which is the loopback of the KubeSolo container. A normal pod would get connection refused. With `hostNetwork` the pod shares the node (the KubeSolo container) network namespace, so Alloy sees the same `127.0.0.1:9105` as `podman exec kubesolo wget ...`. `ClusterFirstWithHostNet` keeps in-cluster DNS working for `kubernetes.default.svc`. The apiserver scrape doesn’t need `hostNetwork`.
+
+The alternative is to start KubeSolo with `-e KUBESOLO_METRICS_BIND_ADDRESS=0.0.0.0:9105` and scrape the node `InternalIP` instead, which keeps Alloy on the pod network. This demo keeps the loopback default and `hostNetwork` so the metrics endpoint is never exposed on the container network and the target doesn’t depend on the node IP. The cost is that the Alloy pod shares the node network namespace. That is acceptable for a single-node local demo, but not for a shared cluster without thought.
+
+The image tag is `grafana/alloy:latest` for convenience. Pin a version for anything beyond a demo.
+
+Using a Secret with `envFrom` keeps credentials out of the Alloy configuration. You can also read them from within Alloy using [`remote.kubernetes.secret`](https://grafana.com/docs/alloy/latest/reference/components/remote/remote.kubernetes.secret/).
+
+For example, using the same Secret:
 
 ```alloy
 remote.kubernetes.secret "grafanacloud" {
-  namespace = "monitoring"
-  name      = "grafanacloud-credentials"
-}
-
-remote.kubernetes.configmap "grafanacloud" {
-  namespace = "monitoring"
-  name      = "grafanacloud-config"
+  namespace = "default"
+  name      = "grafana-cloud-credentials"
 }
 
 prometheus.remote_write "grafanacloud" {
   endpoint {
-    url = remote.kubernetes.configmap.grafanacloud.data["url"]
+    url = remote.kubernetes.secret.grafanacloud.data["GRAFANA_CLOUD_URL"]
 
     basic_auth {
-      username = remote.kubernetes.secret.grafanacloud.data["username"]
-      password = remote.kubernetes.secret.grafanacloud.data["api-key"]
+      username = remote.kubernetes.secret.grafanacloud.data["GRAFANA_CLOUD_USERNAME"]
+      password = remote.kubernetes.secret.grafanacloud.data["GRAFANA_CLOUD_API_KEY"]
     }
   }
 }
 ```
+
+Non-sensitive values, such as the remote-write URL, can instead be loaded from a `ConfigMap` with [`remote.kubernetes.configmap`](https://grafana.com/docs/alloy/latest/reference/components/remote/remote.kubernetes.configmap/), using the same `data["key"]` access.
 
 For installation options, including the Helm chart, binary, and Docker image, as well as the complete `prometheus.scrape`, `prometheus.remote_write`, and `discovery.kubernetes` component references, see the [Grafana Alloy documentation](https://grafana.com/docs/alloy/latest/).
 
@@ -98,7 +130,9 @@ For installation options, including the Helm chart, binary, and Docker image, as
 
 [`otel-collector-config.yaml`](otel-collector-config.yaml) provides the same setup using the vendor-neutral [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) instead of Alloy.
 
-It scrapes the same two targets—`kubesolo-apiserver` and `kubesolo-kubelet-cadvisor`—using the same authentication settings. It then sends the metrics to the same type of Prometheus-compatible endpoint, so it feeds both dashboards in the same way.
+It scrapes the same three targets (`kubesolo-apiserver`, `kubesolo-kubelet-cadvisor` and `kubesolo-metrics`) using the same authentication settings. It then sends the metrics to the same type of Prometheus-compatible endpoint, so it feeds both dashboards in the same way. As with Alloy, the node name in the cAdvisor `metrics_path` (`/api/v1/nodes/kubesolo/proxy/metrics/cadvisor`) must match your node name. See [The node name must match](#the-node-name-must-match).
+
+Unlike `alloy-config.yaml`, this file has no Deployment. The `kubesolo-metrics` job scrapes `127.0.0.1:9105`, so run the Collector pod with `hostNetwork: true` and `dnsPolicy: ClusterFirstWithHostNet` (Helm: `hostNetwork: true`). See [Why Alloy uses `hostNetwork`](#why-alloy-uses-hostnetwork) for the reasoning and the alternative. The ConfigMap has no `namespace:`, so apply it into the namespace of your Collector release (`kubectl apply -n <ns> -f ...`), and adjust the `ClusterRoleBinding` subject namespace (`default`) to match.
 
 Use this option if you prefer to standardize on the OpenTelemetry Collector rather than run Grafana Alloy.
 
