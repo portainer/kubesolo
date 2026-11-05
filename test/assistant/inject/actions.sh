@@ -30,13 +30,14 @@ healthy() { api /api/v1/assistant/report | jq -e '[.components | to_entries[] | 
 wait_healthy() { wait_api; until healthy; do sleep 5; done; }
 
 # synthetic writes a triaged incident calling for $1, rated high, and prints
-# its ID.
+# its ID. Its trigger names it alone, so that an action failed in one scenario
+# is not refused in the next as just failed.
 synthetic() {
   local id
   id=$(date -u +%Y%m%dT%H%M%S.%NZ)
   mkdir -p "$INCIDENTS"
   jq -n --arg id "$id" --arg action "$1" --arg now "$(date -u +%FT%TZ)" '{
-    id: $id, time: $now, kind: "kubesolo", trigger: ("actions.sh: " + $action),
+    id: $id, time: $now, kind: "kubesolo", trigger: ("actions.sh " + $id + ": " + $action),
     snapshot: {host: {diskUsedPercent: 0, memoryAvailableMiB: 0, uptimeSeconds: 0}},
     triage: {status: "triaged", time: $now, summary: ("a test of " + $action), cause: "actions.sh",
              action: $action, actionProbability: 0.95, rating: "high"}}' >"$INCIDENTS/$id.json"
@@ -66,20 +67,34 @@ expect_status() {
 
 coredns_uid() { kubectl -n kube-system get pods -l k8s-app=coredns -o jsonpath='{.items[0].metadata.uid}'; }
 
-# kubelet_incident blocks the kubelet's health port until the watcher records
-# an incident and it is triaged, and prints its ID. The port stays blocked.
-kubelet_incident() {
+unblock_kubelet() { while iptables -D INPUT -i lo -p tcp --dport 10248 -j REJECT 2>/dev/null; do :; done; }
+
+# runtime_down moves containerd's socket away until the probe fails: a fault a
+# restart clears, as containerd listens on a new socket when it starts.
+SOCKET=$DATA/containerd/containerd.sock
+runtime_down() {
+  mv "$SOCKET" "$SOCKET.actions"
+  wait_for 120 runtime_failing
+}
+# put_back_runtime puts the socket back unless a restart made a new one.
+put_back_runtime() {
+  [ -e "$SOCKET.actions" ] || return 0
+  if [ -e "$SOCKET" ]; then rm -f "$SOCKET.actions"; else mv "$SOCKET.actions" "$SOCKET"; fi
+}
+
+# runtime_incident moves containerd's socket away until the watcher records an
+# incident and it is triaged, and prints its ID. The socket stays away.
+runtime_incident() {
   local cursor id
   cursor=$(api /api/v1/assistant/incidents | jq -r 'last | .id // ""')
-  iptables -I INPUT -i lo -p tcp --dport 10248 -j REJECT
+  mv "$SOCKET" "$SOCKET.actions"
   for _ in $(seq 150); do
     id=$(api "/api/v1/assistant/incidents?since=$cursor" | jq -r 'map(select(.kind == "kubesolo")) | first | .id // ""')
     [ -n "$id" ] && { echo "$id"; return; }
     sleep 10
   done
-  fail "no kubelet incident"
+  fail "no runtime incident"
 }
-unblock_kubelet() { while iptables -D INPUT -i lo -p tcp --dport 10248 -j REJECT 2>/dev/null; do :; done; }
 
 approve() { kubesoloctl assistant approve "$1" --note "actions.sh" >&2 || fail "could not approve $1"; }
 
@@ -94,9 +109,10 @@ wait_for() {
 stopped() { ! systemctl is-active --quiet kubesolo; }
 auto_started() { api "/api/v1/assistant/incidents/$1" 2>/dev/null | jq -e '.actionRun.auto == true' >/dev/null; }
 kubelet_failing() { api /api/v1/assistant/report | jq -e '.components.kubelet != "ok"' >/dev/null 2>&1; }
+runtime_failing() { api /api/v1/assistant/report | jq -e '.components.runtime != "ok"' >/dev/null 2>&1; }
 
 # kubelet_down blocks the kubelet's health port until the probe fails, so that
-# a restart's precondition holds.
+# a restart's precondition holds. A restart leaves the block in place.
 kubelet_down() {
   iptables -I INPUT -i lo -p tcp --dport 10248 -j REJECT
   wait_for 120 kubelet_failing
@@ -108,7 +124,9 @@ scenario_restart_fails() {
   local id
   id=$(synthetic restart_component)
   approve "$id"
-  # The kubelet stays unreachable: KubeSolo restarts but does not come back healthy.
+  # The kubelet stays unreachable: KubeSolo restarts but does not come back
+  # healthy. A real incident would not offer this restart, its port being
+  # blocked; the synthetic one records no snapshot, so it is carried out.
   expect_status "$(action_run "$id" 1500)" failed
   unblock_kubelet
 }
@@ -117,14 +135,14 @@ scenario_restart_succeeds() {
   wait_healthy
   local id before
   before=$(coredns_uid)
-  kubelet_down
+  runtime_down
   id=$(synthetic restart_component)
   approve "$id"
-  # The restart is what fixes it: undo the fault as soon as KubeSolo stops.
+  # The restart is what fixes it: containerd listens on a new socket.
   wait_for 300 stopped
-  unblock_kubelet
   wait_api
   expect_status "$(action_run "$id")" succeeded
+  put_back_runtime
   [ "$(coredns_uid)" = "$before" ] || fail "CoreDNS was recreated: pods did not survive the restart"
   log "ok: pods kept running across the restart"
 }
@@ -231,25 +249,25 @@ scenario_auto() {
   grep -q "autoRestart: true" /etc/kubesolo/config.yaml || fail "set assistant.autoRestart: true first"
   wait_healthy
   local id
-  id=$(kubelet_incident)
+  id=$(runtime_incident)
   local triage
   triage=$(api "/api/v1/assistant/incidents/$id" | jq -r '"\(.triage.action) \(.triage.rating)"')
   if [ "$triage" != "restart_component high" ]; then
-    unblock_kubelet; log "skipped: the model triaged it $triage, not a high-rated restart"; return
+    put_back_runtime; log "skipped: the model triaged it $triage, not a high-rated restart"; return
   fi
   # The restart starts as the incident is triaged, and KubeSolo is down for
   # seconds: wait for its record rather than for the stop.
   wait_for 300 auto_started "$id"
-  unblock_kubelet
   wait_api
   local run
   run=$(action_run "$id")
   expect_status "$run" succeeded
   [ "$(jq -r .auto <<<"$run")" = true ] || fail "not marked automatic: $run"
+  put_back_runtime
   log "ok: restarted without approval"
 }
 
-trap 'unblock_kubelet; rm -f "$DATA/actions-fill"' EXIT
+trap 'unblock_kubelet; put_back_runtime; rm -f "$DATA/actions-fill"' EXIT
 for s in "$@"; do
   log "=== $s"
   "scenario_${s//-/_}"
