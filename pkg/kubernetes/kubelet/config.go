@@ -54,6 +54,18 @@ func (s *service) writeKubeletConfigFile() error {
 		return fmt.Errorf("failed to create kubelet directory: %v", err)
 	}
 
+	// The kubelet refuses to start when --config-dir names a missing directory.
+	if err := filesystem.EnsureDirectoryExists(s.kubeletDropInDir); err != nil {
+		return fmt.Errorf("failed to create kubelet drop-in directory: %v", err)
+	}
+	// A file at that path is left alone above, and the kubelet would load nothing
+	// from it without saying so.
+	if info, err := os.Stat(s.kubeletDropInDir); err != nil {
+		return fmt.Errorf("failed to check kubelet drop-in directory: %v", err)
+	} else if !info.IsDir() {
+		return fmt.Errorf("kubelet drop-in directory %s is not a directory; move it and put drop-ins in a directory at that path", s.kubeletDropInDir)
+	}
+
 	yamlConfig, err := yaml.Marshal(s.generateKubeletConfig())
 	if err != nil {
 		log.Error().Str("component", "kubelet").Msgf("failed to marshal kubelet config: %v", err)
@@ -148,7 +160,9 @@ func (s *service) generateKubeletConfig() map[string]any {
 		// Disable QoS cgroups and node-allocatable enforcement; containerd/runc
 		// still manage per-container cgroups normally.
 		config["cgroupsPerQOS"] = false
-		config["enforceNodeAllocatable"] = []string{}
+		// "none" rather than an empty list: --config-dir makes the kubelet re-apply
+		// defaults, which turn an empty list back into "pods".
+		config["enforceNodeAllocatable"] = []string{"none"}
 		config["imageGCHighThresholdPercent"] = 100
 		config["evictionHard"] = map[string]string{
 			"memory.available":  "50Mi",

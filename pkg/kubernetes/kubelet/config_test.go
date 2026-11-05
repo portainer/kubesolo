@@ -1,6 +1,9 @@
 package kubelet
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +11,11 @@ import (
 	"github.com/portainer/kubesolo/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	kubeletconfigv1beta1 "k8s.io/kubelet/config/v1beta1"
+	kubeletconfiginternal "k8s.io/kubernetes/pkg/kubelet/apis/config"
+	kubeletconfigv1beta1conversion "k8s.io/kubernetes/pkg/kubelet/apis/config/v1beta1"
+	"k8s.io/kubernetes/pkg/kubelet/kubeletconfig/configfiles"
+	utilfs "k8s.io/kubernetes/pkg/util/filesystem"
 )
 
 func TestCgroupDriver(t *testing.T) {
@@ -64,7 +72,7 @@ func TestGenerateKubeletConfig_ContainerMode(t *testing.T) {
 	assert.Equal(t, "/dev/null", cfg["resolvConf"])
 
 	assert.Equal(t, false, cfg["cgroupsPerQOS"])
-	assert.Equal(t, []string{}, cfg["enforceNodeAllocatable"])
+	assert.Equal(t, []string{"none"}, cfg["enforceNodeAllocatable"])
 	assert.Equal(t, 100, cfg["imageGCHighThresholdPercent"])
 
 	evict, ok := cfg["evictionHard"].(map[string]string)
@@ -142,6 +150,7 @@ func writeConfigWith(t *testing.T, dir string, cpuManager types.CPUManagerConfig
 		kubeletDir:        dir,
 		kubeletConfigDir:  filepath.Join(dir, "config"),
 		kubeletConfigFile: filepath.Join(dir, "config", "config.yaml"),
+		kubeletDropInDir:  filepath.Join(dir, "config.d"),
 		containerMode:     true, // avoids reading the host /etc/resolv.conf
 		cpuManager:        cpuManager,
 	}
@@ -253,4 +262,75 @@ func TestGenerateKubeletConfig_ContainerModeKeepsSystemReserved(t *testing.T) {
 
 	assert.Equal(t, map[string]string{"memory": "500Mi"}, cfg["systemReserved"])
 	assert.Equal(t, map[string]string{}, cfg["kubeReserved"])
+}
+
+func TestWriteKubeletConfigFile_CreatesDropInDir(t *testing.T) {
+	// The kubelet refuses to start when --config-dir names a missing directory.
+	dir := t.TempDir()
+	writeConfigWith(t, dir, types.CPUManagerConfig{Policy: types.CPUManagerPolicyNone})
+
+	info, err := os.Stat(filepath.Join(dir, "config.d"))
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+func TestWriteKubeletConfigFile_RefusesFileAtDropInDir(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.d"), []byte("evictionHard: {}\n"), 0o644))
+
+	s := &service{
+		kubeletDir:        dir,
+		kubeletConfigDir:  filepath.Join(dir, "config"),
+		kubeletConfigFile: filepath.Join(dir, "config", "config.yaml"),
+		kubeletDropInDir:  filepath.Join(dir, "config.d"),
+		containerMode:     true, // avoids reading the host /etc/resolv.conf
+	}
+	err := s.writeKubeletConfigFile()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a directory")
+}
+
+// TestGenerateKubeletConfig_SurvivesDropInMerge guards against settings the kubelet
+// loses because of --config-dir. With that flag the kubelet round-trips its config
+// through versioned JSON and applies defaults again, even when the directory is
+// empty, so an explicitly empty value that the JSON encoding omits comes back as its
+// default. The steps below are those of mergeKubeletConfigurations in
+// k8s.io/kubernetes/cmd/kubelet/app with no drop-ins.
+func TestGenerateKubeletConfig_SurvivesDropInMerge(t *testing.T) {
+	for _, containerMode := range []bool{false, true} {
+		t.Run(fmt.Sprintf("containerMode=%v", containerMode), func(t *testing.T) {
+			dir := t.TempDir()
+			s := &service{
+				kubeletDir:        dir,
+				kubeletConfigDir:  filepath.Join(dir, "config"),
+				kubeletConfigFile: filepath.Join(dir, "config", "config.yaml"),
+				kubeletDropInDir:  filepath.Join(dir, "config.d"),
+				containerMode:     containerMode,
+				cpuManager:        types.CPUManagerConfig{Policy: types.CPUManagerPolicyStatic, ReservedCPUs: "0"},
+				systemReserved:    map[string]string{"cpu": "1"},
+			}
+			require.NoError(t, s.writeKubeletConfigFile())
+
+			loader, err := configfiles.NewFsLoader(&utilfs.DefaultFs{}, s.kubeletConfigFile)
+			require.NoError(t, err)
+			loaded, err := loader.Load(context.Background())
+			require.NoError(t, err)
+
+			versioned := &kubeletconfigv1beta1.KubeletConfiguration{}
+			require.NoError(t, kubeletconfigv1beta1conversion.Convert_config_KubeletConfiguration_To_v1beta1_KubeletConfiguration(loaded, versioned, nil))
+			data, err := json.Marshal(versioned)
+			require.NoError(t, err)
+			versioned = &kubeletconfigv1beta1.KubeletConfiguration{}
+			require.NoError(t, json.Unmarshal(data, versioned))
+			kubeletconfigv1beta1conversion.SetDefaults_KubeletConfiguration(versioned)
+			merged := &kubeletconfiginternal.KubeletConfiguration{}
+			require.NoError(t, kubeletconfigv1beta1conversion.Convert_v1beta1_KubeletConfiguration_To_config_KubeletConfiguration(versioned, merged, nil))
+
+			// The kubelet treats an empty reservation the same as none.
+			if len(loaded.KubeReserved) == 0 {
+				loaded.KubeReserved = nil
+			}
+			assert.Equal(t, loaded, merged)
+		})
+	}
 }

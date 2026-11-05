@@ -14,9 +14,10 @@ import (
 // 1. it validates the kubelet
 // 2. it generates the kubelet kubeconfig
 // 3. it writes the kubelet config
-// 4. it starts the kubelet
-// 5. it waits for shutdown to be requested, then stops the kubelet
-// 6. it logs the termination of the kubelet
+// 4. it checks the kubelet drop-ins
+// 5. it starts the kubelet
+// 6. it waits for shutdown to be requested, then stops the kubelet
+// 7. it logs the termination of the kubelet
 func (s *service) Run(apiServerReady chan struct{}) error {
 	log.Info().Str("component", "kubelet").Msg("starting kubelet...")
 	if err := s.validation(); err != nil {
@@ -32,6 +33,12 @@ func (s *service) Run(apiServerReady chan struct{}) error {
 
 	if err := s.writeKubeletConfigFile(); err != nil {
 		log.Error().Str("component", "kubelet").Msgf("failed to write kubelet config: %v...", err)
+		s.terminate()
+		return err
+	}
+
+	if err := s.checkDropIns(); err != nil {
+		log.Error().Str("component", "kubelet").Msgf("invalid kubelet drop-in: %v...", err)
 		s.terminate()
 		return err
 	}
