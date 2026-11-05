@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/portainer/kubesolo/internal/cli/config"
 	"github.com/portainer/kubesolo/internal/cli/ui"
 	"github.com/portainer/kubesolo/internal/upgrade"
 )
@@ -43,6 +44,12 @@ func newerReleaseNotice(p *ui.Printer, cmd *cobra.Command, version string) {
 			"Update kubesoloctl (https://github.com/portainer/kubesolo/releases/latest) or pass --version=%s",
 			latest, version, latest))
 	}
+}
+
+// versionFromInput reports whether an offline archive or a custom image
+// decides the version install installs, rather than the default.
+func versionFromInput(cfg *config.Config, containerMode bool) bool {
+	return cfg.OfflineInstall != "" || (containerMode && cfg.ContainerImage != "")
 }
 
 // newerRelease returns the latest release when it is newer than version, and

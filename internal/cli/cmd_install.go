@@ -181,8 +181,7 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	if !containerMode {
 		offlineVersion(p, cfg)
 	}
-	// An offline archive or a custom image decides the version, not the default.
-	if cfg.OfflineInstall == "" && (!containerMode || cfg.ContainerImage == "") {
+	if !versionFromInput(cfg, containerMode) {
 		newerReleaseNotice(p, cmd, cfg.Version)
 	}
 
