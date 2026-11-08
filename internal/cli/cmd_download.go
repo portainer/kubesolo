@@ -56,6 +56,7 @@ Examples:
 			}
 			p.OK("Target resolved", info.ArchiveName(cfg.Version))
 
+			newerReleaseNotice(p, cmd, cfg.Version)
 			archiveName := info.ArchiveName(cfg.Version)
 			p.Step(fmt.Sprintf("Downloading KubeSolo %s", cfg.Version))
 			sameArch := targetArch == "" || info.Arch == runtime.GOARCH && runtime.GOOS == "linux"

@@ -181,6 +181,9 @@ func runInstall(cmd *cobra.Command, cfg *config.Config) error {
 	if !containerMode {
 		offlineVersion(p, cfg)
 	}
+	if !versionFromInput(cfg, containerMode) {
+		newerReleaseNotice(p, cmd, cfg.Version)
+	}
 
 	// ── Feature/version compatibility ──────────────────────────────────────────
 	// d2k flags only exist in kubesolo >= MinD2KVersion. Passing --d2k to an older
