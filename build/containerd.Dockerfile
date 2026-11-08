@@ -35,7 +35,9 @@ ENV PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
 ENV PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig
 
 # Clone containerd repository
-ARG CONTAINERD_VERSION=v2.2.5
+# Keep in step with CONTAINERD_VERSION in build/download-deps.sh, which passes
+# it explicitly.
+ARG CONTAINERD_VERSION=v2.3.7
 RUN git clone https://github.com/containerd/containerd.git /go/src/github.com/containerd/containerd
 WORKDIR /go/src/github.com/containerd/containerd
 

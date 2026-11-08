@@ -15,13 +15,13 @@ The `containerd.Dockerfile` provides a complete cross-compilation environment fo
 
 1. **Build the Docker image** (runs natively on ARM64/AMD64 host):
    ```bash
-   docker build -f build/containerd.Dockerfile -t containerd-arm32-cross .
+   docker build -f build/containerd.Dockerfile --build-arg CONTAINERD_VERSION=v2.3.7 -t containerd-arm32-cross .
    ```
 
 2. **Extract the compiled archive**:
    ```bash
    docker create --name temp containerd-arm32-cross && \
-   docker cp temp:/containerd-v2.0.4-linux-arm32.tar.gz . && \
+   docker cp temp:/containerd-v2.3.7-linux-arm32.tar.gz . && \
    docker rm temp
    ```
 
@@ -42,10 +42,10 @@ The Dockerfile builds containerd with the following features enabled:
 
 ## Output
 
-The build process produces a compressed archive `containerd-v2.0.4-linux-arm32.tar.gz` containing all the containerd binaries. After extraction, the binaries will be available in the `bin/` directory and can be used to replace the downloaded containerd binaries in your kubesolo distribution for ARM32 targets.
+The build process produces a compressed archive `containerd-<version>-linux-arm32.tar.gz` containing all the containerd binaries. After extraction, the binaries will be available in the `bin/` directory and can be used to replace the downloaded containerd binaries in your kubesolo distribution for ARM32 targets.
 
 ## Notes
 
-- The build process uses containerd version `v2.0.4` by default (configurable via `CONTAINERD_VERSION` build arg)
+- `build/download-deps.sh` runs this build for ARM32 and passes its own `CONTAINERD_VERSION`, which is the version KubeSolo ships. Use the same version when building by hand; the Dockerfile's default only mirrors it
 - All necessary cross-compilation dependencies are included in the Docker image
 - The binaries are statically linked where possible for better portability
