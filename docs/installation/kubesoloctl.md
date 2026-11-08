@@ -101,7 +101,7 @@ Common flags:
 
 | Flag | Env var | Default | Description |
 |---|---|---|---|
-| `--version` | `KUBESOLO_VERSION` | matched to the CLI build | KubeSolo version to install |
+| `--version` | `KUBESOLO_VERSION` | matched to the CLI build | KubeSolo version to install. Left at its default, `install` and `download` warn when a newer release exists; update `kubesoloctl` to get it as the default |
 | `--path` | `KUBESOLO_PATH` | `/var/lib/kubesolo` | Data directory (ignored in container mode, which keeps state in a volume) |
 | `--run-mode` | `KUBESOLO_RUN_MODE` | `service` | `service`, `daemon`, `foreground`, or `container` |
 | `--name` | `KUBESOLO_NAME` | `kubesolo` | Instance name (container name + kubeconfig context) |
