@@ -153,8 +153,8 @@ kubesoloctl kubeconfig fetch      # merge it into ~/.kube/config
 ### upgrade / rollback / status
 
 ```bash
-sudo kubesoloctl upgrade --version=v1.2.3      # verified, backed up, rolled back automatically on failure
-sudo kubesoloctl upgrade --version=v1.2.3 --offline-install=/tmp/bundle/kubesolo-v1.2.3-linux-amd64.tar.gz
+sudo kubesoloctl upgrade --version=v1.3.0      # verified, backed up, rolled back automatically on failure
+sudo kubesoloctl upgrade --version=v1.3.0 --offline-install=/tmp/bundle/kubesolo-v1.3.0-linux-amd64.tar.gz
 sudo kubesoloctl rollback                      # undo the last upgrade (loses cluster changes made since)
 sudo kubesoloctl status                        # version, health, last run, rollback target
 ```
@@ -199,7 +199,7 @@ any other image, such as a CI build or a private mirror, needs `--image` to name
 the image to upgrade to, rather than being switched to the public release:
 
 ```bash
-kubesoloctl upgrade --name dev --version=v1.2.3 --image=registry.example.com/kubesolo:v1.2.3
+kubesoloctl upgrade --name dev --version=v1.3.0 --image=registry.example.com/kubesolo:v1.3.0
 ```
 
 `--offline-install`, `--sha256` and `--detach` apply to host installs only.
@@ -292,8 +292,8 @@ KubeSolo's admin users are scoped the same way (`kubernetes-admin@<cluster>`), s
 
 ```bash
 # On a connected machine (specify --arch when the target differs):
-kubesoloctl download --version=v1.2.3 --path=./bundle --arch=arm64
+kubesoloctl download --version=v1.3.0 --path=./bundle --arch=arm64
 
 # On the target machine:
-sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.2.3-linux-arm64.tar.gz
+sudo ./kubesoloctl install --offline-install=./bundle/kubesolo-v1.3.0-linux-arm64.tar.gz
 ```

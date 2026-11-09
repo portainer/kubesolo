@@ -485,8 +485,8 @@ func Install(src, dst string) error {
 }
 
 // VersionFromArchiveName returns the version in a release archive's name, such
-// as v1.2.3 in kubesolo-v1.2.3-linux-arm64-musl.tar.gz or
-// kubesolo-v1.2.3-linux-amd64-offline.tar.gz.
+// as v1.3.0 in kubesolo-v1.3.0-linux-arm64-musl.tar.gz or
+// kubesolo-v1.3.0-linux-amd64-offline.tar.gz.
 func VersionFromArchiveName(path string) (string, bool) {
 	m := archiveNamePattern.FindStringSubmatch(filepath.Base(path))
 	if m == nil {
