@@ -268,6 +268,9 @@ Every port KubeSolo listens on is a setting, so a host that already uses one —
 web UI on 10443, another cluster's etcd on 2379 — only needs that one moved. Two
 of KubeSolo's own on the same port are refused before anything starts.
 
+Kubelet settings this file doesn't cover, such as eviction thresholds and image
+garbage collection, are set with [kubelet drop-ins](kubelet-drop-ins.md).
+
 ---
 
 ## Every setting
@@ -451,5 +454,6 @@ KubeSolo does not set either of those conflicting flags.
 ## See also
 
 - [Configuration API](config-api.md) — managing this file over a socket
+- [Kubelet drop-ins](kubelet-drop-ins.md) — kubelet settings this file doesn't cover
 - [Install script flags](../installation/flags.md)
 - [kubesoloctl](../installation/kubesoloctl.md)
