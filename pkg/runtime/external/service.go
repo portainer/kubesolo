@@ -57,7 +57,8 @@ func (s *service) Run() error {
 		s.cancel()
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	// s.ctx is already cancelled by the time this runs; Close only logs with it
+	defer func() { _ = client.Close(context.WithoutCancel(s.ctx)) }()
 
 	if err := s.inspect(client); err != nil {
 		log.Error().Str("component", component).Msgf("failed to inspect container runtime: %v...", err)
@@ -81,7 +82,7 @@ func (s *service) Run() error {
 func (s *service) connect() (internalapi.RuntimeService, error) {
 	var lastErr error
 	for attempt := range types.DefaultRetryCount {
-		client, err := criclient.NewRemoteRuntimeService(s.embedded.RuntimeEndpoint, types.DefaultContextTimeout, nil, nil)
+		client, err := criclient.NewRemoteRuntimeService(s.ctx, s.embedded.RuntimeEndpoint, types.DefaultContextTimeout, nil, false)
 		if err == nil {
 			return client, nil
 		}

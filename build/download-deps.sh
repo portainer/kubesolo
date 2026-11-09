@@ -5,7 +5,7 @@
 OS="linux"
 ARCH="amd64"
 # Set versions
-CONTAINERD_VERSION="2.2.5"
+CONTAINERD_VERSION="2.3.7"
 CRUN_VERSION="1.26"
 CNI_VERSION="v1.9.0"
 PORTAINER_AGENT_VERSION="lts"
@@ -95,7 +95,7 @@ fi
 # Extract containerd binaries and zstd-compress the shim for embedding
 tar -xzf internal/core/embedded/bin/containerd.tar.gz -C internal/core/embedded/bin/containerd
 rm internal/core/embedded/bin/containerd.tar.gz
-zstd -19 --rm -q internal/core/embedded/bin/containerd/bin/containerd-shim-runc-v2
+zstd -19 --rm -q -f internal/core/embedded/bin/containerd/bin/containerd-shim-runc-v2
 
 # Download crun - add error checking
 # crun does not publish 32-bit ARM binaries; build from source for arm
@@ -137,7 +137,7 @@ else
         exit 1
     fi
 fi
-zstd -19 --rm -q internal/core/embedded/bin/crun
+zstd -19 --rm -q -f internal/core/embedded/bin/crun
 
 # Download CNI plugins - add error checking
 echo "Downloading CNI plugins ${CNI_VERSION} for ${OS}-${ARCH}..."
@@ -157,7 +157,7 @@ rm internal/core/embedded/bin/cni/cni-plugins.tgz
 
 # zstd-compress CNI plugin binaries for embedding
 for plugin in bridge host-local portmap loopback; do
-    zstd -19 --rm -q "internal/core/embedded/bin/cni/${plugin}"
+    zstd -19 --rm -q -f "internal/core/embedded/bin/cni/${plugin}"
 done
 
 # Download container images
