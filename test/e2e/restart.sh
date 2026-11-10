@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # End to end test of POST /api/v1/restart on a host install, driven the way the
 # Portainer agent drives it: from inside a pod, through the agent's API socket.
+# The agent's socket cannot change the configuration, so changes are made
+# through the host's socket, as kubesoloctl config set makes them.
 #
 #   1. A configuration change is applied, and every pod keeps running.
 #   2. A Portainer agent image that cannot run is reverted.
@@ -63,6 +65,10 @@ k() { kubectl --kubeconfig "$DATA/pki/admin/admin.kubeconfig" "$@"; }
 # agent_api calls the API the way the agent does: from a pod, through the
 # socket directory KubeSolo mounts into the agent's pod.
 agent_api() { k -n "$NS" exec probe -- curl -sS -m 10 --unix-socket /agent-api/kubesolo.sock "$@"; }
+
+# host_api calls the API through the host's socket, which can change the
+# configuration.
+host_api() { curl -sS -m 10 --unix-socket "$DATA/config.sock" "$@"; }
 
 json() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 
@@ -229,8 +235,10 @@ ok "setup: probe pod running, configuration known-good"
 # ── 1. a change is applied, and nothing is restarted ────────────────────────
 metrics=$(setting "['metrics']['enabled']")
 want=$([ "$metrics" = True ] && echo false || echo true)
-log "1: changing metrics.enabled to $want through the agent socket"
-agent_api -X PATCH -H 'Content-Type: application/merge-patch+json' -d "{\"metrics\":{\"enabled\":$want}}" http://localhost/api/v1/config >/dev/null
+log "1: changing metrics.enabled to $want"
+code=$(agent_api -o /dev/null -w '%{http_code}' -X PATCH -H 'Content-Type: application/merge-patch+json' -d "{\"metrics\":{\"enabled\":$want}}" http://localhost/api/v1/config)
+[ "$code" = 403 ] || fail "1: changing the configuration through the agent socket answered $code, want 403"
+host_api -X PATCH -H 'Content-Type: application/merge-patch+json' -d "{\"metrics\":{\"enabled\":$want}}" http://localhost/api/v1/config >/dev/null
 before=$(pods)
 result=$(restart '{}')
 [[ "$result" == succeeded* ]] || fail "1: restart ended: $result"
@@ -250,7 +258,7 @@ ok "1: metrics.enabled=$want applied; every pod kept its container"
 # ── 2. an agent image that cannot run is reverted ───────────────────────────
 image=$(setting "['portainer']['image']")
 log "2: configuring an agent image that does not exist"
-agent_api -X PATCH -H 'Content-Type: application/merge-patch+json' -d '{"portainer":{"image":"docker.io/portainer/agent:e2e-does-not-exist"}}' http://localhost/api/v1/config >/dev/null
+host_api -X PATCH -H 'Content-Type: application/merge-patch+json' -d '{"portainer":{"image":"docker.io/portainer/agent:e2e-does-not-exist"}}' http://localhost/api/v1/config >/dev/null
 before=$(pods | grep -v '^portainer/')
 result=$(restart "{\"healthTimeoutSeconds\":$HEALTH_TIMEOUT}")
 [[ "$result" == rolled-back*"Portainer agent"* ]] || fail "2: restart ended: $result"
@@ -263,7 +271,7 @@ ok "2: reverted ($result); agent running $image again"
 
 # ── 3. a configuration KubeSolo cannot run on is reverted ───────────────────
 log "3: pointing runtime.endpoint at a socket that does not exist"
-agent_api -X PATCH -H 'Content-Type: application/merge-patch+json' -d '{"runtime":{"endpoint":"unix:///run/e2e-no-such-runtime.sock"}}' http://localhost/api/v1/config >/dev/null
+host_api -X PATCH -H 'Content-Type: application/merge-patch+json' -d '{"runtime":{"endpoint":"unix:///run/e2e-no-such-runtime.sock"}}' http://localhost/api/v1/config >/dev/null
 before=$(pods)
 # KubeSolo never comes up on this, so the shortest timeout is enough.
 result=$(restart '{"healthTimeoutSeconds":60}')
@@ -273,9 +281,9 @@ expect_same_pods "$before" "3: a pod or container changed across the reverted re
 ok "3: reverted ($result); every pod kept its container"
 
 # ── 4. the agent's set-once settings are refused, not ignored ──────────────
-log "4: changing portainer.edgeKey through the agent socket"
+log "4: changing portainer.edgeKey"
 saved=$(mktemp); cp -p "$CONFIG" "$saved"
-code=$(agent_api -o /dev/null -w '%{http_code}' -X PATCH -H 'Content-Type: application/merge-patch+json' -d '{"portainer":{"edgeKey":"e2e-other-key"}}' http://localhost/api/v1/config)
+code=$(host_api -o /dev/null -w '%{http_code}' -X PATCH -H 'Content-Type: application/merge-patch+json' -d '{"portainer":{"edgeKey":"e2e-other-key"}}' http://localhost/api/v1/config)
 [ "$code" = 409 ] || fail "4: changing portainer.edgeKey answered $code, want 409"
 cmp -s "$CONFIG" "$saved" || fail "4: a refused change modified the configuration file"
 log "4: changing portainer.edgeID by hand, then asking for a restart"
