@@ -85,8 +85,11 @@ func (s *service) postSetup() error {
 		// Tools that bootstrap a node container, such as Apple container's
 		// `container cluster create`, wait for the kubeadm path to appear. It is
 		// linked only once the kubeconfig is fully written.
+		// Without the link those tools wait forever, so fail instead.
 		if err := linkAdminKubeconfig(s.adminKubeconfig, types.DefaultAdminKubeconfigLink); err != nil {
 			log.Error().Str("component", "apiserver").Msgf("failed to link the kubeconfig to %s: %v...", types.DefaultAdminKubeconfigLink, err)
+			s.cancelShutdown()
+			return err
 		}
 	}
 

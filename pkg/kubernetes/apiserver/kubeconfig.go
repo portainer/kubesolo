@@ -109,10 +109,19 @@ func (s *service) writeKubeConfig(config *api.Config) error {
 }
 
 // linkAdminKubeconfig links link to the admin kubeconfig, creating the parent
-// directory of link if needed.
+// directory of link if needed. It replaces an existing symlink but refuses any
+// other file at link, which belongs to someone else.
 func linkAdminKubeconfig(kubeconfig, link string) error {
+	// A relative target would resolve against the directory of link.
+	source, err := filepath.Abs(kubeconfig)
+	if err != nil {
+		return err
+	}
+	if info, err := os.Lstat(link); err == nil && info.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf("%s exists and is not a symlink", link)
+	}
 	if err := filesystem.EnsureDirectoryExists(filepath.Dir(link)); err != nil {
 		return err
 	}
-	return filesystem.EnsureSymbolicLink(kubeconfig, link)
+	return filesystem.EnsureSymbolicLink(source, link)
 }
