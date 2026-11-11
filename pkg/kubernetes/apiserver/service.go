@@ -24,6 +24,7 @@ type service struct {
 	adminCertFile            string
 	adminKeyFile             string
 	adminKubeconfig          string
+	containerMode            bool
 	serviceAccountKeyFile    string
 	authenticationConfigFile string
 	requestHeaderCAFile      string
@@ -51,6 +52,7 @@ func NewService(ctx context.Context, cancel context.CancelFunc, apiServerReady c
 		adminCertFile:            embedded.AdminCerts.Cert,
 		adminKeyFile:             embedded.AdminCerts.Key,
 		adminKubeconfig:          embedded.AdminKubeconfigFile,
+		containerMode:            embedded.ContainerMode,
 		serviceAccountKeyFile:    embedded.ServiceAccountKeyFile,
 		authenticationConfigFile: embedded.APIServerAuthenticationConfigFile,
 		requestHeaderCAFile:      embedded.RequestHeaderCerts.CACert,

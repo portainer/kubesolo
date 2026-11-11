@@ -81,6 +81,13 @@ func (s *service) postSetup() error {
 
 	if err := s.generateKubeConfig(); err != nil {
 		log.Error().Str("component", "apiserver").Msgf("failed to generate the kubeconfig: %v...", err)
+	} else if s.containerMode {
+		// Tools that bootstrap a node container, such as Apple container's
+		// `container cluster create`, wait for the kubeadm path to appear. It is
+		// linked only once the kubeconfig is fully written.
+		if err := linkAdminKubeconfig(s.adminKubeconfig, types.DefaultAdminKubeconfigLink); err != nil {
+			log.Error().Str("component", "apiserver").Msgf("failed to link the kubeconfig to %s: %v...", types.DefaultAdminKubeconfigLink, err)
+		}
 	}
 
 	if err := s.applyAPIServerRBAC(); err != nil {

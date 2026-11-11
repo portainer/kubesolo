@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 
+	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/rs/zerolog/log"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -113,4 +115,13 @@ func (s *service) writeKubeConfig(config *api.Config) error {
 		return fmt.Errorf("failed to write kubeconfig file: %v", err)
 	}
 	return nil
+}
+
+// linkAdminKubeconfig links link to the admin kubeconfig, creating the parent
+// directory of link if needed.
+func linkAdminKubeconfig(kubeconfig, link string) error {
+	if err := filesystem.EnsureDirectoryExists(filepath.Dir(link)); err != nil {
+		return err
+	}
+	return filesystem.EnsureSymbolicLink(kubeconfig, link)
 }
