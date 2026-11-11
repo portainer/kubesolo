@@ -24,3 +24,18 @@ func TestLinkAdminKubeconfig(t *testing.T) {
 		}
 	}
 }
+
+// Tools that import the admin kubeconfig, such as Apple container's
+// `container cluster create`, accept only one cluster, user and context.
+func TestCreateKubeConfigHasOneClusterUserAndContext(t *testing.T) {
+	s := &service{port: 6443}
+	cfg := s.createKubeConfig(&certificateData{adminCert: []byte("CERT"), adminKey: []byte("KEY"), ca: []byte("CA")}, "10.0.0.5")
+
+	if len(cfg.Clusters) != 1 || len(cfg.AuthInfos) != 1 || len(cfg.Contexts) != 1 {
+		t.Fatalf("clusters = %d, users = %d, contexts = %d, want 1 each", len(cfg.Clusters), len(cfg.AuthInfos), len(cfg.Contexts))
+	}
+	ctx := cfg.Contexts[cfg.CurrentContext]
+	if cfg.CurrentContext != "kubernetes-admin@kubesolo" || ctx == nil || ctx.AuthInfo != "kubernetes-admin" {
+		t.Errorf("current-context = %q (%+v)", cfg.CurrentContext, ctx)
+	}
+}

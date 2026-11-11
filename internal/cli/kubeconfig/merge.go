@@ -42,9 +42,11 @@ type entries struct {
 }
 
 // entryNames returns the entries the instance whose cluster is named cluster
-// owns once merged. KubeSolo names its users kubernetes-admin and admin-token,
-// as kubeadm does, so a merge scopes them to the cluster: two instances, or an
-// instance and a kubeadm cluster, would otherwise share one set of credentials.
+// owns once merged. KubeSolo names its user kubernetes-admin, as kubeadm does,
+// so a merge scopes it to the cluster: two instances, or an instance and a
+// kubeadm cluster, would otherwise share one set of credentials. admin-token is
+// the user releases before KS-119 also wrote; it is listed so that merging and
+// removal clean it up.
 func entryNames(cluster string) entries {
 	var e entries
 	e.clusters = []string{cluster}
@@ -92,7 +94,8 @@ func scope(doc map[string]any, cluster string) {
 
 // mergeInto merges the kubeconfig src into the file at path, creating it if
 // needed. src's entries are first scoped to cluster (see scope); they then
-// replace entries of the same name, everything else in the file is kept, and
+// replace entries of the same name, entries the instance owns (see entryNames)
+// that src no longer has are removed, everything else in the file is kept, and
 // src's current context becomes the current one. A non-empty server replaces
 // the server of src's clusters. An existing file is backed up first. uid and
 // gid, when positive, become the owner of the file.
@@ -122,6 +125,14 @@ func mergeInto(path string, src []byte, cluster, server string, uid, gid int) er
 		return fmt.Errorf("cannot parse %s: %w", path, err)
 	}
 
+	owned := entryNames(cluster)
+	for key, names := range map[string][]string{"clusters": owned.clusters, "users": owned.users, "contexts": owned.contexts} {
+		for _, name := range names {
+			if find(in, key, name) == nil {
+				remove(out, key, name)
+			}
+		}
+	}
 	for _, key := range []string{"clusters", "users", "contexts"} {
 		for _, e := range namedList(in, key) {
 			upsert(out, key, e)

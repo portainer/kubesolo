@@ -77,11 +77,9 @@ func (s *service) readCertificateFiles() (*certificateData, error) {
 // createKubeConfig creates a new kubeconfig with the provided certificate data
 func (s *service) createKubeConfig(certData *certificateData, nodeIP string) *api.Config {
 	const (
-		clusterName  = "kubesolo"
-		userName     = "kubernetes-admin"
-		contextName  = "kubernetes-admin@" + clusterName
-		tokenUser    = "admin-token"
-		tokenContext = "admin-token@" + clusterName
+		clusterName = "kubesolo"
+		userName    = "kubernetes-admin"
+		contextName = "kubernetes-admin@" + clusterName
 	)
 
 	kubeConfig := api.NewConfig()
@@ -96,13 +94,6 @@ func (s *service) createKubeConfig(certData *certificateData, nodeIP string) *ap
 	kubeConfig.Contexts[contextName] = &api.Context{
 		Cluster:  clusterName,
 		AuthInfo: userName,
-	}
-	kubeConfig.AuthInfos[tokenUser] = &api.AuthInfo{
-		Token: "admin-token",
-	}
-	kubeConfig.Contexts[tokenContext] = &api.Context{
-		Cluster:  clusterName,
-		AuthInfo: tokenUser,
 	}
 	kubeConfig.CurrentContext = contextName
 
