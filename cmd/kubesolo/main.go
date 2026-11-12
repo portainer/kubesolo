@@ -1024,6 +1024,13 @@ func (s *kubesolo) bootstrap() {
 		if err := system.SetupContainerCgroups(); err != nil {
 			log.Fatal().Err(err).Msg("failed to setup container cgroups")
 		}
+
+		// The API server links the admin kubeconfig here once it has written
+		// it. A link left by the previous run would point at that run's file
+		// before the API server is ready.
+		if filesystem.RemoveIfSymlink(types.DefaultAdminKubeconfigLink) {
+			log.Info().Str("component", "kubesolo").Msgf("removed stale admin kubeconfig link: %s", types.DefaultAdminKubeconfigLink)
+		}
 	}
 
 	// Clean stale runtime state from previous runs (e.g., after reboot)

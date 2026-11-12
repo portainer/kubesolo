@@ -19,6 +19,7 @@ const (
 	DefaultContainerdDir             = "containerd"
 	DefaultContainerdSocket          = "containerd.sock"
 	DefaultSystemContainerdSock      = "/run/containerd/containerd.sock"
+	DefaultAdminKubeconfigLink       = "/etc/kubernetes/admin.conf"
 	DefaultStandardCNIConfDir        = "/etc/cni/net.d"
 	DefaultContainerdConfigDir       = "/etc/containerd/conf.d"
 	LegacyContainerdConfigDir        = "/etc/containerd/config.d"

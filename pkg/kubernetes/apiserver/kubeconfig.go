@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 
+	"github.com/portainer/kubesolo/internal/runtime/filesystem"
 	"github.com/rs/zerolog/log"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -75,11 +77,9 @@ func (s *service) readCertificateFiles() (*certificateData, error) {
 // createKubeConfig creates a new kubeconfig with the provided certificate data
 func (s *service) createKubeConfig(certData *certificateData, nodeIP string) *api.Config {
 	const (
-		clusterName  = "kubesolo"
-		userName     = "kubernetes-admin"
-		contextName  = "kubernetes-admin@" + clusterName
-		tokenUser    = "admin-token"
-		tokenContext = "admin-token@" + clusterName
+		clusterName = "kubesolo"
+		userName    = "kubernetes-admin"
+		contextName = "kubernetes-admin@" + clusterName
 	)
 
 	kubeConfig := api.NewConfig()
@@ -95,13 +95,6 @@ func (s *service) createKubeConfig(certData *certificateData, nodeIP string) *ap
 		Cluster:  clusterName,
 		AuthInfo: userName,
 	}
-	kubeConfig.AuthInfos[tokenUser] = &api.AuthInfo{
-		Token: "admin-token",
-	}
-	kubeConfig.Contexts[tokenContext] = &api.Context{
-		Cluster:  clusterName,
-		AuthInfo: tokenUser,
-	}
 	kubeConfig.CurrentContext = contextName
 
 	return kubeConfig
@@ -113,4 +106,22 @@ func (s *service) writeKubeConfig(config *api.Config) error {
 		return fmt.Errorf("failed to write kubeconfig file: %v", err)
 	}
 	return nil
+}
+
+// linkAdminKubeconfig links link to the admin kubeconfig, creating the parent
+// directory of link if needed. It replaces an existing symlink but refuses any
+// other file at link, which belongs to someone else.
+func linkAdminKubeconfig(kubeconfig, link string) error {
+	// A relative target would resolve against the directory of link.
+	source, err := filepath.Abs(kubeconfig)
+	if err != nil {
+		return err
+	}
+	if info, err := os.Lstat(link); err == nil && info.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf("%s exists and is not a symlink", link)
+	}
+	if err := filesystem.EnsureDirectoryExists(filepath.Dir(link)); err != nil {
+		return err
+	}
+	return filesystem.EnsureSymbolicLink(source, link)
 }
