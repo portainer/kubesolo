@@ -177,6 +177,56 @@ func TestRemoveEntries(t *testing.T) {
 	}
 }
 
+// Releases before KS-119 also wrote an admin-token user and context, so
+// kubeconfigs merged from them hold admin-token@<cluster> entries.
+func TestMergeAndRemoveDropLegacyAdminToken(t *testing.T) {
+	legacy := strings.Replace(kubesoloKubeconfig, "contexts:", `- name: admin-token
+  user:
+    token: admin-token
+contexts:
+- name: admin-token@kubesolo
+  context:
+    cluster: kubesolo
+    user: admin-token`, 1)
+
+	for _, tc := range []struct {
+		name  string
+		after func(path string) error
+		want  string
+	}{
+		{"merge", func(path string) error {
+			return mergeInto(path, []byte(kubesoloKubeconfig), "kubesolo", "", -1, -1)
+		}, "kind-dev,kubernetes-admin@kubesolo"},
+		{"remove", func(path string) error {
+			_, err := removeEntries(path, entryNames("kubesolo"))
+			return err
+		}, "kind-dev"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config")
+			if err := os.WriteFile(path, []byte(otherKubeconfig), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := mergeInto(path, []byte(legacy), "kubesolo", "", -1, -1); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(names(readDoc(t, path), "users"), ","); got != "kind-dev,kubernetes-admin@kubesolo,admin-token@kubesolo" {
+				t.Fatalf("legacy merge: users = %s", got)
+			}
+
+			if err := tc.after(path); err != nil {
+				t.Fatal(err)
+			}
+			doc := readDoc(t, path)
+			for _, key := range []string{"users", "contexts"} {
+				if got := strings.Join(names(doc, key), ","); got != tc.want {
+					t.Errorf("%s = %s, want %s", key, got, tc.want)
+				}
+			}
+		})
+	}
+}
+
 func TestRemoveEntriesMissingFile(t *testing.T) {
 	removed, err := removeEntries(filepath.Join(t.TempDir(), "absent"), entryNames("kubesolo"))
 	if err != nil || removed {

@@ -40,6 +40,6 @@ func LatestRelease(ctx context.Context, timeout time.Duration) (Version, error) 
 		}
 		return Version{}, err
 	}
-	// .../releases/tag/v1.2.3
+	// .../releases/tag/v1.3.0
 	return ParseVersion(path.Base(loc.Path))
 }

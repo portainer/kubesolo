@@ -1,8 +1,11 @@
 package pki
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -93,6 +96,11 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 		if len(embedded.APIServerExtraSANs) > 0 {
 			addExtraSANs(&opts, embedded.APIServerExtraSANs)
 		}
+		if embedded.ContainerMode {
+			if name := nodeDNSName(); name != "" {
+				opts.DNSNames = append(opts.DNSNames, name)
+			}
+		}
 		opts.SignerCertDir = embedded.CACerts.Cert
 		opts.SignerKeyDir = embedded.CACerts.Key
 		opts.CertDir = filepath.Join(embedded.PKIAPIServerDir, "apiserver.crt")
@@ -161,6 +169,54 @@ func defaultCertOptions(certType CertificateType, embedded types.Embedded) CertO
 	}
 
 	return opts
+}
+
+// resolvConfPath is the node's own resolver configuration. Tests replace it.
+var resolvConfPath = "/etc/resolv.conf"
+
+// nodeDNSName returns <hostname>.<domain> when the node's resolv.conf has a
+// domain line, and "" otherwise. Apple container's `container cluster create`
+// reaches a cluster at <name>.<domain> when a DNS domain is configured; inside
+// the node, the hostname is the cluster name and the domain is written as a
+// domain line.
+func nodeDNSName() string {
+	conf, err := os.ReadFile(resolvConfPath)
+	if err != nil {
+		return ""
+	}
+	domain := resolvConfDomain(conf)
+	if domain == "" {
+		return ""
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	name := strings.ToLower(hostname) + "." + domain
+	if !network.IsDNSName(name) {
+		log.Warn().Str("component", "pki").Msgf("not adding invalid node DNS name to the API server certificate: %s", name)
+		return ""
+	}
+	return name
+}
+
+// resolvConfDomain returns the domain set by the last domain line of a
+// resolv.conf, or "" when there is none or it is not a valid DNS name. search
+// lines are ignored: they can list several unrelated domains.
+func resolvConfDomain(conf []byte) string {
+	domain := ""
+	scanner := bufio.NewScanner(bytes.NewReader(conf))
+	for scanner.Scan() {
+		line, _, _ := strings.Cut(scanner.Text(), "#")
+		line, _, _ = strings.Cut(line, ";")
+		if fields := strings.Fields(line); len(fields) >= 2 && fields[0] == "domain" {
+			domain = strings.ToLower(strings.TrimSuffix(fields[1], "."))
+		}
+	}
+	if !network.IsDNSName(domain) {
+		return ""
+	}
+	return domain
 }
 
 // addExtraSANs adds extra SANs to the certificate options
