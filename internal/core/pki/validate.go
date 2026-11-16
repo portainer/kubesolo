@@ -35,6 +35,10 @@ import (
 // previously distributed kubeconfig to be updated. Keeping the CA stable lets
 // re-signed leaf certs (and existing client certs) keep validating.
 func InvalidateIfStale(embedded types.Embedded) error {
+	if err := removeExpiredRequestHeaderClientCert(embedded.RequestHeaderCerts); err != nil {
+		return err
+	}
+
 	certPath := filepath.Join(embedded.PKIAPIServerDir, "apiserver.crt")
 
 	certPEM, err := os.ReadFile(certPath)
@@ -169,6 +173,14 @@ func removeLeafCerts(pkiDir string) error {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("refusing to modify PKI directory: %q is a symlink", pkiDir)
 	}
+	// request-header/ is kept for its CA, but the client cert next to it is a
+	// leaf cert like the others.
+	if err := removeFiles(
+		filepath.Join(pkiDir, "request-header", "request-header-client.crt"),
+		filepath.Join(pkiDir, "request-header", "request-header-client.key"),
+	); err != nil {
+		return err
+	}
 	entries, err := os.ReadDir(pkiDir)
 	if err != nil {
 		return err
@@ -178,6 +190,52 @@ func removeLeafCerts(pkiDir string) error {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(pkiDir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// removeExpiredRequestHeaderClientCert removes the request-header client cert
+// and key once the cert has expired or cannot be parsed, so
+// GenerateAllCertificates re-signs them with the existing request-header CA.
+//
+// This is the apiserver's proxy client cert: aggregated APIs such as
+// metrics-server reject it once it has expired. It is checked on its own
+// because it can expire before apiserver.crt, which older releases re-signed
+// without it.
+func removeExpiredRequestHeaderClientCert(certs types.RequestHeaderCertificatePaths) error {
+	certPEM, err := os.ReadFile(certs.ClientCert)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	if block, _ := pem.Decode(certPEM); block != nil {
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err == nil && time.Now().Before(cert.NotAfter) {
+			return nil
+		}
+	}
+
+	log.Warn().Str("component", "pki").Str("cert", certs.ClientCert).
+		Msg("request-header client certificate has expired or is corrupt — regenerating it")
+	return removeFiles(certs.ClientCert, certs.ClientKey)
+}
+
+// removeFiles removes each file, ignoring any that do not exist. Both callers
+// pass <pki>/request-header/<file>. Like removeLeafCerts, it refuses a symlink
+// at either directory, which would redirect the deletions.
+func removeFiles(files ...string) error {
+	for _, file := range files {
+		for _, dir := range []string{filepath.Dir(file), filepath.Dir(filepath.Dir(file))} {
+			if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("refusing to modify PKI directory: %q is a symlink", dir)
+			}
+		}
+		if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}

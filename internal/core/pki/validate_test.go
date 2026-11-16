@@ -34,6 +34,21 @@ func TestRemoveLeafCerts(t *testing.T) {
 		assert.Error(t, removeLeafCerts(link), "a symlinked PKI dir must be refused")
 	})
 
+	t.Run("refuses a symlinked request-header directory", func(t *testing.T) {
+		target := t.TempDir()
+		for _, name := range []string{"request-header-client.crt", "request-header-client.key"} {
+			require.NoError(t, os.WriteFile(filepath.Join(target, name), nil, 0o600))
+		}
+		dir := filepath.Join(t.TempDir(), "pki")
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "apiserver"), 0o755))
+		require.NoError(t, os.Symlink(target, filepath.Join(dir, "request-header")))
+
+		assert.Error(t, removeLeafCerts(dir), "a symlinked request-header dir must be refused")
+		assert.FileExists(t, filepath.Join(target, "request-header-client.crt"), "files outside the PKI dir must be kept")
+		assert.FileExists(t, filepath.Join(target, "request-header-client.key"), "files outside the PKI dir must be kept")
+		assert.DirExists(t, filepath.Join(dir, "apiserver"), "nothing may be removed before refusing")
+	})
+
 	t.Run("removes leaf certs but preserves the CA dirs", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "pki")
 		for _, sub := range []string{"ca", "request-header", "apiserver", "admin", "kubelet"} {
@@ -258,5 +273,115 @@ func TestInvalidateIfStaleExtraSANs(t *testing.T) {
 		e.APIServerExtraSANs = []string{"kubesolo.local"}
 		require.NoError(t, InvalidateIfStale(e))
 		certRegenerated(t, e)
+	})
+}
+
+// The request-header client cert is the apiserver's proxy client cert for
+// aggregated APIs such as metrics-server. It sits next to the request-header CA
+// and can expire while apiserver.crt is still valid.
+func TestInvalidateIfStaleRequestHeaderClientCert(t *testing.T) {
+	// withClientCert returns an Embedded with a valid apiserver.crt, a real
+	// request-header CA and the given client cert.
+	withClientCert := func(t *testing.T, clientCert []byte) types.Embedded {
+		t.Helper()
+		e := writeAPIServerCert(t, "10.0.0.5", selfSignedCert(t, time.Now().Add(24*time.Hour), []net.IP{net.ParseIP("10.0.0.5")}))
+		dir := filepath.Join(e.PKIDir, "request-header")
+		e.RequestHeaderCerts = types.RequestHeaderCertificatePaths{
+			CACert:     filepath.Join(dir, "request-header-ca.crt"),
+			CAKey:      filepath.Join(dir, "request-header-ca.key"),
+			ClientCert: filepath.Join(dir, "request-header-client.crt"),
+			ClientKey:  filepath.Join(dir, "request-header-client.key"),
+		}
+		require.NoError(t, generateCertificate(defaultCertOptions(RequestHeaderCACert, e)))
+		require.NoError(t, os.WriteFile(e.RequestHeaderCerts.ClientCert, clientCert, 0o644))
+		require.NoError(t, os.WriteFile(e.RequestHeaderCerts.ClientKey, []byte("key"), 0o600))
+		return e
+	}
+
+	assertCAsKept := func(t *testing.T, e types.Embedded) {
+		t.Helper()
+		assert.FileExists(t, e.RequestHeaderCerts.CACert, "request-header CA must be preserved")
+		assert.FileExists(t, e.RequestHeaderCerts.CAKey, "request-header CA must be preserved")
+		assert.FileExists(t, filepath.Join(e.PKIDir, "ca", "ca.crt"), "CA must be preserved")
+	}
+
+	t.Run("expired client cert is re-signed by the existing CA", func(t *testing.T) {
+		e := withClientCert(t, selfSignedCert(t, time.Now().Add(-time.Hour), nil))
+		ca, _, err := loadCertificateAndKey(e.RequestHeaderCerts.CACert, e.RequestHeaderCerts.CAKey)
+		require.NoError(t, err)
+
+		require.NoError(t, InvalidateIfStale(e))
+		require.NoFileExists(t, e.RequestHeaderCerts.ClientCert, "expired client cert must be removed")
+		assert.NoFileExists(t, e.RequestHeaderCerts.ClientKey, "its key must be removed with it")
+		assert.FileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"), "the other leaf certs must be kept")
+		assertCAsKept(t, e)
+
+		require.NoError(t, generateCertificate(defaultCertOptions(RequestHeaderClientCert, e)))
+		client, _, err := loadCertificateAndKey(e.RequestHeaderCerts.ClientCert, e.RequestHeaderCerts.ClientKey)
+		require.NoError(t, err)
+		roots := x509.NewCertPool()
+		roots.AddCert(ca)
+		_, err = client.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}})
+		assert.NoError(t, err, "the new client cert must chain to the existing request-header CA")
+	})
+
+	t.Run("corrupt client cert is removed", func(t *testing.T) {
+		for _, corrupt := range [][]byte{
+			[]byte("this is not a certificate"),
+			pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("not DER")}),
+		} {
+			e := withClientCert(t, corrupt)
+			require.NoError(t, InvalidateIfStale(e))
+			assert.NoFileExists(t, e.RequestHeaderCerts.ClientCert, "corrupt client cert must be removed")
+			assert.NoFileExists(t, e.RequestHeaderCerts.ClientKey, "its key must be removed with it")
+			assertCAsKept(t, e)
+		}
+	})
+
+	t.Run("valid client cert is kept", func(t *testing.T) {
+		e := withClientCert(t, selfSignedCert(t, time.Now().Add(time.Hour), nil))
+		require.NoError(t, InvalidateIfStale(e))
+		assert.FileExists(t, e.RequestHeaderCerts.ClientCert)
+		assert.FileExists(t, e.RequestHeaderCerts.ClientKey)
+	})
+
+	t.Run("re-signing the leaf certs replaces the client cert too", func(t *testing.T) {
+		e := withClientCert(t, selfSignedCert(t, time.Now().Add(time.Hour), nil))
+		e.NodeIP = "192.168.1.10" // not in apiserver.crt, so every leaf cert is re-signed
+		require.NoError(t, InvalidateIfStale(e))
+		assert.NoFileExists(t, filepath.Join(e.PKIAPIServerDir, "apiserver.crt"))
+		assert.NoFileExists(t, e.RequestHeaderCerts.ClientCert, "client cert must be re-signed with the other leaf certs")
+		assert.NoFileExists(t, e.RequestHeaderCerts.ClientKey, "client cert must be re-signed with the other leaf certs")
+		assertCAsKept(t, e)
+	})
+
+	t.Run("checked even when apiserver.crt is missing", func(t *testing.T) {
+		e := withClientCert(t, selfSignedCert(t, time.Now().Add(-time.Hour), nil))
+		require.NoError(t, os.Remove(filepath.Join(e.PKIAPIServerDir, "apiserver.crt")))
+		require.NoError(t, InvalidateIfStale(e))
+		assert.NoFileExists(t, e.RequestHeaderCerts.ClientCert)
+	})
+
+	t.Run("refuses a symlinked request-header directory", func(t *testing.T) {
+		e := withClientCert(t, selfSignedCert(t, time.Now().Add(-time.Hour), nil))
+		dir := filepath.Dir(e.RequestHeaderCerts.ClientCert)
+		target := filepath.Join(t.TempDir(), "request-header")
+		require.NoError(t, os.Rename(dir, target))
+		require.NoError(t, os.Symlink(target, dir))
+
+		assert.Error(t, InvalidateIfStale(e), "a symlinked request-header dir must be refused")
+		assert.FileExists(t, filepath.Join(target, "request-header-client.crt"), "files outside the PKI dir must be kept")
+		assert.FileExists(t, filepath.Join(target, "request-header-client.key"), "files outside the PKI dir must be kept")
+	})
+
+	t.Run("refuses a symlinked PKI directory", func(t *testing.T) {
+		e := withClientCert(t, selfSignedCert(t, time.Now().Add(-time.Hour), nil))
+		target := filepath.Join(t.TempDir(), "pki")
+		require.NoError(t, os.Rename(e.PKIDir, target))
+		require.NoError(t, os.Symlink(target, e.PKIDir))
+
+		assert.Error(t, InvalidateIfStale(e), "a symlinked PKI dir must be refused")
+		assert.FileExists(t, filepath.Join(target, "request-header", "request-header-client.crt"), "files outside the PKI dir must be kept")
+		assert.FileExists(t, filepath.Join(target, "request-header", "request-header-client.key"), "files outside the PKI dir must be kept")
 	})
 }
