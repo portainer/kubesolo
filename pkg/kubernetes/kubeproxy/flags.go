@@ -28,6 +28,7 @@ func (s *service) configureKubeProxyFlags(command *cobra.Command) {
 
 	// networking settings
 	_ = flags.Set("kubeconfig", s.adminKubeconfigFile)
+	_ = flags.Set("hostname-override", s.nodeName)
 	_ = flags.Set("cluster-cidr", s.podCIDR)
 	_ = flags.Set("healthz-bind-address", net.JoinHostPort("0.0.0.0", strconv.Itoa(s.healthzPort)))
 	_ = flags.Set("metrics-bind-address", "")
