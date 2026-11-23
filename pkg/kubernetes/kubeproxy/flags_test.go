@@ -62,3 +62,23 @@ func TestHostModeKeepsConntrackDefaults(t *testing.T) {
 		t.Errorf("%s = %q, want the kube-proxy default outside container mode", name, got)
 	}
 }
+
+// kube-proxy must look up the node the kubelet registers. Without the override
+// it waits for a node named after the host, /healthz answers 503 forever and
+// KubeSolo never reaches CoreDNS when kubernetes.nodeName differs from the host
+// name.
+func TestHostnameOverrideUsesNodeName(t *testing.T) {
+	command := app.NewProxyCommand()
+	(&service{nodeName: "node-9305de"}).configureKubeProxyFlags(command)
+
+	const name = "hostname-override"
+
+	flag := command.Flags().Lookup(name)
+	if flag == nil {
+		t.Fatalf("%s: flag not found on the kube-proxy command", name)
+	}
+
+	if got := flag.Value.String(); got != "node-9305de" {
+		t.Errorf("%s = %q, want the configured node name", name, got)
+	}
+}

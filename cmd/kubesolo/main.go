@@ -386,7 +386,7 @@ func (s *kubesolo) run() {
 		{
 			name: "kubeproxy",
 			start: func(ctx context.Context, cancel context.CancelFunc) {
-				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.PodCIDR, s.embedded.KubeProxyHealthzPort)
+				kubeproxyService := kubeproxy.NewService(ctx, cancel, kubeproxyReadyCh, s.embedded.AdminKubeconfigFile, s.embedded.ContainerMode, s.embedded.PodCIDR, s.embedded.KubeProxyHealthzPort, s.embedded.NodeName)
 				_ = kubeproxyService.Run(kubeletReadyCh)
 			},
 			readyCh: kubeproxyReadyCh,
