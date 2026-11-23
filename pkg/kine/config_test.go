@@ -45,7 +45,7 @@ func TestGeneratedConfigKeepsKineDefaults(t *testing.T) {
 	}
 }
 
-func TestGeneratedConfigOnlyOverridesEndpointAndCompaction(t *testing.T) {
+func TestGeneratedConfigOnlyOverridesExpectedFields(t *testing.T) {
 	unsetKineEnv(t)
 	s := &service{databaseDir: t.TempDir(), listener: "127.0.0.1:2379"}
 	config := s.generateKineConfig()
@@ -59,9 +59,14 @@ func TestGeneratedConfigOnlyOverridesEndpointAndCompaction(t *testing.T) {
 		t.Errorf("CompactTimeout = %v, want 60s", config.CompactTimeout)
 	}
 
+	if config.ConnectionPoolConfig.MaxOpen != 5 {
+		t.Errorf("ConnectionPoolConfig.MaxOpen = %d, want 5", config.ConnectionPoolConfig.MaxOpen)
+	}
+
 	// Every other field must be kine's default.
 	want := app.Config(nil)
 	config.Endpoint, config.Listener, config.CompactTimeout = want.Endpoint, want.Listener, want.CompactTimeout
+	config.ConnectionPoolConfig.MaxOpen = want.ConnectionPoolConfig.MaxOpen
 	if !reflect.DeepEqual(config, want) {
 		t.Errorf("config differs from kine's defaults:\n got  %+v\n want %+v", config, want)
 	}

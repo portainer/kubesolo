@@ -15,12 +15,15 @@ import (
 // compaction is left to the apiserver: kine ignores its compact requests while kine's own compactor runs,
 // which kine's default CompactInterval of 0 keeps off
 // compactTimeout is raised to 60 seconds
+// maxOpen caps the connection pool at 5: kine's default is unlimited, and on a single CPU
+// extra connections only queue on SQLite's write lock, where some requests time out
 // the DSN params come from kine's own defaults so that upstream tuning
 // (statement cache size, synchronous mode, ...) is picked up on version bumps
 func (s *service) generateKineConfig() endpoint.Config {
 	config := app.Config(nil)
 	config.Endpoint = fmt.Sprintf("sqlite://%s/state.db?%s", s.databaseDir, sqlite.DefaultParams)
 	config.Listener = s.listener
+	config.ConnectionPoolConfig.MaxOpen = 5
 	config.CompactTimeout = 60 * time.Second
 	return config
 }
