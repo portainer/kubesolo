@@ -15,10 +15,11 @@ type service struct {
 	containerMode       bool
 	podCIDR             string
 	healthzPort         int
+	nodeName            string
 }
 
 // NewService creates a new kube proxy service
-func NewService(ctx context.Context, cancel context.CancelFunc, kubeproxyReady chan<- struct{}, adminKubeconfigFile string, containerMode bool, podCIDR string, healthzPort int) *service {
+func NewService(ctx context.Context, cancel context.CancelFunc, kubeproxyReady chan<- struct{}, adminKubeconfigFile string, containerMode bool, podCIDR string, healthzPort int, nodeName string) *service {
 	return &service{
 		ctx:                 ctx,
 		cancel:              cancel,
@@ -27,5 +28,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, kubeproxyReady c
 		containerMode:       containerMode,
 		podCIDR:             podCIDR,
 		healthzPort:         healthzPort,
+		nodeName:            nodeName,
 	}
 }
