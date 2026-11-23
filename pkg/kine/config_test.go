@@ -1,14 +1,31 @@
 package kine
 
 import (
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/k3s-io/kine/pkg/app"
 )
 
+// unsetKineEnv unsets the environment variables kine's CLI flags read, so
+// app.Config returns kine's defaults. An empty value still counts as set.
+func unsetKineEnv(t *testing.T) {
+	for _, kv := range os.Environ() {
+		name, value, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(name, "KINE_") || strings.HasPrefix(name, "AWS_") {
+			t.Setenv(name, value) // restores the variable after the test
+			if err := os.Unsetenv(name); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
 func TestGeneratedConfigKeepsKineDefaults(t *testing.T) {
+	unsetKineEnv(t)
 	s := &service{databaseDir: t.TempDir(), listener: "127.0.0.1:2379"}
 	config := s.generateKineConfig()
 
@@ -29,6 +46,7 @@ func TestGeneratedConfigKeepsKineDefaults(t *testing.T) {
 }
 
 func TestGeneratedConfigOnlyOverridesEndpointAndCompaction(t *testing.T) {
+	unsetKineEnv(t)
 	s := &service{databaseDir: t.TempDir(), listener: "127.0.0.1:2379"}
 	config := s.generateKineConfig()
 
