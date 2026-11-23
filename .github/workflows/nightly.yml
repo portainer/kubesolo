@@ -39,14 +39,28 @@ jobs:
           registry: docker.io
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+      - name: "[preparation] build loadgen"
+        run: go build -o ./dist/loadgen ./test/perf/loadgen
       - name: "[execution] performance baseline"
-        run: IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/perf/bench.sh
+        run: IMAGE=portainerci/kubesolo:develop PROFILE_DIR=test/perf/profiles/bench KUBESOLOCTL=./dist/kubesoloctl test/perf/bench.sh
+      # Each suite boots and tears down its own instance, so a failure in one
+      # does not hide the results of the next.
+      - name: "[execution] control-plane load"
+        if: ${{ !cancelled() }}
+        run: IMAGE=portainerci/kubesolo:develop PROFILE_DIR=test/perf/profiles/load KUBESOLOCTL=./dist/kubesoloctl LOADGEN=./dist/loadgen test/perf/load.sh
+      - name: "[execution] datastore scale"
+        if: ${{ !cancelled() }}
+        run: IMAGE=portainerci/kubesolo:develop PROFILE_DIR=test/perf/profiles/scale KUBESOLOCTL=./dist/kubesoloctl LOADGEN=./dist/loadgen test/perf/scale.sh
       - name: "[reporting] upload result"
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: perf-${{ matrix.arch }}
-          path: test/perf/result.${{ matrix.arch }}.json
+          path: |
+            test/perf/result.${{ matrix.arch }}.json
+            test/perf/load.${{ matrix.arch }}.json
+            test/perf/scale.${{ matrix.arch }}.json
+            test/perf/profiles/
           retention-days: 90
           if-no-files-found: ignore
 
@@ -84,6 +98,16 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
       - name: "[execution] soak"
         run: IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/e2e/soak.sh
+      - name: "[reporting] upload samples"
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: soak-${{ matrix.arch }}
+          path: |
+            test/e2e/soak-samples.csv
+            test/e2e/profiles/
+          retention-days: 90
+          if-no-files-found: ignore
 
   # Conformance-lite: focused single-node-safe subset of upstream e2e via Sonobuoy.
   # amd64 only — the upstream test binary is heavy and one arch is enough signal.

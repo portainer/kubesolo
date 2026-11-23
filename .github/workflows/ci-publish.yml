@@ -143,3 +143,48 @@ jobs:
           chmod +x /usr/local/bin/kubectl
       - name: "[execution] run e2e smoke suite"
         run: IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.publish-images.outputs.tag }} KUBESOLOCTL=./dist/kubesoloctl test/e2e/run.sh
+
+  # Footprint ceilings and a short control-plane load on every PR image. The
+  # ceilings catch busy loops and memory jumps that functional e2e cannot see,
+  # such as a dependency bump that leaves kine's poll loop spinning (#254).
+  perf-amd64:
+    name: perf (amd64)
+    needs: [publish-images]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: "[preparation] checkout the tested commit"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl and loadgen"
+        run: |
+          make build-kubesoloctl GOOS=linux GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+          go build -o ./dist/loadgen ./test/perf/loadgen
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[execution] idle footprint"
+        run: DENSITY_MAX=0 IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.publish-images.outputs.tag }} PROFILE_DIR=test/perf/profiles/bench KUBESOLOCTL=./dist/kubesoloctl test/perf/bench.sh
+      - name: "[execution] short control-plane load"
+        if: ${{ !cancelled() }}
+        run: |
+          LOAD_DURATION=30s POD_WAVES=1 RECOVERY_SETTLE=60 \
+            IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.publish-images.outputs.tag }} \
+            PROFILE_DIR=test/perf/profiles/load KUBESOLOCTL=./dist/kubesoloctl LOADGEN=./dist/loadgen test/perf/load.sh
+      - name: "[reporting] upload result"
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: perf-pr-amd64
+          path: |
+            test/perf/result.amd64.json
+            test/perf/load.amd64.json
+            test/perf/profiles/
+          retention-days: 14
+          if-no-files-found: ignore

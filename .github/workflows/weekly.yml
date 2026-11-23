@@ -1,0 +1,97 @@
+name: weekly
+
+# Suites too long or too slow for the nightly run, against the latest develop
+# image: a multi-hour soak that catches slow leaks, and the load test inside a
+# 512 MiB / 1 CPU container that models the smallest supported edge device.
+on:
+  schedule:
+    - cron: "0 2 * * 6" # 02:00 UTC Saturday
+  workflow_dispatch:
+
+jobs:
+  long-soak:
+    name: long soak (amd64)
+    runs-on: ubuntu-24.04
+    # GitHub-hosted jobs stop at 6h; the soak runs 5h plus boot and teardown.
+    timeout-minutes: 340
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl"
+        run: make build-kubesoloctl GOOS=linux GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[preparation] log in to docker hub"
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+      - name: "[execution] long soak"
+        run: SOAK_DURATION=18000 IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl test/e2e/soak.sh
+      - name: "[reporting] upload samples"
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: long-soak-amd64
+          path: |
+            test/e2e/soak-samples.csv
+            test/e2e/profiles/
+          retention-days: 90
+          if-no-files-found: ignore
+
+  constrained:
+    name: 512MiB load (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl and loadgen"
+        run: |
+          make build-kubesoloctl GOOS=linux GOARCH=${{ matrix.arch }} KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+          go build -o ./dist/loadgen ./test/perf/loadgen
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.6/bin/linux/${{ matrix.arch }}/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[preparation] log in to docker hub"
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+      - name: "[execution] load test at 512MiB / 1 CPU"
+        run: |
+          KS_MEMORY=512m KS_CPUS=1 POD_REPLICAS=10 \
+            IMAGE=portainerci/kubesolo:develop KUBESOLOCTL=./dist/kubesoloctl LOADGEN=./dist/loadgen \
+            test/perf/load.sh
+      - name: "[reporting] upload result"
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: constrained-${{ matrix.arch }}
+          path: |
+            test/perf/load.${{ matrix.arch }}.json
+            test/perf/profiles/
+          retention-days: 90
+          if-no-files-found: ignore
