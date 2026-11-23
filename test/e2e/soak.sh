@@ -3,14 +3,20 @@
 # repeatedly, asserting the cluster stays healthy across iterations:
 #   - the KubeSolo container never restarts,
 #   - no kube-system pod is crash-looping,
-#   - idle memory does not grow unboundedly (a leak detector).
+#   - idle memory and goroutines do not grow unboundedly (leak detectors),
+#   - the node goes back to idle CPU once the last iteration ends.
 #
 # Standalone nightly entrypoint (boots and tears down itself).
 #
 # Tunables:
 #   SOAK_ITERATIONS    manifest-tier loops          (default: 5)
-#   SOAK_RSS_GROWTH    allowed idle RSS growth, MiB (default: 64)
+#   SOAK_DURATION      loop for this many seconds instead of SOAK_ITERATIONS
+#   SOAK_RSS_GROWTH    allowed idle RSS growth after iteration 1, MiB (default: 64)
+#   SOAK_GOROUTINE_GROWTH  allowed goroutine growth after iteration 1 (default: 200)
 #   SOAK_MAX_RESTARTS  allowed kube-system restarts (default: 0)
+#   SOAK_SAMPLES       per-iteration samples CSV    (default: test/e2e/soak-samples.csv)
+#   IDLE_CPU_MAX       idle CPU ceiling at the end, cores (default: 0.25)
+#   PROFILE_DIR        where profiles are saved when a gate fails (default: test/e2e/profiles)
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
@@ -19,6 +25,11 @@ source "$HERE/lib.sh"
 SOAK_ITERATIONS="${SOAK_ITERATIONS:-5}"
 SOAK_RSS_GROWTH="${SOAK_RSS_GROWTH:-64}"
 SOAK_MAX_RESTARTS="${SOAK_MAX_RESTARTS:-0}"
+SOAK_DURATION="${SOAK_DURATION:-}"
+SOAK_GOROUTINE_GROWTH="${SOAK_GOROUTINE_GROWTH:-200}"
+SOAK_SAMPLES="${SOAK_SAMPLES:-$HERE/soak-samples.csv}"
+IDLE_CPU_MAX="${IDLE_CPU_MAX:-0.25}"
+PROFILE_DIR="${PROFILE_DIR:-$HERE/profiles}"
 
 trap 'bash "$HERE/teardown.sh"' EXIT
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
@@ -37,11 +48,24 @@ system_pod_restarts() {
 }
 
 rss0="$(settle_rss)"
+goroutines0="$(goroutine_count)"
 restarts0="$(container_restarts)"
-log "baseline: idle RSS ${rss0} MiB, container restarts ${restarts0}"
+log "baseline: idle RSS ${rss0} MiB, ${goroutines0} goroutines, container restarts ${restarts0}"
+echo "iteration,elapsed_s,idle_rss_mib,goroutines,cpu_cores" > "$SOAK_SAMPLES"
+echo "0,0,$rss0,$goroutines0," >> "$SOAK_SAMPLES"
 
-for i in $(seq 1 "$SOAK_ITERATIONS"); do
-  log "── soak iteration $i/$SOAK_ITERATIONS ──"
+# more_iterations decides whether to run iteration $1: by wall clock when
+# SOAK_DURATION is set (the weekly long soak), else by count.
+SOAK_START=$SECONDS
+more_iterations() {
+  if [ -n "$SOAK_DURATION" ]; then [ $((SECONDS - SOAK_START)) -lt "$SOAK_DURATION" ]
+  else [ "$1" -le "$SOAK_ITERATIONS" ]; fi
+}
+
+i=0
+while more_iterations $((i + 1)); do
+  i=$((i + 1))
+  log "── soak iteration $i ──"
   bash "$HERE/manifests.sh" || { dump_diagnostics; fail "manifest tiers failed on iteration $i"; }
 
   cr="$(container_restarts)"
@@ -55,27 +79,49 @@ for i in $(seq 1 "$SOAK_ITERATIONS"); do
   fi
 
   rss="$(settle_rss)"
-  log "iteration $i: idle RSS ${rss} MiB (Δ from baseline $((rss - rss0)) MiB)"
+  goroutines="$(goroutine_count)"
+  cpu="$(measure_cpu_cores 20)"
+  echo "$i,$((SECONDS - SOAK_START)),$rss,$goroutines,$cpu" >> "$SOAK_SAMPLES"
+  log "iteration $i: idle RSS ${rss} MiB (Δ $((rss - rss0))), ${goroutines} goroutines (Δ $((goroutines - goroutines0))), ${cpu} cores"
+  # The first pass warms caches and pulls images (~70 MiB on a 4 vCPU VM), so
+  # growth is measured from the end of it: a leak keeps growing after warm-up.
+  if [ "$i" -eq 1 ]; then rss_warm="$rss"; goroutines_warm="$goroutines"; fi
 done
 
 rss_final="$(settle_rss)"
-growth=$((rss_final - rss0))
-log "idle RSS: ${rss0} → ${rss_final} MiB over $SOAK_ITERATIONS iterations (Δ ${growth} MiB)"
+growth=$((rss_final - rss_warm))
+goroutines_final="$(goroutine_count)"
+goroutine_growth=$((goroutines_final - goroutines_warm))
+cpu_final="$(measure_cpu_cores 60)"
+log "idle RSS: ${rss0} cold, ${rss_warm} after iteration 1, ${rss_final} MiB at the end of $i iterations (Δ since warm-up ${growth} MiB)"
+log "goroutines: ${goroutines_warm} after iteration 1 → ${goroutines_final} (Δ ${goroutine_growth}); idle CPU ${cpu_final} cores"
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
-    echo "### KubeSolo soak ($(uname -m), ${SOAK_ITERATIONS} iterations)"
+    echo "### KubeSolo soak ($(uname -m), ${i} iterations)"
     echo ""
     echo "| metric | value |"
     echo "|--------|-------|"
-    echo "| idle RSS start | ${rss0} MiB |"
+    echo "| idle RSS cold | ${rss0} MiB |"
+    echo "| idle RSS after iteration 1 | ${rss_warm} MiB |"
     echo "| idle RSS end | ${rss_final} MiB |"
-    echo "| idle RSS growth | ${growth} MiB (limit ${SOAK_RSS_GROWTH}) |"
+    echo "| idle RSS growth since warm-up | ${growth} MiB (limit ${SOAK_RSS_GROWTH}) |"
+    echo "| goroutine growth | ${goroutine_growth} (limit ${SOAK_GOROUTINE_GROWTH}) |"
+    echo "| idle CPU at end | ${cpu_final} cores (limit ${IDLE_CPU_MAX}) |"
     echo "| container restarts | $(container_restarts) |"
   } >> "$GITHUB_STEP_SUMMARY"
 fi
 
 if [ "$growth" -gt "$SOAK_RSS_GROWTH" ]; then
+  capture_profiles "$PROFILE_DIR"
   fail "idle RSS grew ${growth} MiB (> ${SOAK_RSS_GROWTH} MiB) — possible leak"
 fi
-ok "soak passed: stable across $SOAK_ITERATIONS iterations, RSS growth ${growth} MiB"
+if [ "$goroutine_growth" -gt "$SOAK_GOROUTINE_GROWTH" ]; then
+  capture_profiles "$PROFILE_DIR"
+  fail "goroutines grew by ${goroutine_growth} (> ${SOAK_GOROUTINE_GROWTH}) — possible leak"
+fi
+if awk -v c="$cpu_final" -v m="$IDLE_CPU_MAX" 'BEGIN{exit !(c > m)}'; then
+  capture_profiles "$PROFILE_DIR"
+  fail "idle CPU ${cpu_final} cores after soak (> ${IDLE_CPU_MAX})"
+fi
+ok "soak passed: stable across $i iterations, RSS growth ${growth} MiB, goroutine growth ${goroutine_growth}"

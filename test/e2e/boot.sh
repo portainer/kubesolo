@@ -30,11 +30,25 @@ if [ -n "${E2E_AUTH_DIR:-}" ]; then
 fi
 "$KUBESOLOCTL" "${install_args[@]}"
 
+# Optional resource limits, to model a constrained edge device (e.g. KS_MEMORY=512m
+# KS_CPUS=1). kubesoloctl has no limit flags, so apply them to the container and
+# restart it: the boot this script then waits on runs entirely under the limits.
+# Swap is capped at the memory limit so the container cannot hide in host swap.
+if [ -n "${KS_MEMORY:-}" ] || [ -n "${KS_CPUS:-}" ]; then
+  update_args=()
+  [ -n "${KS_MEMORY:-}" ] && update_args+=(--memory "$KS_MEMORY" --memory-swap "$KS_MEMORY")
+  [ -n "${KS_CPUS:-}" ] && update_args+=(--cpus "$KS_CPUS")
+  log "constraining $(container_name): ${update_args[*]}"
+  docker update "${update_args[@]}" "$(container_name)" >/dev/null
+  docker restart "$(container_name)" >/dev/null
+fi
+
 # install merges the kubeconfig into ~/.kube/config; make sure we target it.
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 _resolve_ctx
 log "using kube context: $KS_CONTEXT"
-kc cluster-info >/dev/null 2>&1 \
+api_up() { kc cluster-info >/dev/null 2>&1; }
+wait_for "$READY_TIMEOUT" 3 "API server" api_up \
   || { dump_diagnostics; fail "kube context '$KS_CONTEXT' is not reachable after install"; }
 ok "API server reachable"
 

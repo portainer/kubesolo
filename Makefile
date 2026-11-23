@@ -275,8 +275,8 @@ load: build-kubesoloctl
 scale: build-kubesoloctl
 	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/scale.sh
 
-# soak loops the manifest tiers and watches for container restarts and idle-RSS
-# growth (a leak detector). Used by the nightly workflow.
+# soak loops the manifest tiers and watches for container restarts, idle-RSS and
+# goroutine growth (leak detectors). Used by the nightly and weekly workflows.
 .PHONY: soak
 soak: build-kubesoloctl
 	IMAGE=$(E2E_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/e2e/soak.sh
