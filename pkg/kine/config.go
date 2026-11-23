@@ -15,6 +15,7 @@ import (
 // (poll batch size, compaction retention, emulated etcd version, ...) are picked up on version bumps
 // connectionPoolConfig sets the connection pool config is customized to 3 idle connections and 5 open connections
 // notifyInterval sets the notify interval to 15 seconds
+// compaction is left to the apiserver: kine ignores its compact requests while kine's own compactor runs
 // the DSN params come from kine's own defaults so that upstream tuning
 // (statement cache size, synchronous mode, ...) is picked up on version bumps
 func (s *service) generateKineConfig() endpoint.Config {
@@ -27,7 +28,6 @@ func (s *service) generateKineConfig() endpoint.Config {
 		MaxLifetime: 60 * time.Second,
 	}
 	config.NotifyInterval = 15 * time.Second
-	config.CompactInterval = 5 * time.Minute
 	config.CompactTimeout = 60 * time.Second
 	return config
 }

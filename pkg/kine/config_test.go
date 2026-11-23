@@ -38,8 +38,10 @@ func TestGeneratedConfigKeepsOverrides(t *testing.T) {
 	if config.NotifyInterval != 15*time.Second {
 		t.Errorf("NotifyInterval = %v, want 15s", config.NotifyInterval)
 	}
-	if config.CompactInterval != 5*time.Minute {
-		t.Errorf("CompactInterval = %v, want 5m", config.CompactInterval)
+	// kine only honours the apiserver's compaction requests when its own
+	// compactor is off.
+	if config.CompactInterval != 0 {
+		t.Errorf("CompactInterval = %v, want 0", config.CompactInterval)
 	}
 	if config.CompactTimeout != 60*time.Second {
 		t.Errorf("CompactTimeout = %v, want 60s", config.CompactTimeout)
