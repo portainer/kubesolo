@@ -1,8 +1,11 @@
 package kine
 
 import (
+	"reflect"
 	"testing"
 	"time"
+
+	"github.com/k3s-io/kine/pkg/app"
 )
 
 func TestGeneratedConfigKeepsKineDefaults(t *testing.T) {
@@ -25,19 +28,10 @@ func TestGeneratedConfigKeepsKineDefaults(t *testing.T) {
 	}
 }
 
-func TestGeneratedConfigKeepsOverrides(t *testing.T) {
+func TestGeneratedConfigOnlyOverridesEndpointAndCompaction(t *testing.T) {
 	s := &service{databaseDir: t.TempDir(), listener: "127.0.0.1:2379"}
 	config := s.generateKineConfig()
 
-	if config.Listener != s.listener {
-		t.Errorf("Listener = %q, want %q", config.Listener, s.listener)
-	}
-	if pool := config.ConnectionPoolConfig; pool.MaxIdle != 3 || pool.MaxOpen != 5 || pool.MaxLifetime != 60*time.Second {
-		t.Errorf("ConnectionPoolConfig = %+v, want MaxIdle 3, MaxOpen 5, MaxLifetime 60s", pool)
-	}
-	if config.NotifyInterval != 15*time.Second {
-		t.Errorf("NotifyInterval = %v, want 15s", config.NotifyInterval)
-	}
 	// kine only honours the apiserver's compaction requests when its own
 	// compactor is off.
 	if config.CompactInterval != 0 {
@@ -45,5 +39,12 @@ func TestGeneratedConfigKeepsOverrides(t *testing.T) {
 	}
 	if config.CompactTimeout != 60*time.Second {
 		t.Errorf("CompactTimeout = %v, want 60s", config.CompactTimeout)
+	}
+
+	// Every other field must be kine's default.
+	want := app.Config(nil)
+	config.Endpoint, config.Listener, config.CompactTimeout = want.Endpoint, want.Listener, want.CompactTimeout
+	if !reflect.DeepEqual(config, want) {
+		t.Errorf("config differs from kine's defaults:\n got  %+v\n want %+v", config, want)
 	}
 }
