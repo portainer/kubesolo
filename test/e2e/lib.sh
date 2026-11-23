@@ -110,6 +110,12 @@ api_request_total() {
   kc get --raw /metrics 2>/dev/null | awk '/^apiserver_request_total\{/ {n += $NF} END {printf "%d", n}'
 }
 
+# goroutine_count reports the goroutines in the kubesolo process. The API server
+# serves pprof for the whole process, since every component runs inside it.
+goroutine_count() {
+  kc get --raw '/debug/pprof/goroutine?debug=1' 2>/dev/null | awk 'NR == 1 {print $NF}'
+}
+
 # capture_profiles <dir> saves a 30s CPU profile, a heap profile and a goroutine
 # dump of the kubesolo process, for diagnosing a failed performance gate.
 capture_profiles() {

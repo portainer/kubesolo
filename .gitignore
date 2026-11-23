@@ -12,5 +12,6 @@ coverage.html
 # perf run output — committed baselines (baseline.*.json) are NOT ignored
 /test/perf/result.*.json
 /test/perf/profiles/
+/test/perf/load.*.json
 # sonobuoy retrieve tarballs (e.g. 20260629_sonobuoy_<uuid>.tar.gz)
 *sonobuoy*.tar.gz

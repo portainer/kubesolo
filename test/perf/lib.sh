@@ -30,3 +30,18 @@ finish_checks() {
   fi
   ok "$1 passed"
 }
+
+# ensure_loadgen builds the load generator unless LOADGEN already points at one.
+ensure_loadgen() {
+  [ -n "${LOADGEN:-}" ] && return
+  require_cmd go
+  LOADGEN="$(mktemp -d)/loadgen"
+  log "building loadgen"
+  (cd "$PERF_DIR/loadgen" && go build -o "$LOADGEN" .)
+}
+
+# lg <scenario> [flags] runs loadgen against the instance in its own namespace.
+lg() {
+  _resolve_ctx
+  "$LOADGEN" "$1" -kubeconfig "$KUBECONFIG" -context "$KS_CONTEXT" -namespace "$NS" "${@:2}"
+}

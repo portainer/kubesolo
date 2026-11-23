@@ -265,6 +265,12 @@ PERF_IMAGE ?= portainer/kubesolo:dev
 bench: build-kubesoloctl
 	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/bench.sh
 
+# load drives API churn, a watch storm and pod churn, then checks the node goes
+# back to idle.
+.PHONY: load
+load: build-kubesoloctl
+	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/load.sh
+
 # soak loops the manifest tiers and watches for container restarts and idle-RSS
 # growth (a leak detector). Used by the nightly workflow.
 .PHONY: soak
