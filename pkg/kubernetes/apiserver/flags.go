@@ -24,6 +24,7 @@ func (s *service) configureAPIServerFlags(command *cobra.Command) error {
 	_ = flags.Set("client-ca-file", s.caFile)
 	_ = flags.Set("kubelet-client-certificate", s.apiServerCertFile)
 	_ = flags.Set("kubelet-client-key", s.apiServerKeyFile)
+	_ = flags.Set("kubelet-preferred-address-types", "InternalIP,ExternalIP,Hostname")
 	_ = flags.Set("service-account-issuer", "kubernetes.default.svc")
 	_ = flags.Set("service-account-signing-key-file", s.serviceAccountKeyFile)
 	_ = flags.Set("service-account-key-file", s.serviceAccountKeyFile)
