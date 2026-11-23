@@ -88,6 +88,39 @@ sample_rss_mib() {
   to_mib "$raw"
 }
 
+# cpu_usage_usec reports the container cgroup's cumulative CPU time in µs. On
+# cgroup v2 KubeSolo nests itself and its pods under the container's cgroup, so
+# this covers the whole node, not only the kubesolo process.
+cpu_usage_usec() {
+  docker exec "$(container_name)" cat /sys/fs/cgroup/cpu.stat | awk '$1 == "usage_usec" {print $2}'
+}
+
+# measure_cpu_cores <seconds> reports the average cores the node used over the
+# window, e.g. 0.031.
+measure_cpu_cores() {
+  local secs="$1" start end
+  start="$(cpu_usage_usec)"
+  sleep "$secs"
+  end="$(cpu_usage_usec)"
+  awk -v a="$start" -v b="$end" -v s="$secs" 'BEGIN{printf "%.3f", (b - a) / 1e6 / s}'
+}
+
+# api_request_total reports the API server's cumulative request count.
+api_request_total() {
+  kc get --raw /metrics 2>/dev/null | awk '/^apiserver_request_total\{/ {n += $NF} END {printf "%d", n}'
+}
+
+# capture_profiles <dir> saves a 30s CPU profile, a heap profile and a goroutine
+# dump of the kubesolo process, for diagnosing a failed performance gate.
+capture_profiles() {
+  local dir="$1"
+  mkdir -p "$dir"
+  log "capturing profiles into $dir"
+  kc get --raw '/debug/pprof/profile?seconds=30' > "$dir/cpu.pprof" 2>/dev/null || true
+  kc get --raw '/debug/pprof/heap' > "$dir/heap.pprof" 2>/dev/null || true
+  kc get --raw '/debug/pprof/goroutine?debug=1' > "$dir/goroutines.txt" 2>/dev/null || true
+}
+
 # dump_diagnostics prints everything useful for debugging a failed run. Safe to
 # call even when the cluster never came up.
 dump_diagnostics() {
