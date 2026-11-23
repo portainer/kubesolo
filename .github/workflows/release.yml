@@ -38,10 +38,55 @@ jobs:
           done
           exit 1
 
+  # The release is cut from develop, so gate it on the develop image: idle
+  # footprint ceilings plus the control-plane load, before anything is published.
+  perf-gate:
+    name: perf gate (amd64)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] set up golang"
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: "[preparation] build kubesoloctl and loadgen"
+        run: |
+          make build-kubesoloctl GOOS=linux GOARCH=amd64 KUBESOLOCTL_OUTPUT=./dist/kubesoloctl
+          go build -o ./dist/loadgen ./test/perf/loadgen
+      - name: "[preparation] install kubectl"
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+      - name: "[preparation] log in to docker hub"
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+      - name: "[execution] idle footprint"
+        run: IMAGE=portainerci/kubesolo:develop PROFILE_DIR=test/perf/profiles/bench KUBESOLOCTL=./dist/kubesoloctl test/perf/bench.sh
+      - name: "[execution] control-plane load"
+        run: IMAGE=portainerci/kubesolo:develop PROFILE_DIR=test/perf/profiles/load KUBESOLOCTL=./dist/kubesoloctl LOADGEN=./dist/loadgen test/perf/load.sh
+      - name: "[reporting] upload result"
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: perf-release-amd64
+          path: |
+            test/perf/result.amd64.json
+            test/perf/load.amd64.json
+            test/perf/profiles/
+          retention-days: 90
+          if-no-files-found: ignore
+
   create-release:
     name: create-release
     runs-on: ubuntu-latest
-    needs: [go-mod-cache]
+    needs: [go-mod-cache, perf-gate]
     steps:
       - name: "[execution] create a pre-release"
         run: |

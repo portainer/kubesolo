@@ -265,8 +265,18 @@ PERF_IMAGE ?= portainer/kubesolo:dev
 bench: build-kubesoloctl
 	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/bench.sh
 
-# soak loops the manifest tiers and watches for container restarts and idle-RSS
-# growth (a leak detector). Used by the nightly workflow.
+# load drives API churn, a watch storm and pod churn, then checks the node goes
+# back to idle. scale grows the datastore and checks idle, LIST and restart.
+.PHONY: load
+load: build-kubesoloctl
+	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/load.sh
+
+.PHONY: scale
+scale: build-kubesoloctl
+	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/scale.sh
+
+# soak loops the manifest tiers and watches for container restarts, idle-RSS and
+# goroutine growth (leak detectors). Used by the nightly and weekly workflows.
 .PHONY: soak
 soak: build-kubesoloctl
 	IMAGE=$(E2E_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/e2e/soak.sh

@@ -13,18 +13,24 @@
 #   DENSITY_MAX    max pods to attempt      (default: 50; 0 disables the density probe)
 #   DENSITY_STEP   density scale increment  (default: 10)
 #   SETTLE         idle settle seconds before RSS sample (default: 25)
+#   CPU_WINDOW     idle CPU sampling window, seconds (default: 60)
+#   IDLE_CPU_MAX   absolute ceiling for idle CPU, cores (default: 0.25)
+#   IDLE_RSS_MAX   absolute ceiling for idle RSS, MiB  (default: 768)
+#   PROFILE_DIR    where profiles are saved when a gate fails (default: test/perf/profiles)
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../e2e/lib.sh
-source "$HERE/../e2e/lib.sh"
+# shellcheck source=lib.sh
+source "$HERE/lib.sh"
 
-ARCH="$(uname -m)"; case "$ARCH" in x86_64) ARCH=amd64 ;; aarch64) ARCH=arm64 ;; esac
 OUT="${OUT:-$HERE/result.$ARCH.json}"
 BASELINE="${BASELINE:-$HERE/baseline.$ARCH.json}"
 TOLERANCE="${TOLERANCE:-0.20}"
 DENSITY_MAX="${DENSITY_MAX:-50}"
 DENSITY_STEP="${DENSITY_STEP:-10}"
 SETTLE="${SETTLE:-25}"
+CPU_WINDOW="${CPU_WINDOW:-60}"
+IDLE_CPU_MAX="${IDLE_CPU_MAX:-0.25}"
+IDLE_RSS_MAX="${IDLE_RSS_MAX:-768}"
 
 [ -n "$IMAGE" ] || fail "IMAGE is required"
 require_cmd docker
@@ -60,6 +66,14 @@ log "settling ${SETTLE}s before sampling idle memory"
 sleep "$SETTLE"
 idle_rss_mib="$(sample_rss_mib)"
 
+# Idle CPU catches busy loops that leave memory and latency untouched, such as
+# kine's poll loop spinning without waiting (issue #254: ~1.3 cores vs ~0.02).
+log "sampling idle CPU over ${CPU_WINDOW}s"
+api0="$(api_request_total)"
+idle_cpu_cores="$(measure_cpu_cores "$CPU_WINDOW")"
+api1="$(api_request_total)"
+idle_api_rps="$(awk -v a="$api0" -v b="$api1" -v s="$CPU_WINDOW" 'BEGIN{printf "%.1f", (b - a) / s}')"
+
 image_bytes="$(docker image inspect "$IMAGE" -f '{{.Size}}' 2>/dev/null || echo 0)"
 image_size_mib=$(( image_bytes / 1024 / 1024 ))
 
@@ -91,6 +105,8 @@ cat > "$OUT" <<JSON
   "boot_to_node_ready_s": $boot_to_node_ready,
   "boot_to_first_pod_s": $boot_to_first_pod,
   "idle_rss_mib": $idle_rss_mib,
+  "idle_cpu_cores": $idle_cpu_cores,
+  "idle_api_rps": $idle_api_rps,
   "image_size_mib": $image_size_mib,
   "max_pods": $max_pods
 }
@@ -108,12 +124,22 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     echo "| boot → node Ready | ${boot_to_node_ready}s |"
     echo "| boot → first pod Running | ${boot_to_first_pod}s |"
     echo "| idle RSS | ${idle_rss_mib} MiB |"
+    echo "| idle CPU | ${idle_cpu_cores} cores |"
+    echo "| idle API requests | ${idle_api_rps}/s |"
     echo "| image size | ${image_size_mib} MiB |"
     echo "| max pods scheduled | ${max_pods} |"
   } >> "$GITHUB_STEP_SUMMARY"
 fi
 
 printf '\n%s\n' "$(cat "$OUT")"
+
+# ── Absolute ceilings (no baseline needed) ────────────────────────────────────
+# Healthy and broken are an order of magnitude apart here, so a fixed ceiling
+# cannot flake on runner variance and needs no committed baseline.
+log "checking absolute ceilings"
+check idle_cpu_cores "$idle_cpu_cores" "$IDLE_CPU_MAX"
+check idle_rss_mib "$idle_rss_mib" "$IDLE_RSS_MAX"
+finish_checks "idle footprint ceilings"
 
 # ── Regression gate (relative, vs committed baseline) ─────────────────────────
 if [ ! -f "$BASELINE" ]; then
@@ -141,5 +167,5 @@ gate boot_to_first_pod_s "$boot_to_first_pod"
 gate idle_rss_mib "$idle_rss_mib"
 gate image_size_mib "$image_size_mib"
 
-[ "$regressed" -eq 0 ] || fail "performance regressed beyond tolerance"
+[ "$regressed" -eq 0 ] || { capture_profiles "$PROFILE_DIR"; fail "performance regressed beyond tolerance"; }
 ok "within performance tolerances"

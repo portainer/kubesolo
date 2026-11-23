@@ -14,7 +14,7 @@ driven by `kubesoloctl` so it exercises the same install path users do.
 | `manifests.sh` | Tiered manifest deployment suite (see below) |
 | `teardown.sh` | `kubesoloctl uninstall --purge` (+ `docker rm -f` fallback); best-effort |
 | `run.sh` | Per-PR entrypoint: boot → smoke → manifests → authentication, always tears down via an `EXIT` trap |
-| `soak.sh` | Nightly stability entrypoint: loop the tiers, watch container restarts + idle-RSS growth (leak detector) |
+| `soak.sh` | Nightly stability entrypoint: loop the tiers, watch container restarts, idle-RSS and goroutine growth (leak detectors) and idle CPU at the end; `SOAK_DURATION` runs by wall clock (weekly long soak) |
 | `conformance.sh` | Nightly entrypoint: focused single-node-safe upstream `[Conformance]` subset via Sonobuoy |
 | `restart.sh` | `POST /api/v1/restart` on a **host** install (not container mode), through the agent's socket from a pod: a change is applied with every pod kept; a bad agent image and a configuration KubeSolo cannot run on are reverted; set-once agent settings are refused; agent settings from the environment and an agent already crash-looping do not fail it. Runs as root, as its own systemd unit, and puts the configuration back when it ends |
 | `authentication.sh` | Called by `run.sh` after smoke and manifests. JWTs are rejected until an authentication file is set; once it is, tokens map to users and tokens for another audience are rejected. A replaced file loads without a restart, an invalid one is refused while the last valid one stays in use, and correcting it recovers (upstream's reload cases) |
@@ -85,6 +85,7 @@ seconds by default).
 | `KS_NAME` | `kubesolo` | Instance name / kube context |
 | `READY_TIMEOUT` | `240` | Seconds to wait for readiness gates |
 | `RELOAD_TIMEOUT` | `180` | Seconds to wait for an authentication file reload |
+| `KS_MEMORY` / `KS_CPUS` | unset | Container memory / CPU limits applied by `boot.sh` before the cluster boots, e.g. `512m` / `1` for the smallest edge device |
 
 ## Why this leans on kubesoloctl (the seam)
 
