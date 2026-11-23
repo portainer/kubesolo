@@ -26,6 +26,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -457,6 +458,8 @@ type fillResult struct {
 
 // fill creates objects ConfigMaps, then updates them round-robin until the
 // total number of writes reaches revisions, growing kine's revision history.
+// ConfigMaps left by an earlier fill are updated instead, so a second fill
+// writes the same amount of history.
 func fill(ctx context.Context, cs kubernetes.Interface, ns string, workers, objects, revisions int, size int) fillResult {
 	cms := cs.CoreV1().ConfigMaps(ns)
 	start := time.Now()
@@ -476,7 +479,8 @@ func fill(ctx context.Context, cs kubernetes.Interface, ns string, workers, obje
 				var err error
 				if i < int64(objects) {
 					_, err = cms.Create(ctx, cm, metav1.CreateOptions{})
-				} else {
+				}
+				if i >= int64(objects) || apierrors.IsAlreadyExists(err) {
 					cm.Data["i"] = strconv.FormatInt(i, 10)
 					_, err = cms.Update(ctx, cm, metav1.UpdateOptions{})
 				}

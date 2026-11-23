@@ -10,7 +10,7 @@ profile, a heap profile and a goroutine dump of the still-running node to
 |--------|---------------------|-------|
 | `bench.sh` | Does an idle node boot fast and stay small and quiet? | `make bench` |
 | `load.sh` | Does the control plane hold up under write, watch and pod churn, and go back to idle afterwards? | `make load` |
-| `scale.sh` | Does a node with a large datastore history still idle, LIST and restart in time? | `make scale` |
+| `scale.sh` | Does a node with a large datastore history still idle, LIST and restart in time, and is that history compacted so the database stops growing? | `make scale` |
 
 All take `IMAGE` (`PERF_IMAGE` for make) and `KUBESOLOCTL`. `load.sh` and
 `scale.sh` drive load with `loadgen/` (client-go, no extra binaries); they build
@@ -46,6 +46,8 @@ a healthy node at a few hundredths of a core.
 | scale | idle cores with the large database, and after restarting on it | 0.25 |
 | scale | `LIST_P99_MAX_MS` (every object) | 2000 |
 | scale | `RESTART_READY_MAX_S` | 120 |
+| scale | `COMPACT_TIMEOUT`: seconds after each fill for live data to drop under `COMPACTED_LIVE_MAX_MIB` (64) | 900 |
+| scale | `DB_GROWTH_MAX_PCT`: database and WAL file growth over a second, identical fill | 25 |
 
 `bench.sh` additionally gates boot times, idle RSS and image size on *relative*
 regression against a committed `baseline.<arch>.json` (`TOLERANCE`, default
@@ -77,7 +79,17 @@ one object per scenario — `churn` (ops/s, p50/p99/max ms, errors), `watch`
 → Ready p50/p99) — each with the node's `cpu_cores` during the scenario.
 
 `scale.<arch>.json`: fill rate, database size after fill and after restart,
-LIST p50/p99, idle CPU and RSS with the large database, restart → node Ready.
+LIST p50/p99, idle CPU and RSS with the large database, restart → node Ready,
+and `compaction`: live data (`apiserver_storage_size_bytes`, the database less
+its free pages) after the fill and once compacted, how long each compaction
+took, and the database and WAL file sizes after each fill.
+
+The API server compacts every 5 minutes, to the revision it saw at the previous
+tick, so a fill is compacted 5 to 10 minutes after it lands. SQLite never
+shrinks its files while running, so the check is that the second fill reuses
+the pages the first fill's compacted revisions freed. Without compaction the
+database file roughly doubles. The WAL keeps its high-water mark too: kine's
+post-compaction checkpoint is `FULL`, not `TRUNCATE`.
 
 ## Establishing a bench baseline
 
