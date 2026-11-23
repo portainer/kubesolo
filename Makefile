@@ -266,10 +266,14 @@ bench: build-kubesoloctl
 	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/bench.sh
 
 # load drives API churn, a watch storm and pod churn, then checks the node goes
-# back to idle.
+# back to idle. scale grows the datastore and checks idle, LIST and restart.
 .PHONY: load
 load: build-kubesoloctl
 	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/load.sh
+
+.PHONY: scale
+scale: build-kubesoloctl
+	IMAGE=$(PERF_IMAGE) KUBESOLOCTL=$(KUBESOLOCTL_OUTPUT) test/perf/scale.sh
 
 # soak loops the manifest tiers and watches for container restarts and idle-RSS
 # growth (a leak detector). Used by the nightly workflow.
