@@ -418,6 +418,109 @@ stop_workloads() {
     for pid in $alive; do kill -KILL "$pid" 2>/dev/null || true; done
 }
 
+# json_string KEY FILE prints the first string value of KEY in a JSON file.
+# Enough for the flat keys of a CNI configuration list and of libcni's cached
+# results, whose other values are base64 or nested under other keys.
+json_string() {
+    sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$2" | head -n 1
+}
+
+# plain_name NAME is true when NAME is one path component that is safe as an
+# argument to rm and ip.
+plain_name() {
+    case "$1" in
+        ''|.*|-*|*[!A-Za-z0-9_.-]*) return 1 ;;
+    esac
+}
+
+# netns_shared NETNS NETWORK is true when a cached result of a network other
+# than NETWORK records NETNS: a pod attached to more than one network.
+netns_shared() {
+    for other in /var/lib/cni/results/*; do
+        [ -f "$other" ] || continue
+        case "$(json_string networkName "$other")" in
+            "$2"|cni-loopback) continue ;;
+        esac
+        [ "$(json_string netns "$other")" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# Function to remove the state the bridge and host-local CNI plugins left for
+# KubeSolo's pods: a network namespace per pod with its veth link, the bridge
+# with its route, and the addresses and cached results in /var/lib/cni. The
+# names come from KubeSolo's CNI configuration list, so the state of another
+# CNI on the host stays, such as K3s's flannel, whose bridge is also cni0: a
+# namespace another network's result records and a bridge with interfaces still
+# attached are left in place.
+remove_pod_network() {
+    conflist="$1"
+    [ -f "$conflist" ] || return 0
+    network=$(json_string name "$conflist")
+    bridge=$(json_string bridge "$conflist")
+    plain_name "$network" || return 0
+
+    echo "🗑️  Removing pod network $network..."
+    # A glob on the name alone also matches a network named, say,
+    # kubesolo-net-2, so each result's networkName is checked as well.
+    for result in /var/lib/cni/results/"$network"-*; do
+        [ -f "$result" ] || continue
+        [ "$(json_string networkName "$result")" = "$network" ] || continue
+        netns=$(json_string netns "$result")
+        case "$netns" in
+            /run/netns/*|/var/run/netns/*)
+                ns=${netns##*/}
+                if plain_name "$ns"; then
+                    if netns_shared "$netns" "$network"; then
+                        echo "ℹ️  Keeping network namespace $ns: another network's result records it"
+                    else
+                        ip netns delete "$ns" 2>/dev/null || true
+                    fi
+                fi
+                ;;
+        esac
+        id=$(json_string containerId "$result")
+        if plain_name "$id"; then
+            rm -f "/var/lib/cni/results/cni-loopback-$id-lo"
+        fi
+        rm -f "$result"
+    done
+
+    if plain_name "$bridge" && [ -d "/sys/class/net/$bridge/brif" ]; then
+        # The kernel removes the pods' veth links after their namespaces
+        # asynchronously, so wait for the bridge's ports to go.
+        i=0
+        while [ -n "$(ls "/sys/class/net/$bridge/brif")" ] && [ $i -lt 10 ]; do
+            sleep 1
+            i=$((i + 1))
+        done
+        if [ -n "$(ls "/sys/class/net/$bridge/brif")" ]; then
+            echo "ℹ️  Keeping the bridge $bridge: other interfaces are still attached to it"
+        else
+            ip link delete "$bridge" || echo "⚠️  Could not delete the bridge $bridge"
+        fi
+    fi
+    rm -rf "/var/lib/cni/networks/$network"
+    rmdir /var/lib/cni/networks /var/lib/cni/results /var/lib/cni 2>/dev/null || true
+}
+
+# Function to remove /var/lib/kubelet, where KubeSolo's kubelet, whose root
+# directory is in the data directory, keeps only its device plugin socket at the
+# path kubelet hardcodes. Anything else in it, or a kubelet still listening on
+# that socket, belongs to another kubelet.
+remove_kubelet_dir() {
+    dir=/var/lib/kubelet
+    [ -d "$dir" ] || return 0
+    if [ -n "$(find "$dir" -mindepth 1 ! -path "$dir/device-plugins" ! -path "$dir/device-plugins/*" 2>/dev/null)" ]; then
+        return 0
+    fi
+    if grep -q " $dir/device-plugins/kubelet.sock\$" /proc/net/unix 2>/dev/null; then
+        return 0
+    fi
+    echo "🗑️  Removing $dir..."
+    rm -rf "$dir"
+}
+
 # Function to remove kubeconfig
 remove_kubeconfig() {
     # Detect real user when running under sudo
@@ -545,11 +648,21 @@ if [ -f "$LOGFILE" ]; then
     rm -f "$LOGFILE"
 fi
 
+CNI_CONFIG_FILE="/etc/cni/net.d/10-bridge.conflist"
+
+# Remove the network state of the pods stopped above. It takes the network's
+# names from the CNI configuration, so it runs before that is removed. Not
+# cluster state, so it goes regardless of --remove-data. Without the
+# configuration nothing shows the state is KubeSolo's, so it stays.
+if [ -f "$CNI_CONFIG_FILE" ]; then
+    remove_pod_network "$CNI_CONFIG_FILE"
+    remove_kubelet_dir
+fi
+
 # Remove the CNI configuration KubeSolo writes into the standard CNI directory.
 # Left behind, a container runtime managed by the host keeps loading it after
 # KubeSolo is gone. Not cluster state, so it goes regardless of --remove-data.
 # -e is false for a dangling symlink, so test for a symlink as well.
-CNI_CONFIG_FILE="/etc/cni/net.d/10-bridge.conflist"
 if [ -e "$CNI_CONFIG_FILE" ] || [ -L "$CNI_CONFIG_FILE" ]; then
     echo "🗑️  Removing CNI configuration..."
     rm -f "$CNI_CONFIG_FILE"

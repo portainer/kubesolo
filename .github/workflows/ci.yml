@@ -210,6 +210,37 @@ jobs:
           KUBESOLOCTL=./dist/kubesoloctl-linux-amd64 KUBESOLO=./dist/kubesolo \
             test/firewall/run.sh ${{ matrix.scenario }}
 
+  # Installs KubeSolo on the runner itself, uninstalls it and checks that the
+  # pod network is gone and another CNI network's state stays.
+  uninstall:
+    name: uninstall
+    runs-on: ubuntu-24.04
+    needs: [build]
+    steps:
+      - name: "[preparation] checkout the current branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "[preparation] download kubesolo"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: kubesolo-linux-amd64
+          path: ./dist
+      # install.sh refuses to run where Docker is installed. Docker's FORWARD
+      # policy outlives it and drops the pods' traffic.
+      - name: "[preparation] remove docker"
+        run: |
+          sudo systemctl stop docker.socket docker.service containerd.service || true
+          sudo apt-get purge -y -qq $(dpkg -S /usr/bin/docker /usr/bin/dockerd /usr/bin/containerd 2>/dev/null | cut -d: -f1 | tr ',' '\n' | sort -u)
+          sudo rm -f /var/run/docker.sock
+          sudo iptables -P FORWARD ACCEPT
+      - name: "[preparation] install kubectl"
+        run: |
+          sudo curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubectl
+          sudo chmod +x /usr/local/bin/kubectl
+      - name: "[execution] install, uninstall and check what stays"
+        run: |
+          chmod +x ./dist/kubesolo
+          sudo KUBESOLO=./dist/kubesolo test/uninstall/run.sh
+
   # Uploads the PR number as a build-independent artifact so ci-publish.yml can
   # validate it strictly, rather than trusting workflow_run.pull_requests[0]
   # (unreliable for fork-originated runs).
