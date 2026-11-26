@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Installs KubeSolo on the host, waits for its system pods, runs
-# uninstall.sh --remove-data and checks that nothing of the pod network stays:
-# no bridge, veth link, route to the pod CIDR or pod network namespace, and
-# nothing of the network in /var/lib/cni or /var/lib/kubelet. The state of
-# another CNI network on the host, whose name starts with KubeSolo's, must stay.
+# uninstall.sh --remove-data and checks what stays, twice:
+#
+#   1. Nothing of the pod network stays: no bridge, veth link, route to the pod
+#      CIDR or pod network namespace, and nothing of the network in
+#      /var/lib/cni or /var/lib/kubelet. The state of another CNI network,
+#      whose name starts with KubeSolo's, stays.
+#   2. What KubeSolo shares with another network stays: a pod's network
+#      namespace that another network's result also records, and the bridge
+#      while another interface is attached to it.
 #
 # Usage, as root on a host that can be thrown away:
 #   KUBESOLO=./dist/kubesolo test/uninstall/run.sh
@@ -17,6 +22,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DATA=/var/lib/kubesolo
 POD_CIDR=10.42.0.0/16
 NETWORK=kubesolo-net
+BRIDGE=cni0
 RESULTS=/var/lib/cni/results
 NETWORKS=/var/lib/cni/networks
 
@@ -32,9 +38,19 @@ OTHER_RESULT="$RESULTS/$OTHER_NETWORK-$OTHER_ID-eth0"
 OTHER_LOOPBACK="$RESULTS/cni-loopback-$OTHER_ID-lo"
 OTHER_ADDRESS="$NETWORKS/$OTHER_NETWORK/10.99.0.2"
 
+# A second network attached to one of KubeSolo's pods, and another interface
+# on KubeSolo's bridge.
+EXTRA_NETWORK=e2e-extra
+EXTRA_RESULT=""
+SHARED_NETNS=""
+EXTRA_LINK=e2e-veth0
+
 cleanup() {
   ip netns delete "$OTHER_NETNS" 2>/dev/null || true
-  rm -rf "$OTHER_RESULT" "$OTHER_LOOPBACK" "${NETWORKS:?}/${OTHER_NETWORK:?}"
+  [ -z "$SHARED_NETNS" ] || ip netns delete "$SHARED_NETNS" 2>/dev/null || true
+  ip link delete "$EXTRA_LINK" 2>/dev/null || true
+  ip link delete "$BRIDGE" 2>/dev/null || true
+  rm -rf "$OTHER_RESULT" "$OTHER_LOOPBACK" "${NETWORKS:?}/${OTHER_NETWORK:?}" ${EXTRA_RESULT:+"$EXTRA_RESULT"}
   rmdir "$NETWORKS" "$RESULTS" /var/lib/cni 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -76,15 +92,35 @@ check() {
 
 none() { [ -z "$("$@" 2>/dev/null)" ]; }
 
-echo "Installing KubeSolo from $KUBESOLO"
-sh "$ROOT/install.sh" --offline-install="$KUBESOLO"
+# result_netns FILE prints the netns a cached result records.
+result_netns() { sed -n 's/.*"netns":"\([^"]*\)".*/\1/p' "$1"; }
 
-wait_running kube-system coredns
-wait_running local-path-storage local-path-provisioner
+# install_kubesolo installs KubeSolo and checks that its pods left the state
+# the test checks for.
+install_kubesolo() {
+  echo "Installing KubeSolo from $KUBESOLO"
+  sh "$ROOT/install.sh" --offline-install="$KUBESOLO"
+  wait_running kube-system coredns
+  wait_running local-path-storage local-path-provisioner
+  ip link show "$BRIDGE" >/dev/null 2>&1 || { echo "FAIL  $BRIDGE does not exist before uninstall"; exit 1; }
+  ls "$RESULTS/$NETWORK"-*-eth0 >/dev/null 2>&1 || { echo "FAIL  no $NETWORK results before uninstall"; exit 1; }
+}
 
-# The test means nothing unless the pods left what it checks for.
-ip link show cni0 >/dev/null 2>&1 || { echo "FAIL  cni0 does not exist before uninstall"; exit 1; }
-ls "$RESULTS/$NETWORK"-* >/dev/null 2>&1 || { echo "FAIL  no $NETWORK results before uninstall"; exit 1; }
+uninstall_kubesolo() {
+  echo "Running uninstall.sh --remove-data"
+  echo y | sh "$ROOT/uninstall.sh" --remove-data
+}
+
+dump_host() {
+  echo "Left on the host:"
+  ip -br link || true
+  ip route || true
+  ip netns list || true
+  ls -laR /var/lib/cni /var/lib/kubelet 2>/dev/null || true
+}
+
+echo "=== 1. KubeSolo's pod network goes, another network's state stays"
+install_kubesolo
 
 ip netns add "$OTHER_NETNS"
 mkdir -p "$NETWORKS/$OTHER_NETWORK"
@@ -94,10 +130,9 @@ printf '{"kind":"cniCacheV1","containerId":"%s","config":"e30=","ifName":"eth0",
 printf '{"kind":"cniCacheV1","containerId":"%s","config":"e30=","ifName":"lo","networkName":"cni-loopback","netns":"/var/run/netns/%s","result":{"cniVersion":"1.0.0"}}' \
   "$OTHER_ID" "$OTHER_NETNS" > "$OTHER_LOOPBACK"
 
-echo "Running uninstall.sh --remove-data"
-echo y | sh "$ROOT/uninstall.sh" --remove-data
+uninstall_kubesolo
 
-check "no cni0 link" none ip -o link show cni0
+check "no $BRIDGE link" none ip -o link show "$BRIDGE"
 check "no veth links" none ip -o link show type veth
 check "no route to $POD_CIDR" none ip route show "$POD_CIDR"
 check "no cni-* network namespaces" none sh -c "ip netns list | grep '^cni-'"
@@ -112,11 +147,30 @@ check "$OTHER_NETWORK's loopback result stays" test -f "$OTHER_LOOPBACK"
 check "$OTHER_NETWORK's addresses stay" test -f "$OTHER_ADDRESS"
 check "$OTHER_NETWORK's network namespace stays" test -e "/run/netns/$OTHER_NETNS"
 
-if [ "$failed" -ne 0 ]; then
-  echo "Left on the host:"
-  ip -br link || true
-  ip route || true
-  ip netns list || true
-  ls -laR /var/lib/cni /var/lib/kubelet 2>/dev/null || true
-fi
+[ "$failed" -eq 0 ] || { dump_host; exit 1; }
+cleanup
+
+echo "=== 2. What KubeSolo shares with another network stays"
+install_kubesolo
+
+shared_result="$(ls "$RESULTS/$NETWORK"-*-eth0 | head -n 1)"
+shared_path="$(result_netns "$shared_result")"
+SHARED_NETNS="${shared_path##*/}"
+EXTRA_RESULT="$RESULTS/$EXTRA_NETWORK-$OTHER_ID-net1"
+printf '{"kind":"cniCacheV1","containerId":"%s","config":"e30=","ifName":"net1","networkName":"%s","netns":"%s","result":{"cniVersion":"1.0.0"}}' \
+  "$OTHER_ID" "$EXTRA_NETWORK" "$shared_path" > "$EXTRA_RESULT"
+ip link add "$EXTRA_LINK" type veth peer name "${EXTRA_LINK%0}1"
+ip link set "$EXTRA_LINK" master "$BRIDGE" up
+
+uninstall_kubesolo
+
+check "the namespace $EXTRA_NETWORK shares ($SHARED_NETNS) stays" test -e "/run/netns/$SHARED_NETNS"
+check "no other cni-* network namespaces" none sh -c "ip netns list | grep '^cni-' | grep -v '^$SHARED_NETNS'"
+check "$BRIDGE stays while $EXTRA_LINK is attached" test -e "/sys/class/net/$BRIDGE/brif/$EXTRA_LINK"
+check "$EXTRA_NETWORK's result stays" test -f "$EXTRA_RESULT"
+check "no $NETWORKS/$NETWORK" test ! -e "$NETWORKS/$NETWORK"
+check "no $NETWORK results" none ls -d "$RESULTS/$NETWORK"-*-eth0
+check "no $DATA" test ! -e "$DATA"
+
+[ "$failed" -eq 0 ] || dump_host
 exit "$failed"
